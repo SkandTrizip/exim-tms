@@ -1,0 +1,56 @@
+/* ==========================================
+   QUOTE TABS
+   ========================================== */
+
+.quote-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--gray-100);
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: all var(--transition-fast);
+    user-select: none;
+}
+
+.quote-tab:hover {
+    background: var(--gray-200);
+    color: var(--navy-800);
+}
+
+.quote-tab.active {
+    background: var(--navy-700);
+    color: white;
+    border-color: var(--navy-700);
+    box-shadow: var(--shadow-sm);
+}
+
+.quote-tab .btn-delete-quote {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.6;
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    width: 20px;
+    height: 20px;
+    transition: all var(--transition-fast);
+}
+
+.quote-tab .btn-delete-quote:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.1);
+}
+
+.quote-tab.active .btn-delete-quote:hover {
+    background: rgba(255, 255, 255, 0.2);
+}

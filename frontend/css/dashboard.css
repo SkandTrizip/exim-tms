@@ -1,0 +1,101 @@
+/* ==========================================
+   DASHBOARD LAYOUT
+   ========================================== */
+
+.dashboard {
+    display: flex;
+    gap: 24px;
+    position: relative;
+    padding-top: 24px;
+    min-height: calc(100vh - 80px);
+    /* Fill remaining height */
+}
+
+.sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 100px;
+    /* Header height + spacing */
+    height: calc(100vh - 140px);
+    overflow-y: auto;
+    background: white;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    box-shadow: var(--shadow-sm);
+    z-index: 50;
+    /* Ensure it stays above scrolling content if needed */
+}
+
+/* Scrollbar Styling for Sidebar */
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: var(--gray-300);
+    border-radius: 3px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: var(--navy-400);
+}
+
+.sidebar-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-tertiary);
+    margin-bottom: 16px;
+    padding-left: 12px;
+}
+
+.sidebar-nav {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.sidebar-link {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    color: var(--text-secondary);
+    text-decoration: none;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.sidebar-link:hover {
+    background: var(--gray-50);
+    color: var(--navy-700);
+}
+
+.sidebar-link.active {
+    background: var(--navy-50);
+    color: var(--navy-700);
+    font-weight: 600;
+}
+
+.sidebar-link .icon {
+    font-size: 18px;
+    width: 24px;
+    text-align: center;
+}
+
+.content {
+    flex: 1;
+    min-width: 0;
+    /* Prevents overflow in flex items */
+    padding-bottom: 40px;
+}

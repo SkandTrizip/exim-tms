@@ -1,0 +1,179 @@
+[
+  {
+    "path": "/openapi.json",
+    "name": "openapi",
+    "methods": [
+      "GET",
+      "HEAD"
+    ]
+  },
+  {
+    "path": "/docs",
+    "name": "swagger_ui_html",
+    "methods": [
+      "GET",
+      "HEAD"
+    ]
+  },
+  {
+    "path": "/docs/oauth2-redirect",
+    "name": "swagger_ui_redirect",
+    "methods": [
+      "GET",
+      "HEAD"
+    ]
+  },
+  {
+    "path": "/redoc",
+    "name": "redoc_html",
+    "methods": [
+      "GET",
+      "HEAD"
+    ]
+  },
+  {
+    "path": "/api/enquiry/",
+    "name": "create_enquiry",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "path": "/api/enquiry/{enquiry_id}",
+    "name": "update_enquiry",
+    "methods": [
+      "PUT"
+    ]
+  },
+  {
+    "path": "/api/enquiry/",
+    "name": "list_enquiries",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/enquiry/{enquiry_id}",
+    "name": "get_enquiry",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/pricing/calculate",
+    "name": "get_price_quote",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "path": "/api/workflow/status",
+    "name": "get_workflow_status",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/ports/search",
+    "name": "search_ports",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/ports/search-by-code",
+    "name": "search_ports_by_code",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/exchange-rate/rate",
+    "name": "get_rate",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/quotes/",
+    "name": "create_quote",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "path": "/api/quotes/",
+    "name": "get_all_quotes",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/quotes/enquiry/{enquiry_id}",
+    "name": "get_quotes_by_enquiry",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/quotes/{quote_id}",
+    "name": "get_quote",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/quotes/{quote_id}",
+    "name": "update_quote",
+    "methods": [
+      "PUT"
+    ]
+  },
+  {
+    "path": "/api/quotes/{quote_id}/status",
+    "name": "update_quote_status",
+    "methods": [
+      "PATCH"
+    ]
+  },
+  {
+    "path": "/api/quotes/{quote_id}",
+    "name": "delete_quote",
+    "methods": [
+      "DELETE"
+    ]
+  },
+  {
+    "path": "/api/tracking/",
+    "name": "upload_documents",
+    "methods": [
+      "POST"
+    ]
+  },
+  {
+    "path": "/api/tracking/enquiry/{enquiry_id}",
+    "name": "get_enquiry_documents",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api",
+    "name": "root",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "/api/debug-routes",
+    "name": "debug_routes",
+    "methods": [
+      "GET"
+    ]
+  },
+  {
+    "path": "",
+    "name": "frontend",
+    "methods": []
+  }
+]

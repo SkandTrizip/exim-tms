@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Client – ShipFlow TMS</title>
+    <meta name="description" content="Create a new client origin and branch in ShipFlow TMS">
+    <link href="css/styles.css" rel="stylesheet">
+    <link href="css/modal.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* ── Page-specific styles ── */
+        .cm-page {
+            padding: 36px 0 60px;
+        }
+
+        /* Wizard tabs */
+        .wizard-tabs {
+            display: flex;
+            gap: 0;
+            margin-bottom: 0;
+            border-bottom: 2px solid var(--border-light);
+        }
+
+        .wizard-tab {
+            padding: 14px 28px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-tertiary);
+            cursor: pointer;
+            border: none;
+            background: transparent;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .wizard-tab .tab-number {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--gray-200);
+            color: var(--gray-600);
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            transition: all 0.2s;
+        }
+
+        .wizard-tab.active {
+            color: var(--navy-800);
+            border-bottom-color: var(--coral-500);
+        }
+
+        .wizard-tab.active .tab-number {
+            background: var(--coral-500);
+            color: white;
+        }
+
+        .wizard-tab.completed {
+            color: var(--success);
+        }
+
+        .wizard-tab.completed .tab-number {
+            background: var(--success);
+            color: white;
+        }
+
+        /* Panels */
+        .wizard-panel {
+            display: none;
+            padding-top: 32px;
+        }
+
+        .wizard-panel.active {
+            display: block;
+            animation: fadeInUp 0.35s ease;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            padding: 36px 40px;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 32px;
+        }
+
+        .page-header h1 {
+            font-size: 1.75rem;
+            color: var(--navy-800);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .page-header h1 i {
+            color: var(--coral-500);
+            font-size: 1.4rem;
+        }
+
+        /* Origin link picker (Step 2) */
+        .origin-picker {
+            background: var(--gray-50);
+            border: 1.5px solid var(--border-medium);
+            border-radius: var(--radius-lg);
+            padding: 20px 24px;
+            margin-bottom: 32px;
+            display: flex;
+            align-items: flex-end;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .origin-picker>.form-group {
+            flex: 1 1 340px;
+            margin: 0;
+        }
+
+        .origin-picker-note {
+            font-size: 13px;
+            color: var(--text-tertiary);
+            margin-top: 6px;
+        }
+
+        /* Section titles */
+        .section-label {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-tertiary);
+            margin: 32px 0 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-label i {
+            color: var(--coral-500);
+        }
+
+        /* Form grid overrides */
+        .form-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px 20px;
+        }
+
+        @media (max-width: 960px) {
+            .form-grid-3 {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 640px) {
+            .form-grid-3 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .col-span-2 {
+            grid-column: span 2;
+        }
+
+        .col-span-3 {
+            grid-column: 1 / -1;
+        }
+
+        /* Step navigation */
+        .step-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 36px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-light);
+        }
+
+        /* Existing origin chips (step 2 preview) */
+        .origin-preview {
+            background: linear-gradient(135deg, var(--navy-700), var(--navy-600));
+            color: white;
+            border-radius: var(--radius-lg);
+            padding: 14px 20px;
+            font-size: 0.9rem;
+            display: none;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-top: 12px;
+        }
+
+        .origin-preview.visible {
+            display: flex;
+        }
+
+        .origin-preview strong {
+            opacity: 0.75;
+            font-size: 11px;
+            display: block;
+        }
+
+        .origin-preview span {
+            font-weight: 600;
+        }
+
+        /* Branches list */
+        .branches-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 24px;
+        }
+
+        .branch-chip {
+            background: var(--gray-50);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-md);
+            padding: 10px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.9rem;
+        }
+
+        .branch-chip strong {
+            color: var(--navy-700);
+        }
+
+        .branch-chip code {
+            background: var(--gray-200);
+            border-radius: 4px;
+            padding: 2px 6px;
+            font-size: 11px;
+            color: var(--gray-700);
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none;">
+                        <div class="logo-icon">SF</div>
+                        <div class="logo-text">ShipFlow</div>
+                    </a>
+                </div>
+
+            </div>
+        </div>
+    </header>
+
+    <main class="cm-page">
+        <div class="container">
+
+            <!-- Page header -->
+            <div class="page-header">
+                <h1><i class="fas fa-user-plus"></i> Add Client</h1>
+                <div style="font-size:13px;color:var(--text-tertiary);">
+                    Create a new client group (Origin) and its first branch (Master)
+                </div>
+            </div>
+
+            <!-- Wizard tabs -->
+            <div class="wizard-tabs">
+                <button class="wizard-tab active" id="tab1" onclick="switchTab(1)">
+                    <span class="tab-number">1</span> Client Origin
+                    <span style="font-size:11px;font-weight:400;color:inherit;opacity:0.7;">(Group / Head Office)</span>
+                </button>
+                <button class="wizard-tab" id="tab2" onclick="switchTab(2)">
+                    <span class="tab-number">2</span> Client Master
+                    <span style="font-size:11px;font-weight:400;color:inherit;opacity:0.7;">(Branch)</span>
+                </button>
+                <button class="wizard-tab" id="tab3" onclick="switchTab(3)">
+                    <span class="tab-number"><i class="fas fa-list"></i></span> View Clients
+                    <span style="font-size:11px;font-weight:400;color:inherit;opacity:0.7;">(All Masters)</span>
+                </button>
+            </div>
+
+            <!-- ── STEP 1 : CLIENT ORIGIN ─────────────────────────────────── -->
+            <div class="wizard-panel active card" id="panel1">
+
+                <p style="color:var(--text-secondary);font-size:14px;margin-bottom:8px;">
+                    <i class="fas fa-info-circle" style="color:var(--info);"></i>
+                    The <strong>Client Origin</strong> represents the company / group. Add the main head-office details
+                    here.
+                    You can link multiple branches (Client Masters) to this origin in <strong>Step 2</strong>.
+                </p>
+
+                <form id="originForm" novalidate>
+
+                    <div class="section-label"><i class="fas fa-building"></i> Company Details</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="o_group_client">Group / Conglomerate <span class="required">*</span></label>
+                            <input type="text" id="o_group_client" placeholder="e.g. Tata Group" required>
+                        </div>
+                        <div class="form-group col-span-2">
+                            <label for="o_unique_client_name">Unique Client Name <span class="required">*</span></label>
+                            <input type="text" id="o_unique_client_name" placeholder="e.g. Tata Motors Ltd" required>
+                        </div>
+                        <div class="form-group col-span-3">
+                            <label for="o_office_address">Office Address</label>
+                            <input type="text" id="o_office_address" placeholder="Full office address">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_office_location">City / Location</label>
+                            <input type="text" id="o_office_location" placeholder="e.g. Mumbai">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_country">Country</label>
+                            <input type="text" id="o_country" placeholder="India" value="India">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_pin_code">PIN / ZIP Code</label>
+                            <input type="text" id="o_pin_code" placeholder="400001">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_gst_no">GST Number</label>
+                            <input type="text" id="o_gst_no" placeholder="27AAACR0000A1Z1">
+                        </div>
+                        <div class="form-group col-span-2">
+                            <label for="o_gst_address">GST Address</label>
+                            <input type="text" id="o_gst_address" placeholder="Registered GST address">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_commodity">Primary Commodity</label>
+                            <input type="text" id="o_commodity" placeholder="e.g. Petrochemicals">
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-user-tie"></i> Primary Contact</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="o_contact_person">Contact Person <span class="required">*</span></label>
+                            <input type="text" id="o_contact_person" placeholder="Full name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="o_contact_no">Contact Number</label>
+                            <input type="tel" id="o_contact_no" placeholder="+91 98XXXXXXXX">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_email_id">Email</label>
+                            <input type="email" id="o_email_id" placeholder="contact@company.com">
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-truck"></i> Logistics Contact</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="o_contact_person_logistics">Contact Person</label>
+                            <input type="text" id="o_contact_person_logistics" placeholder="Full name">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_contact_no_logistics">Contact Number</label>
+                            <input type="tel" id="o_contact_no_logistics" placeholder="+91 98XXXXXXXX">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_email_id_logistics">Email</label>
+                            <input type="email" id="o_email_id_logistics" placeholder="logistics@company.com">
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-rupee-sign"></i> Finance Contact</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="o_contact_person_finance">Contact Person</label>
+                            <input type="text" id="o_contact_person_finance" placeholder="Full name">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_contact_no_finance">Contact Number</label>
+                            <input type="tel" id="o_contact_no_finance" placeholder="+91 98XXXXXXXX">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_email_id_finance">Email</label>
+                            <input type="email" id="o_email_id_finance" placeholder="finance@company.com">
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-briefcase"></i> Sales &amp; CS Assignment</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="o_sales_branch">Sales Branch</label>
+                            <input type="text" id="o_sales_branch" placeholder="e.g. Mumbai Main">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_sales_person">Sales Person</label>
+                            <input type="text" id="o_sales_person" placeholder="e.g. Amit Shah">
+                        </div>
+                        <div class="form-group">
+                            <label for="o_cs_name">CS Name</label>
+                            <input type="text" id="o_cs_name" placeholder="e.g. Priya Singh">
+                        </div>
+                    </div>
+
+                    <div class="step-actions">
+                        <span></span>
+                        <div style="display:flex;gap:12px;">
+                            <button type="button" class="btn btn-secondary" onclick="window.location.href='/'">
+                                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                            </button>
+                            <button type="submit" class="btn btn-primary" id="saveOriginBtn">
+                                <i class="fas fa-save"></i> Save Origin &amp; Continue
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ── STEP 2 : CLIENT MASTER ─────────────────────────────────── -->
+            <div class="wizard-panel card" id="panel2">
+
+                <!-- Origin link picker -->
+                <div class="origin-picker">
+                    <div class="form-group" style="flex:1 1 340px;margin:0;">
+                        <label for="masterOriginSelect">
+                            <i class="fas fa-link" style="color:var(--coral-500);"></i>
+                            Link to Client Origin <span class="required">*</span>
+                        </label>
+                        <select id="masterOriginSelect" onchange="onOriginSelect()">
+                            <option value="">— Select an existing Client Origin —</option>
+                        </select>
+                        <div class="origin-picker-note">Select the parent group / origin for this branch.</div>
+                    </div>
+                </div>
+
+                <!-- Origin preview chip -->
+                <div class="origin-preview" id="originPreview">
+                    <div><strong>Group</strong><span id="previewGroup">—</span></div>
+                    <div><strong>Origin Name</strong><span id="previewName">—</span></div>
+                    <div><strong>Location</strong><span id="previewLocation">—</span></div>
+                    <div><strong>Country</strong><span id="previewCountry">—</span></div>
+                </div>
+
+                <!-- Existing branches for this origin -->
+                <div id="existingBranchesWrap" style="display:none;margin-top:20px;">
+                    <div class="section-label"><i class="fas fa-code-branch"></i> Existing Branches under this Origin
+                    </div>
+                    <div class="branches-list" id="existingBranchesList"></div>
+                </div>
+
+                <p style="color:var(--text-secondary);font-size:14px;margin-top:8px;margin-bottom:0;">
+                    <i class="fas fa-info-circle" style="color:var(--info);"></i>
+                    The <strong>Client Master</strong> is a branch or billing entity of the origin above.
+                </p>
+
+                <form id="masterForm" novalidate>
+
+                    <div class="section-label"><i class="fas fa-id-card"></i> Branch / Billing Identity</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="m_client_code">Client Code <span class="required">*</span></label>
+                            <input type="text" id="m_client_code" placeholder="e.g. TATA-PUNE" required>
+                        </div>
+                        <div class="form-group col-span-2">
+                            <label for="m_client_name">Client (Branch) Name <span class="required">*</span></label>
+                            <input type="text" id="m_client_name" placeholder="e.g. Tata Motors - Pune Factory"
+                                required>
+                        </div>
+                        <div class="form-group col-span-2">
+                            <label for="m_gst_name">GST Display Name</label>
+                            <input type="text" id="m_gst_name" placeholder="Name as registered in GST">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_gst_no">GST Number</label>
+                            <input type="text" id="m_gst_no" placeholder="27AAACT0000B1Z2">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_pan_no">PAN Number</label>
+                            <input type="text" id="m_pan_no" placeholder="AAACT0000B">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_iec_code">IEC Code</label>
+                            <input type="text" id="m_iec_code" placeholder="0102030405">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_co_registration_type">Registration Type</label>
+                            <select id="m_co_registration_type">
+                                <option value="">— Select —</option>
+                                <option>Proprietorship</option>
+                                <option>Partnership</option>
+                                <option>LLP</option>
+                                <option>Private Ltd</option>
+                                <option>Public Ltd</option>
+                                <option>Trust</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-map-marker-alt"></i> Office Details</div>
+                    <div class="form-grid-3">
+                        <div class="form-group col-span-3">
+                            <label for="m_office_address">Office Address</label>
+                            <input type="text" id="m_office_address" placeholder="Full address">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_office_location">City / Location</label>
+                            <input type="text" id="m_office_location" placeholder="e.g. Pimpri">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_country">Country</label>
+                            <input type="text" id="m_country" placeholder="India" value="India">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_pin_code">PIN / ZIP</label>
+                            <input type="text" id="m_pin_code" placeholder="411018">
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-user"></i> Primary Contact</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="m_contact_person">Contact Person <span class="required">*</span></label>
+                            <input type="text" id="m_contact_person" placeholder="Full name" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="m_contact_no">Contact Number</label>
+                            <input type="tel" id="m_contact_no" placeholder="+91 98XXXXXXXX">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_email_id">Email</label>
+                            <input type="email" id="m_email_id" placeholder="contact@branch.com">
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-industry"></i> Business Classification</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="m_client_type_category">Client Type</label>
+                            <select id="m_client_type_category">
+                                <option value="">— Select —</option>
+                                <option>Enterprise</option>
+                                <option>MSME</option>
+                                <option>Start-up</option>
+                                <option>Government</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="m_business_nature">Business Nature</label>
+                            <select id="m_business_nature">
+                                <option value="">— Select —</option>
+                                <option>Manufacturing</option>
+                                <option>Trading</option>
+                                <option>Service</option>
+                                <option>Distribution</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="m_industry_type">Industry Type</label>
+                            <select id="m_industry_type">
+                                <option value="">— Select —</option>
+                                <option>Pharma</option>
+                                <option>Electronics</option>
+                                <option>Automotive</option>
+                                <option>Chemicals</option>
+                                <option>Textiles</option>
+                                <option>Food &amp; Agriculture</option>
+                                <option>Oil &amp; Gas</option>
+                                <option>Machinery</option>
+                                <option>Other</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="m_shipment_type">Default Shipment Type</label>
+                            <select id="m_shipment_type">
+                                <option value="">— Select —</option>
+                                <option>FCL</option>
+                                <option>LCL</option>
+                                <option>AIR</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="m_contract_type">Contract Type</label>
+                            <select id="m_contract_type">
+                                <option value="">— Select —</option>
+                                <option>Fixed</option>
+                                <option>Spot</option>
+                                <option>NA</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-file-invoice-dollar"></i> Billing &amp; Payment</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="m_billing_method">Billing Method</label>
+                            <select id="m_billing_method">
+                                <option value="">— Select —</option>
+                                <option>FCM</option>
+                                <option>RCM</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="m_gst_percent">GST %</label>
+                            <select id="m_gst_percent">
+                                <option value="">— Select —</option>
+                                <option>5%</option>
+                                <option>12%</option>
+                                <option>18%</option>
+                                <option>0%</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="m_billing_type">Billing Type</label>
+                            <select id="m_billing_type">
+                                <option value="">— Select —</option>
+                                <option>Neft</option>
+                                <option>Cheque</option>
+                                <option>RTGS</option>
+                                <option>DD</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="m_payment_terms">Payment Terms</label>
+                            <select id="m_payment_terms">
+                                <option value="">— Select —</option>
+                                <option>Against BL</option>
+                                <option>Credit</option>
+                                <option>Advance</option>
+                                <option>LC</option>
+                            </select>
+                        </div>
+                        <div class="form-group" id="creditAmountWrap">
+                            <label for="m_credit_amount">Credit Amount (₹)</label>
+                            <input type="number" id="m_credit_amount" placeholder="0.00" min="0">
+                        </div>
+                        <div class="form-group" id="creditPeriodWrap">
+                            <label for="m_credit_period">Credit Period (Days)</label>
+                            <input type="number" id="m_credit_period" placeholder="30" min="0">
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-truck"></i> Logistics Contact</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="m_contact_person_logistics">Contact Person</label>
+                            <input type="text" id="m_contact_person_logistics" placeholder="Full name">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_contact_no_logistics">Contact Number</label>
+                            <input type="tel" id="m_contact_no_logistics" placeholder="+91 98XXXXXXXX">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_email_id_logistics">Email</label>
+                            <input type="email" id="m_email_id_logistics" placeholder="logistics@branch.com">
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-rupee-sign"></i> Finance Contact</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="m_contact_person_finance">Contact Person</label>
+                            <input type="text" id="m_contact_person_finance" placeholder="Full name">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_contact_no_finance">Contact Number</label>
+                            <input type="tel" id="m_contact_no_finance" placeholder="+91 98XXXXXXXX">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_email_id_finance">Email</label>
+                            <input type="email" id="m_email_id_finance" placeholder="finance@branch.com">
+                        </div>
+                    </div>
+
+                    <div class="section-label"><i class="fas fa-briefcase"></i> Sales &amp; CS Assignment</div>
+                    <div class="form-grid-3">
+                        <div class="form-group">
+                            <label for="m_sales_branch">Sales Branch</label>
+                            <input type="text" id="m_sales_branch">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_sales_person">Sales Person</label>
+                            <input type="text" id="m_sales_person">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_cs_name">CS Name</label>
+                            <input type="text" id="m_cs_name">
+                        </div>
+                        <div class="form-group">
+                            <label for="m_created_by">Created By</label>
+                            <input type="text" id="m_created_by" placeholder="Your name">
+                        </div>
+                    </div>
+
+                    <div class="step-actions">
+                        <button type="button" class="btn btn-secondary" onclick="switchTab(1)">
+                            <i class="fas fa-arrow-left"></i> Back to Origin
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="saveMasterBtn">
+                            <i class="fas fa-save"></i> Save Client Master
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ── STEP 3 : VIEW CLIENTS ──────────────────────────────────── -->
+            <div class="wizard-panel card" id="panel3">
+                <div class="section-label"><i class="fas fa-list"></i> Existing Clients (Masters)</div>
+                <div style="overflow-x:auto;">
+                    <table
+                        style="width:100%; text-align:left; border-collapse:collapse; white-space:nowrap; font-size:14px;">
+                        <thead>
+                            <tr
+                                style="border-bottom:2px solid var(--border-medium); background:var(--gray-50); color:var(--navy-800);">
+                                <th style="padding:12px; font-weight:600;">Client Code</th>
+                                <th style="padding:12px; font-weight:600;">Client Name</th>
+                                <th style="padding:12px; font-weight:600;">Location</th>
+                                <th style="padding:12px; font-weight:600;">Contact Person</th>
+                                <th style="padding:12px; font-weight:600;">Email</th>
+                                <th style="padding:12px; font-weight:600; text-align:center;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clientsTableBody">
+                            <tr>
+                                <td colspan="5" style="padding:12px;text-align:center;">Loading...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div><!-- /container -->
+    </main>
+
+    <!-- Simple modal -->
+    <div id="customModal" class="modal-overlay">
+        <div class="modal-box" style="padding:36px 32px;text-align:center;">
+            <div id="modalIcon" style="margin-bottom:8px;"></div>
+            <h3 id="modalTitle" class="modal-title" style="justify-content:center;font-size:1.25rem;"></h3>
+            <p id="modalMessage" style="color:var(--text-secondary);font-size:0.95rem;margin:8px 0 24px;"></p>
+            <button class="btn btn-primary" onclick="closeModal()" style="min-width:100px;">OK</button>
+        </div>
+    </div>
+
+    <!-- Summary Modal -->
+    <div id="summaryModal" class="modal-overlay">
+        <div class="modal-box" style="padding:36px; max-width:850px; width:95%;">
+            <div
+                style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; border-bottom:1px solid var(--border-light); padding-bottom:16px;">
+                <h3 id="summaryTitle" style="margin:0; font-size:1.5rem; color:var(--navy-800);">Client Details</h3>
+                <button onclick="closeSummaryModal()"
+                    style="background:none; border:none; font-size:1.5rem; cursor:pointer; color:var(--text-tertiary);">&times;</button>
+            </div>
+            <div id="summaryContent"
+                style="display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap:24px; max-height:65vh; overflow-y:auto; padding-right:10px;">
+                <!-- Content will be injected here -->
+            </div>
+            <div
+                style="margin-top:32px; padding-top:20px; border-top:1px solid var(--border-light); display:flex; justify-content:flex-end; gap:12px;">
+                <button id="summaryVerifyBtn" class="btn"
+                    style="display:none; background:#10B981; color:white; border:none; padding:8px 24px; border-radius:8px; font-weight:600; cursor:pointer;">
+                    <i class="fas fa-check"></i> Verify
+                </button>
+                <button class="btn btn-secondary" onclick="closeSummaryModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/config.js"></script>
+    <script src="js/client-master.js"></script>
+</body>
+
+</html>

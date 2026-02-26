@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Management - Exim TMS</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/modal.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">SF</div>
+                    <div class="logo-text">ShipFlow</div>
+                </div>
+                <div class="header-actions">
+                    <div class="user-profile"
+                        style="display: flex; align-items: center; gap: 12px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border-light);">
+                        <div class="user-avatar"
+                            style="width: 32px; height: 32px; background: var(--navy-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--navy-700); font-weight: 700; font-size: 14px; border: 1.5px solid var(--navy-600);">
+                            AD</div>
+                        <span id="userNameDisplay"
+                            style="font-size: 14px; font-weight: 600; color: var(--navy-800);">Admin</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="handleLogout()" title="Logout"
+                        style="padding: 8px 12px; width: 40px; justify-content: center;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="content" id="mainContent" style="margin: 0 auto; max-width: 1200px;">
+                <div class="page-header" style="margin-bottom: 32px;">
+                    <h1 style="font-size: 32px; margin: 0; color: var(--navy-800);">
+                        <i class="fas fa-file-invoice-dollar" style="color: var(--primary);"></i> Finance Management
+                    </h1>
+                    <p style="color: var(--text-secondary); margin-top: 8px;">
+                        Manage payments and invoicing for shipment
+                    </p>
+                </div>
+
+                <div class="centered-form-layout">
+                    <div class="upload-track-container">
+                        <!-- Compact Summary Section -->
+                        <div class="form-section"
+                            style="background: white; border: 1px solid var(--border-light); padding: 20px; border-radius: 8px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                                <!-- Shipment Summary -->
+                                <div>
+                                    <h3
+                                        style="font-size: 16px; margin-bottom: 16px; color: var(--navy-800); border-bottom: 2px solid var(--navy-200); padding-bottom: 8px; display: inline-block;">
+                                        🚢 Shipment Summary
+                                    </h3>
+                                    <div style="display: grid; gap: 8px;">
+                                        <div
+                                            style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
+                                            <span
+                                                style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Sale
+                                                Number</span>
+                                            <span id="display_enquiry_number"
+                                                style="font-size: 13px; color: var(--navy-800); font-weight: 600;">-</span>
+                                        </div>
+                                        <div
+                                            style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
+                                            <span
+                                                style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Client
+                                                Name</span>
+                                            <span id="display_client_name"
+                                                style="font-size: 13px; color: var(--navy-800);">-</span>
+                                        </div>
+                                        <div
+                                            style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
+                                            <span
+                                                style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Shipping
+                                                Line</span>
+                                            <span id="display_shipping_line"
+                                                style="font-size: 13px; color: var(--navy-800);">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Financial Summary -->
+                                <div>
+                                    <h3
+                                        style="font-size: 16px; margin-bottom: 16px; color: var(--navy-800); border-bottom: 2px solid var(--navy-200); padding-bottom: 8px; display: inline-block;">
+                                        💰 Financial Summary
+                                    </h3>
+                                    <div style="display: grid; gap: 8px;">
+                                        <div
+                                            style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 10px 0; background: var(--primary-light); margin: 8px -12px -12px; padding: 12px; border-radius: 6px;">
+                                            <span
+                                                style="font-size: 14px; color: var(--primary); font-weight: 700;">Final
+                                                Quote
+                                                (INR)</span>
+                                            <span id="display_final_quote"
+                                                style="font-size: 16px; color: var(--primary); font-weight: 700;">-</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Reference Documents Section -->
+                        <div class="form-section"
+                            style="background: white; border: 1px solid var(--border-light); padding: 24px; border-radius: 8px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+                            <h3
+                                style="font-size: 18px; margin-bottom: 20px; color: var(--navy-800); display: flex; align-items: center; gap: 10px;">
+                                <i class="fas fa-copy" style="color: var(--primary);"></i> Reference Documents
+                            </h3>
+                            <div id="referenceDocumentsList"
+                                style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px;">
+                                <!-- Will be populated dynamically -->
+                                <p style="color: var(--text-tertiary); font-size: 14px;">Loading documents...</p>
+                            </div>
+                        </div>
+
+                        <!-- Recorded Payments List -->
+                        <div class="form-section"
+                            style="background: white; border: 1px solid var(--border-light); padding: 24px; border-radius: 8px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+                            <div
+                                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                <h3
+                                    style="font-size: 18px; color: var(--navy-800); display: flex; align-items: center; gap: 10px; margin: 0;">
+                                    <i class="fas fa-receipt" style="color: var(--primary);"></i> Recorded Payments
+                                </h3>
+                                <button type="button" class="btn btn-outline" onclick="openAdditionalChargeModal()"
+                                    style="font-size: 12px; padding: 6px 12px; display: none;">
+                                    <i class="fas fa-plus-circle"></i> Add Additional Charge
+                                </button>
+                            </div>
+
+                            <!-- Quick Entry Form -->
+                            <div class="quick-entry-form"
+                                style="background: var(--gray-50); padding: 16px; border-radius: 8px; border: 1px solid var(--border-light); margin-bottom: 20px;">
+                                <div
+                                    style="display: grid; grid-template-columns: 140px 1fr 1fr 1fr 140px auto; gap: 12px; align-items: end;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">Type</label>
+                                        <select id="quick_pay_type" class="form-control"
+                                            style="padding: 6px; font-size: 12px;" onchange="toggleQuickDesc()">
+                                            <option value="Main">Main Payment</option>
+                                            <option value="Additional">Additional</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" id="quick_desc_group"
+                                        style="margin-bottom: 0; display: none;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">Description</label>
+                                        <input type="text" id="quick_pay_desc" class="form-control"
+                                            style="padding: 6px; font-size: 12px;" placeholder="e.g. Detention">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">UTR Number</label>
+                                        <input type="text" id="quick_pay_utr" class="form-control"
+                                            style="padding: 6px; font-size: 12px; width: 100%;"
+                                            placeholder="Enter UTR No.">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">Date</label>
+                                        <input type="date" id="quick_pay_date" class="form-control"
+                                            style="padding: 4px 6px; font-size: 12px;">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">Amount (INR)</label>
+                                        <input type="number" id="quick_pay_amount" class="form-control"
+                                            style="padding: 6px; font-size: 12px;" placeholder="0.00">
+                                    </div>
+                                    <button type="button" class="btn btn-primary" onclick="submitQuickPayment()"
+                                        style="padding: 8px 16px; font-size: 12px; height: 34px;">
+                                        <i class="fas fa-plus"></i> Record
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="table-container" style="overflow-x: auto;">
+                                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                    <thead>
+                                        <tr
+                                            style="background: #f8fafc; text-align: left; border-bottom: 2px solid #e2e8f0;">
+                                            <th style="padding: 12px; color: var(--text-tertiary);">Type</th>
+                                            <th style="padding: 12px; color: var(--text-tertiary);">Description</th>
+                                            <th style="padding: 12px; color: var(--text-tertiary);">UTR Number</th>
+                                            <th style="padding: 12px; color: var(--text-tertiary);">Date</th>
+                                            <th style="padding: 12px; text-align: right; color: var(--text-tertiary);">
+                                                Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="paymentsTableBody">
+                                        <!-- Will be populated dynamically -->
+                                        <tr>
+                                            <td colspan="5"
+                                                style="padding: 24px; text-align: center; color: var(--text-tertiary);">
+                                                Loading payments...</td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot>
+                                        <tr
+                                            style="background: #fdfdfd; font-weight: 700; border-top: 2px solid #e2e8f0;">
+                                            <td colspan="4"
+                                                style="padding: 12px; text-align: right; color: var(--navy-700);">Total
+                                                Payments Recorded:</td>
+                                            <td id="totalPaymentsAmount"
+                                                style="padding: 12px; text-align: right; color: var(--primary); font-size: 15px;">
+                                                ₹0.00</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Additional Charge Modal -->
+                        <div id="additionalChargeModal" class="modal" style="display: none;">
+                            <div class="modal-content" style="max-width: 500px;">
+                                <div class="modal-header">
+                                    <h3><i class="fas fa-plus-circle"></i> Record Shipping Line Payment</h3>
+                                    <span class="close" onclick="closeAdditionalChargeModal()">&times;</span>
+                                </div>
+                                <div class="modal-body" style="padding: 20px;">
+                                    <div class="form-group" style="margin-bottom: 16px;">
+                                        <label>Payment Type</label>
+                                        <select id="add_charge_type" class="form-control"
+                                            onchange="toggleDescription()">
+                                            <option value="Main">Main Shipping Line Payment</option>
+                                            <option value="Additional">Additional Charges (Detention, GST, etc.)
+                                            </option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" id="desc_group" style="margin-bottom: 16px; display: none;">
+                                        <label>Description / Particulars</label>
+                                        <input type="text" id="add_charge_desc" class="form-control"
+                                            placeholder="e.g. Detention Charges">
+                                    </div>
+                                    <div
+                                        style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                                        <div class="form-group">
+                                            <label>Amount (INR)</label>
+                                            <input type="number" id="add_charge_amount" class="form-control"
+                                                placeholder="0.00">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Payment Date</label>
+                                            <input type="date" id="add_charge_date" class="form-control">
+                                        </div>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label>UTR Number</label>
+                                        <input type="text" id="add_charge_utr" class="form-control"
+                                            placeholder="Enter UTR Number">
+                                    </div>
+                                </div>
+                                <div class="modal-footer"
+                                    style="padding: 16px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 12px;">
+                                    <button type="button" class="btn btn-secondary"
+                                        onclick="closeAdditionalChargeModal()">Cancel</button>
+                                    <button type="button" class="btn btn-primary"
+                                        onclick="submitFinancialPayment()">Save Record</button>
+                                </div>
+                            </div>
+                        </div>
+
+
+                        <div class="form-actions" style="display: flex; gap: 16px; margin-top: 32px;">
+                            <button type="button" class="btn btn-secondary"
+                                onclick="window.location.href='/#finance-payments'">
+                                <i class="fas fa-arrow-left"></i> Back to Finance
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="saveFinance()">
+                                <i class="fas fa-check-circle"></i> Record Payment
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/finance-details.js"></script>
+</body>
+
+</html>

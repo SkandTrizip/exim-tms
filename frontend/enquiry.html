@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Sale - Exim TMS</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/modal.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">SF</div>
+                    <div class="logo-text">ShipFlow</div>
+                </div>
+                <div class="header-actions">
+                    <div class="user-profile"
+                        style="display: flex; align-items: center; gap: 12px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border-light);">
+                        <div class="user-avatar"
+                            style="width: 32px; height: 32px; background: var(--navy-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--navy-700); font-weight: 700; font-size: 14px; border: 1.5px solid var(--navy-600);">
+                            AD</div>
+                        <span id="userNameDisplay"
+                            style="font-size: 14px; font-weight: 600; color: var(--navy-800);">Admin</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="handleLogout()" title="Logout"
+                        style="padding: 8px 12px; width: 40px; justify-content: center;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="content" id="mainContent" style="margin: 0 auto; max-width: 1200px;">
+                <div class="page-header" style="margin-bottom: 32px;">
+
+                    <h1 style="font-size: 32px; margin: 0; color: var(--navy-800);">
+                        <i class="fas fa-file-invoice" style="color: var(--primary);"></i> Create New Sale
+                    </h1>
+                    <p style="color: var(--text-secondary); margin-top: 8px;">
+                        Enter basic shipment details to start the workflow
+                    </p>
+                </div>
+
+
+
+                <div class="centered-form-layout">
+                    <!-- Stage 1 Form -->
+                    <form id="enquiryForm" class="form-container">
+                        <div class="form-section">
+                            <h2 class="section-title">📋 Basic Information</h2>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Sale Number <span class="required">*</span></label>
+                                    <input type="text" id="enquiryNumber" value="EXIM-2026-001" readonly>
+                                </div>
+                                <div class="form-group">
+                                    <label>Shipment Type <span class="required">*</span></label>
+                                    <select id="shipmentType" required>
+                                        <option value="" disabled selected hidden>Select Type</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Client Name <span class="required">*</span></label>
+                                    <select id="clientName" required>
+                                        <option value="" disabled selected hidden>Select Client</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Client Scope <span class="required">*</span></label>
+                                    <select id="clientScope" required>
+                                        <option value="" disabled selected hidden>Select Scope</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Mode of Transport - Origin</label>
+                                    <select id="modeOrigin">
+                                        <option value="" disabled selected hidden>Select Mode</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Mode of Transport - Destination</label>
+                                    <select id="modeDest">
+                                        <option value="" disabled selected hidden>Select Mode</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Sale Received Date</label>
+                                    <input type="date" id="enquiryRecDate">
+                                </div>
+                                <div class="form-group">
+                                    <label>Stuffing Date</label>
+                                    <input type="date" id="stuffingDate">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h2 class="section-title">🌍 Route Details</h2>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Origin <span class="required">*</span></label>
+                                    <div class="autocomplete-wrapper">
+                                        <input type="text" id="origin" placeholder="e.g., Mundra" required
+                                            autocomplete="off">
+                                        <div id="originDropdown" class="autocomplete-dropdown"></div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Destination <span class="required">*</span></label>
+                                    <div class="autocomplete-wrapper">
+                                        <input type="text" id="destination" placeholder="e.g., Los Angeles" required
+                                            autocomplete="off">
+                                        <div id="destDropdown" class="autocomplete-dropdown"></div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Preferred Origin Port</label>
+                                    <div class="autocomplete-wrapper">
+                                        <input type="text" id="prefOriginPort" placeholder="e.g., NHAVA SHEVA"
+                                            autocomplete="off">
+                                        <div id="prefOriginPortDropdown" class="autocomplete-dropdown"></div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Preferred Destination Port</label>
+                                    <div class="autocomplete-wrapper">
+                                        <input type="text" id="prefDestPort" placeholder="e.g., LONG BEACH"
+                                            autocomplete="off">
+                                        <div id="prefDestPortDropdown" class="autocomplete-dropdown"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-section">
+                            <h2 class="section-title">📦 Container Details</h2>
+                            <div id="containerList">
+                                <div class="container-group">
+                                    <div class="container-header">
+                                        <div class="container-title">Container #1</div>
+                                    </div>
+                                    <div class="form-grid">
+                                        <div class="form-group">
+                                            <label>Container Type <span class="required">*</span></label>
+                                            <select class="containerType" required>
+                                                <option value="" disabled selected hidden>Select Type</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Count of Containers <span class="required">*</span></label>
+                                            <input type="number" class="containerCount" min="1" value="1" required>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Weight Measurement</label>
+                                            <select class="weightMeasurement">
+                                                <option value="KG">Kilograms (KG)</option>
+                                                <option value="LBS">Pounds (LBS)</option>
+                                                <option value="Tons">Tons</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Weight per Container</label>
+                                            <input type="number" class="weightPerContainer" placeholder="0.00"
+                                                step="0.01">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" class="btn btn-add" onclick="addContainer()">
+                                <i class="fas fa-plus"></i> Add Another Container
+                            </button>
+                        </div>
+
+                        <div class="form-section">
+                            <h2 class="section-title">📝 Cargo Information</h2>
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label>Commodity <span class="required">*</span></label>
+                                    <input type="text" id="commodity" placeholder="e.g., Electronics" required>
+                                </div>
+                                <div class="form-group">
+                                    <label>HS Code</label>
+                                    <input type="text" id="hsCode" placeholder="e.g., 8471.30">
+                                </div>
+                                <div class="form-group">
+                                    <label>Cargo Risk <span class="required">*</span></label>
+                                    <select id="cargoRisk" onchange="toggleRiskOptions()" required>
+                                        <option value="" disabled selected hidden>Select Risk</option>
+                                        <option value="Non-Haz">Non-Hazardous</option>
+                                        <option value="Haz">Hazardous</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="riskTypeContainer" style="display: none;">
+                                    <label id="riskTypeLabel">Type</label>
+                                    <select id="cargoRiskType" onchange="toggleRiskDetails()">
+                                        <!-- Populated dynamically -->
+                                    </select>
+                                </div>
+                                <div class="form-group" id="riskDetailContainer" style="display: none;">
+                                    <label id="riskDetailLabel">Category/Detail</label>
+                                    <div id="riskDetailInputWrapper">
+                                        <!-- Populated dynamically (Select or Input) -->
+                                    </div>
+                                </div>
+                                <div class="form-group" id="tempMoistureContainer"
+                                    style="display: none; grid-column: span 2;">
+                                    <div class="form-grid"
+                                        style="grid-template-columns: 1fr 1fr; gap: 16px; width: 100%;">
+                                        <div class="form-group">
+                                            <label>Temperature (Degree)</label>
+                                            <input type="number" id="temperature" placeholder="°C" step="0.1">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Moisture (Degree)</label>
+                                            <input type="number" id="moisture" placeholder="%" step="0.1">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Cargo Value</label>
+                                    <div class="input-group">
+                                        <select id="cargoValueCurrency" class="input-addon">
+                                            <option value="USD">USD</option>
+                                            <option value="INR">INR</option>
+                                        </select>
+                                        <input type="number" id="cargoValue" placeholder="0.00" step="0.01">
+                                    </div>
+                                    <div id="cargoValueINR"
+                                        style="font-size: 0.8rem; color: var(--text-tertiary); margin-top: 4px; display: none;">
+                                        ≈ ₹<span id="inrValueDisplay">0.00</span>
+                                    </div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Customer Clearance Required</label>
+                                    <select id="clearanceRequired">
+                                        <option value="">Select Option</option>
+                                        <option value="At Origin">At Origin</option>
+                                        <option value="At Destination">At Destination</option>
+                                        <option value="At Both">At Both</option>
+                                        <option value="Not Required">Not Required</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label>Client Target Rate</label>
+                                    <div class="input-group">
+                                        <span class="input-addon">USD</span>
+                                        <input type="number" id="targetRate" placeholder="0.00" step="0.01">
+                                    </div>
+                                </div>
+                                <div class="form-group" style="grid-column: span 2;">
+                                    <label>Remarks</label>
+                                    <textarea id="remarks" placeholder="Additional notes or special requirements..."
+                                        style="width: 100%; height: 100px; padding: 12px; border-radius: 6px; border: 1px solid var(--border-light);"></textarea>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" onclick="goBack()">
+                                <i class="fas fa-th-large"></i> Back to Dashboard
+                            </button>
+                            <button type="button" id="saveSaleBtn" class="btn btn-primary" onclick="saveEnquiry()">
+                                <i class="fas fa-save"></i> Save Sale
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/enquiry.js"></script>
+</body>
+
+</html>

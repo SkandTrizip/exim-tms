@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShipFlow - Freight Forwarding Management System</title>
+    <link href="css/styles.css" rel="stylesheet">
+    <link href="css/dashboard.css" rel="stylesheet">
+    <link href="css/modal.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">SF</div>
+                    <div class="logo-text">ShipFlow</div>
+                </div>
+                <div class="header-actions">
+                    <div class="user-profile"
+                        style="display: flex; align-items: center; gap: 12px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border-light);">
+                        <div class="user-avatar"
+                            style="width: 32px; height: 32px; background: var(--navy-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--navy-700); font-weight: 700; font-size: 14px; border: 1.5px solid var(--navy-600);">
+                            AD</div>
+                        <span id="userNameDisplay"
+                            style="font-size: 14px; font-weight: 600; color: var(--navy-800);">Admin</span>
+                    </div>
+
+                    <button class="btn btn-secondary" onclick="handleLogout()" title="Logout"
+                        style="padding: 8px 12px; width: 40px; justify-content: center;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="dashboard">
+                <aside class="sidebar">
+                    <div class="sidebar-title">Navigation</div>
+                    <ul class="sidebar-nav">
+                        <li><a href="#dashboard" class="sidebar-link active" id="navDashboard"><span
+                                    class="icon">📊</span> Dashboard</a></li>
+                        <li><a href="#enquiries" class="sidebar-link" id="navEnquiries"><span class="icon">📋</span>
+                                Sales</a></li>
+                        <li><a href="#quotes" class="sidebar-link" id="navPricing"><span class="icon">💰</span> Quotes &
+                                Pricing</a></li>
+                        <li><a href="#tracking" class="sidebar-link" id="navTracking"><span class="icon">📦</span>
+                                Tracking</a></li>
+                        <li><a href="#finance-payments" class="sidebar-link" id="navFinance"><span
+                                    class="icon">💼</span>
+                                Finance</a>
+                            <ul class="sidebar-subnav"
+                                style="list-style: none; padding-left: 24px; margin-top: 4px; display: none;"
+                                id="financeSubnav">
+                                <li><a href="#finance-payments" class="sidebar-link" id="navFinancePayments"
+                                        style="font-size: 13px; padding: 8px 12px;">Payment to Shipping Line</a></li>
+                                <li><a href="#finance-invoices" class="sidebar-link" id="navFinanceInvoices"
+                                        style="font-size: 13px; padding: 8px 12px;">Create Invoice</a></li>
+                            </ul>
+                        </li>
+                        <li>
+                            <a href="#" class="sidebar-link" id="navSettings" onclick="toggleSettingsNav(event)">
+                                <span class="icon">⚙️</span> Settings
+                            </a>
+                            <ul class="sidebar-subnav"
+                                style="list-style: none; padding-left: 24px; margin-top: 4px; display: none;"
+                                id="settingsSubnav">
+                                <li><a href="/client-master" class="sidebar-link"
+                                        style="font-size: 13px; padding: 8px 12px;">👥 Add Client</a></li>
+                                <li><a href="/shipping-line" class="sidebar-link"
+                                        style="font-size: 13px; padding: 8px 12px;">🚢 Add Shipping Line</a></li>
+                            </ul>
+                        </li>
+                    </ul>
+                </aside>
+
+                <div class="content" id="mainContent">
+                    <!-- Dashboard View -->
+                    <div id="dashboardView" class="view-content">
+                        <h1 style="margin-bottom: 24px; font-size: 28px; color: var(--navy-800);">Dashboard Overview
+                        </h1>
+
+                        <div class="dashboard-stats">
+                            <div class="stat-card">
+                                <div class="stat-value" id="totalEnquiry">0</div>
+                                <div class="stat-label">Total Sales</div>
+                                <button class="btn action-btn" onclick="showEnquiriesView()">View All</button>
+                            </div>
+                            <div class="stat-card accent">
+                                <div class="stat-value" id="pendingPricing">0</div>
+                                <div class="stat-label">Pending at Pricing</div>
+                                <button class="btn action-btn"
+                                    onclick="showEnquiriesView('pending_pricing')">Process</button>
+                            </div>
+                            <div class="stat-card warning">
+                                <div class="stat-value" id="pendingConfirmation">0</div>
+                                <div class="stat-label">Pending for Client Confirmation</div>
+                                <button class="btn action-btn"
+                                    onclick="showEnquiriesView('pending_confirmation')">View</button>
+                            </div>
+                            <div class="stat-card success">
+                                <div class="stat-value" id="bookingPendingCount">0</div>
+                                <div class="stat-label">Booking To Be Secured</div>
+                                <button class="btn action-btn"
+                                    onclick="showTrackingView('pending_booking')">View</button>
+                            </div>
+                            <!-- New Milestone Cards -->
+                            <div class="stat-card info">
+                                <div class="stat-value" id="siPendingCount">0</div>
+                                <div class="stat-label">SI To Be Submitted</div>
+                                <button class="btn action-btn" onclick="showTrackingView('pending_si')">View</button>
+                            </div>
+                            <div class="stat-card purple">
+                                <div class="stat-value" id="blPendingCount">0</div>
+                                <div class="stat-label">BL To Be Received</div>
+                                <button class="btn action-btn" onclick="showTrackingView('pending_bl')">View</button>
+                            </div>
+                            <div class="stat-card cyan">
+                                <div class="stat-value" id="sobPendingCount">0</div>
+                                <div class="stat-label">SOB Remaining</div>
+                                <button class="btn action-btn" onclick="showTrackingView('pending_sob')">View</button>
+                            </div>
+                        </div>
+
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                            <h2 style="font-size: 20px; margin: 0; color: var(--navy-700);">Recent Sales</h2>
+                            <button class="btn btn-primary" onclick="startNewEnquiry()">+ Create New</button>
+                        </div>
+
+                        <div class="table-container"
+                            style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Sale #</th>
+                                        <th>Client</th>
+                                        <th>Route</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="enquiryTable">
+                                    <!-- Will be populated dynamically -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- All Enquiries View -->
+                    <div id="enquiriesView" class="view-content" style="display: none;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h1 style="font-size: 28px; margin: 0; color: var(--navy-800);">Sales</h1>
+                            <button class="btn btn-primary" onclick="startNewEnquiry()">+ New Sale</button>
+                        </div>
+
+                        <div class="table-container"
+                            style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Sale #</th>
+                                        <th>Client</th>
+                                        <th>Route</th>
+                                        <th>Status</th>
+                                        <th>Stuffing Date</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="allEnquiriesTable"></tbody>
+                            </table>
+                            <div class="pagination-container" id="allEnquiriesPagination"></div>
+                        </div>
+                    </div>
+
+                    <!-- Quotes & Pricing View -->
+                    <div id="quotesView" class="view-content" style="display: none;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h1 style="font-size: 28px; margin: 0; color: var(--navy-800);">Quotes & Pricing</h1>
+                            <div style="color: var(--text-tertiary); font-size: 14px;">Select a sale to manage or
+                                view its quotations</div>
+                        </div>
+
+                        <div class="table-container"
+                            style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Sale #</th>
+                                        <th>Client</th>
+                                        <th>Route</th>
+                                        <th>Shipping Line</th>
+                                        <th>Status</th>
+                                        <th>Total (INR)</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="quotesTable"></tbody>
+                            </table>
+                            <div class="pagination-container" id="quotesPagination"></div>
+                        </div>
+                    </div>
+
+                    <!-- Tracking & Documents View -->
+                    <div id="trackingView" class="view-content" style="display: none;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h1 style="font-size: 28px; margin: 0; color: var(--navy-800);">Tracking & Documents</h1>
+                            <div style="color: var(--text-tertiary); font-size: 14px;">Select a sale to manage or
+                                upload documents</div>
+                        </div>
+                        <div class="table-container"
+                            style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Sale #</th>
+                                        <th>Client</th>
+                                        <th>Route</th>
+                                        <th>Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="trackingTable"></tbody>
+                            </table>
+                            <div class="pagination-container" id="trackingPagination"></div>
+                        </div>
+                    </div>
+
+                    <!-- Finance View -->
+                    <div id="financeView" class="view-content" style="display: none;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                            <h1 style="font-size: 28px; margin: 0; color: var(--navy-800);">Finance Management</h1>
+                            <div style="color: var(--text-tertiary); font-size: 14px;">Manage payments and client
+                                invoices</div>
+                        </div>
+
+                        <div class="dashboard-stats" style="margin-bottom: 32px;">
+                            <div class="stat-card accent">
+                                <div class="stat-value" id="financePaymentsMade">0</div>
+                                <div class="stat-label">Payments Made to Shipping Line</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="financeInvoicesRaised">0</div>
+                                <div class="stat-label">Invoices Raised to Client</div>
+                            </div>
+                            <div class="stat-card success">
+                                <div class="stat-value" id="paymentPendingCount">0</div>
+                                <div class="stat-label">Payments To Be Recorded</div>
+                            </div>
+                        </div>
+
+                        <div class="table-container"
+                            style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Sale #</th>
+                                        <th>Client</th>
+                                        <th>Route</th>
+                                        <th>Finance Status</th>
+                                        <th>Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="financeTable"></tbody>
+                            </table>
+                            <div class="pagination-container" id="financePagination"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/app.js"></script>
+</body>
+
+</html>

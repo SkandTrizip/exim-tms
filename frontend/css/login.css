@@ -1,0 +1,232 @@
+/* ==========================================
+   EXIM TMS - Login Page Styles
+   ========================================== */
+
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at top left, var(--navy-800), var(--navy-900));
+    position: relative;
+    overflow: hidden;
+    padding: var(--space-6);
+}
+
+/* Background Decorative Elements */
+.login-page::before,
+.login-page::after {
+    content: '';
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    filter: blur(100px);
+    z-index: 0;
+    opacity: 0.4;
+}
+
+.login-page::before {
+    background: var(--navy-400);
+    top: -100px;
+    left: -100px;
+}
+
+.login-page::after {
+    background: var(--coral-500);
+    bottom: -100px;
+    right: -100px;
+}
+
+.login-container {
+    width: 100%;
+    max-width: 440px;
+    z-index: 1;
+    perspective: 1000px;
+}
+
+.login-card {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    padding: var(--space-10);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-xl), 0 0 40px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    animation: cardEntrance 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes cardEntrance {
+    from {
+        opacity: 0;
+        transform: translateY(30px) rotateX(-10deg);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) rotateX(0);
+    }
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: var(--space-8);
+}
+
+.login-logo {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+}
+
+.login-logo .logo-icon {
+    width: 56px;
+    height: 56px;
+    font-size: 24px;
+}
+
+.login-logo .logo-text {
+    font-size: 2rem;
+}
+
+.login-title {
+    font-size: 1.5rem;
+    color: var(--navy-800);
+    margin-bottom: var(--space-2);
+}
+
+.login-subtitle {
+    color: var(--gray-500);
+    font-size: 0.9375rem;
+}
+
+.login-form .form-group {
+    margin-bottom: var(--space-5);
+}
+
+.login-form label {
+    color: var(--navy-700);
+    margin-bottom: var(--space-2);
+}
+
+.input-with-icon {
+    position: relative;
+}
+
+.input-with-icon i {
+    position: absolute;
+    left: var(--space-4);
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    transition: color var(--transition-base);
+}
+
+.input-with-icon input {
+    width: 100%;
+    padding-left: 3rem;
+}
+
+.input-with-icon input:focus+i {
+    color: var(--navy-600);
+}
+
+.login-options {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-6);
+    font-size: 0.875rem;
+}
+
+.remember-me {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    cursor: pointer;
+    color: var(--gray-600);
+}
+
+.forgot-password {
+    color: var(--navy-600);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.forgot-password:hover {
+    text-decoration: underline;
+}
+
+.btn-login {
+    width: 100%;
+    justify-content: center;
+    padding: var(--space-4);
+    font-size: 1rem;
+    background: linear-gradient(135deg, var(--navy-800), var(--navy-600));
+}
+
+.login-footer {
+    margin-top: var(--space-8);
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--gray-500);
+}
+
+.login-footer a {
+    color: var(--coral-500);
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.login-footer a:hover {
+    text-decoration: underline;
+}
+
+/* Float Animation for Background */
+@keyframes float {
+    0% {
+        transform: translateY(0px);
+    }
+
+    50% {
+        transform: translateY(-20px);
+    }
+
+    100% {
+        transform: translateY(0px);
+    }
+}
+
+.floating-icon {
+    position: absolute;
+    z-index: 0;
+    opacity: 0.1;
+    color: white;
+    font-size: 4rem;
+    animation: float 6s ease-in-out infinite;
+}
+
+.icon-1 {
+    top: 20%;
+    left: 15%;
+    animation-delay: 0s;
+}
+
+.icon-2 {
+    top: 70%;
+    left: 10%;
+    animation-delay: 2s;
+}
+
+.icon-3 {
+    top: 15%;
+    right: 15%;
+    animation-delay: 4s;
+}
+
+.icon-4 {
+    top: 75%;
+    right: 10%;
+    animation-delay: 1s;
+}

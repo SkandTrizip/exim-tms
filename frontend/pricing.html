@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rate & Pricing - Exim TMS</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/modal.css">
+    <link rel="stylesheet" href="css/pricing-refined.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">SF</div>
+                    <div class="logo-text">ShipFlow</div>
+                </div>
+                <div class="header-actions">
+                    <div class="user-profile"
+                        style="display: flex; align-items: center; gap: 12px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border-light);">
+                        <div class="user-avatar"
+                            style="width: 32px; height: 32px; background: var(--navy-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--navy-700); font-weight: 700; font-size: 14px; border: 1.5px solid var(--navy-600);">
+                            AD</div>
+                        <span id="userNameDisplay"
+                            style="font-size: 14px; font-weight: 600; color: var(--navy-800);">Admin</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="handleLogout()" title="Logout"
+                        style="padding: 8px 12px; width: 40px; justify-content: center;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="content" id="mainContent" style="margin: 0 auto; max-width: 1200px;">
+
+
+                <div class="page-header" style="margin-bottom: 32px;">
+
+                    <h1 style="font-size: 32px; margin: 0; color: var(--navy-800);">
+                        <i class="fas fa-calculator" style="color: var(--primary);"></i> Rate & Pricing Calculator
+                    </h1>
+                    <p style="color: var(--text-secondary); margin-top: 8px;">
+                        Compare quotes and calculate final pricing for the shipment
+                    </p>
+                </div>
+
+
+
+                <div class="pricing-page-container">
+                    <!-- Pricing Stage Content -->
+                    <div class="pricing-card">
+                        <div class="pricing-card-header">
+                            <i class="fas fa-info-circle"></i>
+                            <h3>Shipment Overview</h3>
+                        </div>
+                        <div class="pricing-card-body">
+                            <!-- Shipment Summary -->
+                            <div class="shipment-summary-horizontal">
+                                <div class="summary-box">
+                                    <label>Sale #</label>
+                                    <div id="display_enquiry_number" class="value">-</div>
+                                </div>
+                                <div class="summary-box">
+                                    <label>Sale Received Date</label>
+                                    <div id="display_enquiry_date" class="value">-</div>
+                                </div>
+                                <div class="summary-box">
+                                    <label>Stuffing Date</label>
+                                    <div id="display_stuffing_date" class="value">-</div>
+                                </div>
+                                <div class="summary-box">
+                                    <label>Client Name</label>
+                                    <div id="display_client_name" class="value">-</div>
+                                </div>
+                                <div class="summary-box">
+                                    <label>Shipment Type</label>
+                                    <div id="display_shipment_type" class="value">-</div>
+                                </div>
+                                <div class="summary-box">
+                                    <label>Route</label>
+                                    <div class="value"><span id="display_origin">-</span> → <span
+                                            id="display_destination">-</span></div>
+                                </div>
+                                <div class="summary-box">
+                                    <label>Container</label>
+                                    <div id="display_container_type" class="value">-</div>
+                                </div>
+                                <div class="summary-box">
+                                    <label>Commodity</label>
+                                    <div id="display_commodity" class="value">-</div>
+                                </div>
+                                <div class="summary-box">
+                                    <label>Cargo Value</label>
+                                    <div id="display_cargo_value" class="value">-</div>
+                                </div>
+                                <div class="summary-box">
+                                    <label>Client Rate</label>
+                                    <div id="display_client_rate" class="value">-</div>
+                                </div>
+                            </div>
+
+                            <hr style="margin: 32px 0; border: 0; border-top: 1px solid var(--border-light);">
+
+                            <!-- Route Selection -->
+                            <div class="route-section">
+                                <h4 style="margin-bottom: 20px; color: var(--navy-700); font-weight: 700;">
+                                    <i class="fas fa-map-pin" style="margin-right: 8px;"></i> Route & Incoterm
+                                </h4>
+                                <div class="route-info-grid">
+                                    <div class="route-input-group">
+                                        <label>Place of Receipt (POR)</label>
+                                        <input type="text" id="pricingPOR" placeholder="Place Name / Port Name"
+                                            required>
+                                    </div>
+                                    <div class="route-input-group">
+                                        <label>Port of Loading (POL)</label>
+                                        <input type="text" id="pricingPOL" placeholder="Port Name" required>
+                                    </div>
+                                    <div class="route-input-group">
+                                        <label>Port of Discharge (POD)</label>
+                                        <input type="text" id="pricingPOD" placeholder="Port Name" required>
+                                    </div>
+                                    <div class="route-input-group">
+                                        <label>Final Place of Delivery (FPOD)</label>
+                                        <input type="text" id="pricingFPOD" placeholder="Place Name / Port Name"
+                                            required>
+                                    </div>
+                                    <div class="route-input-group">
+                                        <label>Incoterm</label>
+                                        <select id="pricingIncoterm" required>
+                                            <option value="" disabled selected hidden>Select Incoterm</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Calculator Section -->
+                    <div id="calculatorSection">
+                        <div class="pricing-card">
+                            <div class="pricing-card-header" style="justify-content: space-between;">
+                                <div style="display: flex; align-items: center; gap: 12px;">
+                                    <i class="fas fa-calculator"></i>
+                                    <h3>Quote Comparison Manager</h3>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button type="button" class="btn btn-secondary"
+                                        style="padding: 8px 16px; font-size: 13px;" onclick="generatePDF()">
+                                        <i class="fas fa-file-pdf"></i> Export PDF Quote
+                                    </button>
+                                    <button type="button" class="btn btn-primary"
+                                        style="padding: 8px 16px; font-size: 13px;" onclick="addNewQuote()">
+                                        <i class="fas fa-plus"></i> Add Quote Sheet
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="pricing-card-body">
+                                <div id="pricingTabs" class="pricing-tabs">
+                                    <!-- Dynamic Tabs -->
+                                </div>
+
+                                <div id="activeQuoteContainer" class="active-quote-section">
+                                    <div
+                                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                                        <h4 id="activeQuoteTitle"
+                                            style="color: var(--navy-800); font-weight: 700; margin: 0;">Quote 1</h4>
+                                    </div>
+
+                                    <div class="shipping-line-form"
+                                        style="background: var(--gray-50); padding: 24px; border-radius: 12px; margin-bottom: 32px; border: 1px solid var(--border-light);">
+                                        <h5
+                                            style="font-size: 0.9rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 20px; font-weight: 700;">
+                                            Shipping Line Details
+                                        </h5>
+                                        <div class="form-grid">
+                                            <div class="form-group">
+                                                <label>Shipping Line</label>
+                                                <select id="pricingLine" required>
+                                                    <option value="" disabled selected hidden>Select Line</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Currency</label>
+                                                <select id="pricingCurrency" required>
+                                                    <option value="USD">USD</option>
+                                                    <option value="INR">INR</option>
+                                                    <option value="EUR">EUR</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Transit Time (Days)</label>
+                                                <input type="number" id="transitTime" placeholder="e.g. 15" min="0"
+                                                    oninput="if(this.value<0)this.value=0"
+                                                    onkeydown="if(event.key==='-')event.preventDefault()" required>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Rate Validity</label>
+                                                <input type="date" id="rateValidity" required>
+                                            </div>
+                                            <div class="form-group">
+                                                <label>Dest. Free Days</label>
+                                                <input type="number" id="destFreeDays" placeholder="7" min="0"
+                                                    oninput="if(this.value<0)this.value=0"
+                                                    onkeydown="if(event.key==='-')event.preventDefault()" required>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div id="quoteContainersList">
+                                        <!-- Container-Specific Sections will be injected here -->
+                                    </div>
+
+                                    <div style="margin: 32px 0; text-align: center;">
+                                        <button type="button" class="btn btn-secondary" onclick="addContainerSection()"
+                                            style="padding: 12px 32px; font-weight: 700; border-radius: var(--radius-full); border-style: dashed; border-width: 2px;">
+                                            <i class="fas fa-plus-circle"></i> Add Container Specific Service
+                                        </button>
+                                    </div>
+
+                                    <div class="pricing-total-summary">
+                                        <div class="summary-item">
+                                            <label>Shipping Line Total (INR)</label>
+                                            <div id="totalOriginINR" class="amount" style="color:#1e3a8a;">₹0</div>
+                                        </div>
+                                        <div class="summary-item vendor-total-card" style="display:none;">
+                                            <label>Client Rate Total (INR)</label>
+                                            <div id="totalDestINR" class="amount">₹0</div>
+                                        </div>
+                                        <div class="summary-item total">
+                                            <label>Final Quote Amount</label>
+                                            <div id="finalQuoteINR" class="amount">₹0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quote Confirmation Summary (Initially Hidden) -->
+                    <div id="quoteConfirmationPage" style="display: none;">
+                        <div class="pricing-card">
+                            <div class="pricing-card-header"
+                                style="background: #ecfdf5; border-bottom: 2px solid #10b981;">
+                                <i class="fas fa-check-circle" style="color: #059669;"></i>
+                                <h3 style="color: #064e3b;">Quote Confirmed & Locked</h3>
+                            </div>
+                            <div class="pricing-card-body">
+                                <div style="text-align: center; margin-bottom: 40px;">
+                                    <div
+                                        style="width: 80px; height: 80px; background: #d1fae5; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 20px; color: #10b981; font-size: 40px;">
+                                        <i class="fas fa-file-contract"></i>
+                                    </div>
+                                    <h2 style="font-size: 24px; color: var(--navy-950); margin-bottom: 8px;">Confirmed
+                                        Quotation Document</h2>
+                                    <p id="confirmedQuoteNumber" style="font-weight: 700; color: #6b7280;"></p>
+                                </div>
+
+                                <!-- Confirmation Table -->
+                                <div id="confirmationDocumentTable">
+                                    <!-- Dynamic content will be injected here -->
+                                </div>
+
+                                <div
+                                    style="margin-top: 32px; padding: 20px; background: #f9fafb; border-radius: 12px; border: 1px solid var(--border-light); font-size: 14px; color: var(--text-secondary);">
+                                    <i class="fas fa-info-circle"
+                                        style="margin-right: 8px; color: var(--navy-400);"></i>
+                                    This quote is now confirmed and cannot be edited. You can download the PDF version
+                                    or proceed to track your shipment.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quote Selection Stage (Initially Hidden) -->
+                    <div id="selectionSection" style="display: none;">
+                        <div class="pricing-card">
+                            <div class="pricing-card-header"
+                                style="background: #eff6ff; border-bottom: 2px solid #3b82f6;">
+                                <i class="fas fa-tasks" style="color: #2563eb;"></i>
+                                <h3 style="color: #1e3a8a;">Final Quote Selection</h3>
+                            </div>
+                            <div class="pricing-card-body">
+                                <p style="margin-bottom: 24px; color: var(--text-secondary); font-size: 15px;">
+                                    Please review all available quotations for this sale and select the most suitable
+                                    one to finalize and lock the shipment.
+                                </p>
+                                <div id="selectionGrid"
+                                    style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin-bottom: 20px;">
+                                    <!-- Dynamic Content -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions"
+                        style="margin-top: 40px; border-top: 1px solid var(--border-light); padding-top: 32px;">
+
+                        <button type="button" class="btn btn-secondary" onclick="goBack()">
+                            <i class="fas fa-th-large"></i> Back to Dashboard
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="savePricing()">
+                            <i class="fas fa-save" style="color: var(--navy-600)"></i> Save Quote
+                        </button>
+                        <button type="button" id="confirmQuoteBtn" class="btn btn-primary"
+                            onclick="confirmQuoteFromPage()"
+                            style="padding: 12px 32px; background: #059669; border: none; font-weight: 800; display: none;">
+                            Confirm This Quote <i class="fas fa-check-circle" style="margin-left: 8px;"></i>
+                        </button>
+
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/pricing.js"></script>
+</body>
+
+</html>

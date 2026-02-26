@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - ShipFlow TMS</title>
+    <link href="css/styles.css" rel="stylesheet">
+    <link href="css/login.css" rel="stylesheet">
+    <link href="css/modal.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+</head>
+
+<body class="login-page">
+    <!-- Floating Background Icons -->
+    <i class="fas fa-ship floating-icon icon-1"></i>
+    <i class="fas fa-box floating-icon icon-2"></i>
+    <i class="fas fa-truck-moving floating-icon icon-3"></i>
+    <i class="fas fa-globe-americas floating-icon icon-4"></i>
+
+    <div class="login-container">
+        <div class="login-card">
+            <div class="login-header">
+                <div class="login-logo">
+                    <div class="logo-icon">SF</div>
+                    <div class="logo-text">ShipFlow</div>
+                </div>
+                <h1 class="login-title">Welcome Back</h1>
+                <p class="login-subtitle">Please enter your details to sign in</p>
+            </div>
+
+            <form class="login-form" id="loginForm">
+                <div class="form-group">
+                    <label for="userId">User ID</label>
+                    <div class="input-with-icon">
+                        <i class="fas fa-user"></i>
+                        <input type="text" id="userId" name="userId" placeholder="Enter your User ID" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <div class="input-with-icon">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" id="password" name="password" placeholder="••••••••" required>
+                    </div>
+                </div>
+
+                <div class="login-options">
+                    <label class="remember-me">
+                        <input type="checkbox" name="remember">
+                        <span>Remember me</span>
+                    </label>
+                    <a href="#" class="forgot-password">Forgot Password?</a>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-login">
+                    <span>Sign In</span>
+                    <i class="fas fa-arrow-right"></i>
+                </button>
+            </form>
+
+            <div class="login-footer">
+                <p>New to ShipFlow? <a href="#">Contact Admin</a></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+
+            const username = document.getElementById('userId').value;
+            const password = document.getElementById('password').value;
+
+            // Basic validation feedback
+            const btn = this.querySelector('.btn-login');
+            const originalText = btn.innerHTML;
+
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch(`${CONFIG.API_URL}/api/auth/login-json`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Login success:', data);
+
+                    // Store real session data
+                    localStorage.setItem('isLoggedIn', 'true');
+                    localStorage.setItem('user', data.username);
+                    localStorage.setItem('token', data.access_token);
+
+                    // Redirect to dashboard
+                    window.location.href = '/';
+                } else {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Authentication failed');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                showModal('Login Failed', error.message || 'Please enter valid credentials', 'error');
+            }
+        });
+    </script>
+</body>
+
+</html>
