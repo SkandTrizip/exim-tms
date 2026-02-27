@@ -117,6 +117,7 @@ frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 @app.get("/create-invoice", include_in_schema=False)
 @app.get("/client-master", include_in_schema=False)
 @app.get("/shipping-line", include_in_schema=False)
+@app.get("/record-payment", include_in_schema=False)
 async def serve_frontend_pages(request: Request):
     page = request.url.path.strip("/")
     file_path = os.path.join(frontend_path, f"{page}.html")

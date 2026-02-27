@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, JSON
 from backend.database import Base
 import datetime
 
@@ -14,3 +14,4 @@ class ShipmentDocument(Base):
     file_size = Column(Integer)
     mime_type = Column(String)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    metadata_info = Column(JSON)

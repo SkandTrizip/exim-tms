@@ -58,7 +58,7 @@ function handleRouting() {
         showQuotesView();
     } else if (hash === '#tracking') {
         showTrackingView();
-    } else if (hash === '#finance' || hash === '#finance-payments' || hash === '#finance-invoices') {
+    } else if (hash === '#finance' || hash === '#finance-payments' || hash === '#finance-invoices' || hash === '#finance-received') {
         const subView = hash.replace('#finance-', '');
         showFinanceView(subView === '#finance' ? null : subView);
     } else {
@@ -184,6 +184,10 @@ async function showFinanceView(subView = null) {
         if (title) title.textContent = 'Create Client Invoice';
         if (desc) desc.textContent = 'Review BL status and generate invoices for clients';
         setActiveLink('navFinanceInvoices');
+    } else if (subView === 'received') {
+        if (title) title.textContent = 'Payments Received from Client';
+        if (desc) desc.textContent = 'Record and track payments received from clients for invoices';
+        setActiveLink('navFinanceReceived');
     } else {
         if (title) title.textContent = 'Finance Management';
         if (desc) desc.textContent = 'Manage payments and client invoices';
@@ -576,6 +580,32 @@ async function updateFinanceTable(subView = null) {
     const ids = operationalEnquiries.map(e => e.id);
     const bulkStatus = await fetchBulkStatus(ids);
 
+    // Update table headers for enquiries (default)
+    const thead = document.querySelector('#financeView .data-table thead tr');
+    if (thead && subView !== 'received') {
+        thead.innerHTML = `
+            <th>Sale #</th>
+            <th>Client</th>
+            <th>Route</th>
+            <th>Finance Status</th>
+            <th>Action</th>
+        `;
+    }
+
+    // For Payments Received, we use a different data source (Invoices)
+    if (subView === 'received') {
+        try {
+            const res = await fetch(`${CONFIG.API_URL}/api/invoice/list`);
+            if (res.ok) {
+                const invoices = await res.json();
+                renderInvoicesTable(invoices);
+                return;
+            }
+        } catch (err) {
+            console.error('Error fetching invoices:', err);
+        }
+    }
+
     // Filter to those that have a shipping invoice
     const financeEnquiries = operationalEnquiries
         .map(e => {
@@ -659,8 +689,10 @@ async function updateFinanceStats() {
     const paymentsMade = document.getElementById('financePaymentsMade');
     const invoicesRaised = document.getElementById('financeInvoicesRaised');
     const paymentPending = document.getElementById('paymentPendingCount');
+    const paymentsReceived = document.getElementById('financePaymentsReceived');
 
     if (paymentsMade) paymentsMade.textContent = '0';
+    if (paymentsReceived) paymentsReceived.textContent = '0';
 
     try {
         const statsRes = await fetch(`${CONFIG.API_URL}/api/dashboard/stats`);
@@ -669,11 +701,60 @@ async function updateFinanceStats() {
             if (invoicesRaised) invoicesRaised.textContent = sData.invoices_raised || '0';
             if (paymentPending) paymentPending.textContent = sData.payment_pending || '0';
             if (paymentsMade) paymentsMade.textContent = sData.payments_made || '0';
+            if (paymentsReceived) paymentsReceived.textContent = sData.received_payments || '0';
         }
     } catch (e) {
         console.error(e);
     }
 }
+
+function renderInvoicesTable(invoices) {
+    const tbody = document.getElementById('financeTable');
+    if (!tbody) return;
+
+    // Update table headers for invoices
+    const thead = document.querySelector('#financeView .data-table thead tr');
+    if (thead) {
+        thead.innerHTML = `
+            <th>Invoice #</th>
+            <th>Client</th>
+            <th>Sale #</th>
+            <th>Status</th>
+            <th>Action</th>
+        `;
+    }
+
+    if (invoices.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No records found.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = invoices.map(inv => `
+        <tr>
+            <td><strong>${inv.invoice_number}</strong></td>
+            <td>${inv.client_name}</td>
+            <td>${inv.enquiry_number}</td>
+            <td>
+                ${inv.is_paid
+            ? `<span class="badge badge-success"><i class="fas fa-check-circle"></i> Paid</span>`
+            : `<span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>`}
+            </td>
+            <td>
+                <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openPaymentModal(${inv.id}, '${inv.invoice_number}')">
+                    <i class="fas fa-money-check-alt"></i> ${inv.is_paid ? 'View/Edit Receipt' : 'Record Receipt'}
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Global function for modal (will be implemented in separate JS or here)
+window.openPaymentModal = async function (invoiceId, invNum) {
+    // We'll use a modal to record payment
+    // For now, let's redirect to a details page or implement a modal here
+    // Redirecting is easier for complex forms
+    window.location.href = `/record-payment?invoice_id=${invoiceId}`;
+};
 
 /**
  * Maps an enquiry's numeric stage (and optional shipment status flags)

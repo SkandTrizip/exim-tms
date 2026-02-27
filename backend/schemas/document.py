@@ -9,6 +9,7 @@ class ShipmentDocumentBase(BaseModel):
     file_name: str
     file_size: int
     mime_type: str
+    metadata_info: Optional[dict] = None
 
 class ShipmentDocumentCreate(ShipmentDocumentBase):
     file_path: str

@@ -8,7 +8,7 @@ from backend.config import UPLOAD_DIR
 from typing import List, Dict
 from backend.utils.logger import logger
 
-def save_document(db: Session, file: UploadFile, enquiry_id: int, quote_id: int, document_type: str):
+def save_document(db: Session, file: UploadFile, enquiry_id: int, quote_id: int, document_type: str, metadata_info: dict = None):
     """Save a file to disk and record its metadata in the database"""
     logger.info(f"Saving document '{document_type}' for enquiry_id={enquiry_id}")
     # Create upload directory if it doesn't exist
@@ -46,7 +46,8 @@ def save_document(db: Session, file: UploadFile, enquiry_id: int, quote_id: int,
         file_name=file.filename,
         file_path=unique_filename,
         file_size=os.path.getsize(file_path),
-        mime_type=file.content_type
+        mime_type=file.content_type,
+        metadata_info=metadata_info
     )
     
     db.add(db_document)

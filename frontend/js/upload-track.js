@@ -14,6 +14,16 @@ document.addEventListener('DOMContentLoaded', function () {
     loadEnquiryData();
     // After everything is populated, try to load any saved checklist state
     setTimeout(loadChecklistState, 500);
+
+    // Attach autosave to metadata fields
+    const metadataFields = [
+        'si_number', 'bl_consignee', 'bl_port_origin', 'bl_final_dest', 'bl_master_number',
+        'bl_vessel', 'bl_voyage', 'bl_etd', 'bl_eta'
+    ];
+    metadataFields.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', saveChecklistState);
+    });
 });
 
 /**
@@ -141,28 +151,43 @@ async function fetchUploadedDocuments(enquiryId) {
             console.log('📎 Existing documents found:', documents);
 
             documents.forEach(doc => {
+                const filename = doc.file_path.split(/[\\\/]/).pop();
+                const fileUrl = `${CONFIG.API_URL}/uploads/${filename}`;
+                const metadata = doc.metadata_info || {};
+
+                // 1. Handling for Additional Invoices
                 if (doc.document_type === 'additionalInvoice') {
                     const listEl = document.getElementById('additionalInvoicesList');
                     if (listEl) {
-                        const filename = doc.file_path.split(/[\\\/]/).pop();
-                        const fileUrl = `${CONFIG.API_URL}/uploads/${filename}`;
+                        let metaHtml = "";
+                        if (metadata.amount || metadata.charge_details) {
+                            metaHtml = `
+                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #e2e8f0; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; font-size: 10px; color: #64748b;">
+                                    <span><strong>Desc:</strong> ${metadata.charge_details || '-'}</span>
+                                    <span><strong>HSN:</strong> ${metadata.hsn_sac || '-'}</span>
+                                    <span style="text-align: right; font-weight: 700; color: var(--navy-800);">₹${parseFloat(metadata.amount || 0).toLocaleString()}</span>
+                                </div>
+                            `;
+                        }
+
                         const item = document.createElement('div');
                         item.innerHTML = `
-                            <div style="display: flex; align-items: center; gap: 8px; padding: 6px 12px; background: #f8fafc; border-radius: 4px; border: 1px solid var(--border-light);">
-                                <i class="fas fa-file-invoice" style="color: var(--primary);"></i>
-                                <span style="flex: 1; font-weight: 500; font-size: 11px;">${doc.file_name}</span>
-                                <a href="${fileUrl}" target="_blank" style="color: var(--primary); font-size: 11px; font-weight: 600;">View</a>
+                            <div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; border: 1px solid var(--border-light);">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <i class="fas fa-file-invoice" style="color: var(--primary);"></i>
+                                    <span style="flex: 1; font-weight: 600; font-size: 11px;">${doc.file_name}</span>
+                                    <a href="${fileUrl}" target="_blank" style="color: var(--primary); font-size: 11px; font-weight: 600; text-decoration: none;">View</a>
+                                </div>
+                                ${metaHtml}
                             </div>
                         `;
                         listEl.appendChild(item);
+                        return; // Return for forEach callback (like continue)
                     }
-                    return;
                 }
 
-                // Determine which display ID based on document_type
+                // 2. Mapping for all other documents (including Main Shipping Invoice)
                 let displayId = `${doc.document_type}FileName`;
-
-                // Map of document types to their display IDs if they don't follow the pattern
                 const specialMappings = {
                     'bol': 'blFileName',
                     'shippingInvoice': 'shippingInvoiceFileName',
@@ -182,8 +207,6 @@ async function fetchUploadedDocuments(enquiryId) {
 
                 const displayElement = document.getElementById(displayId);
                 if (displayElement) {
-                    const filename = doc.file_path.split(/[\\\/]/).pop();
-                    const fileUrl = `${CONFIG.API_URL}/uploads/${filename}`;
                     displayElement.innerHTML = `
                         <div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: white; border-radius: 4px; border: 1px solid var(--border-light); margin-top: 4px;">
                             <i class="fas fa-check-circle" style="color: var(--success);"></i>
@@ -403,28 +426,27 @@ function checkAllDependencies() {
     const rowShippingInv = document.getElementById('row_shipping_invoice');
     if (rowShippingInv) rowShippingInv.style.opacity = sobChecked ? '1' : '0.8';
 
-    // 2. Payment Dependency: BL Received appears only after Payment to Shipping Line (pay_line)
+    // 2. Payment Dependency: BL Received appears only after Payment to Shipping Line (pay_line) OR after SOB
     const isPaid = window.currentPaymentStatus === true;
     const isBLChecked = document.getElementById('status_bl_received')?.checked;
 
     const rowBL = document.getElementById('row_bl_received');
-    const rowAddPayments = document.getElementById('row_additional_payments');
+    const rowAddInvoices = document.getElementById('row_additional_invoices');
 
     if (rowBL) {
-        // Show BL row if paid OR if it was already checked in a previous state
-        if (isPaid || isBLChecked) {
-            rowBL.style.display = 'table-row';
+        // Show BL row if paid OR if it was already checked OR if SOB is done
+        if (isPaid || isBLChecked || sobChecked) {
+            rowBL.style.display = 'block';
             document.getElementById('status_bl_received').disabled = false;
             document.getElementById('status_bl_received').style.cursor = 'pointer';
             document.getElementById('btn_bl_received').disabled = false;
             document.getElementById('btn_bl_received').style.opacity = '1';
             document.getElementById('btn_bl_received').style.cursor = 'pointer';
 
-            // Show additional payments section once main is paid
-            if (rowAddPayments) rowAddPayments.style.display = 'table-row';
+            if (rowAddInvoices) rowAddInvoices.style.display = 'table-row';
         } else {
             rowBL.style.display = 'none';
-            if (rowAddPayments) rowAddPayments.style.display = 'none';
+            if (rowAddInvoices) rowAddInvoices.style.display = 'none';
         }
     }
 }
@@ -438,7 +460,8 @@ function toggleDetailRow(checkbox, rowId) {
 
     // Only show if checkbox is checked AND parent row is visible (or will be shown)
     if (checkbox.checked) {
-        detailRow.style.display = 'table-row';
+        // If it's a <tr> use table-row, else use block
+        detailRow.style.display = detailRow.tagName === 'TR' ? 'table-row' : 'block';
     } else {
         detailRow.style.display = 'none';
         const inputs = detailRow.querySelectorAll('input');
@@ -494,14 +517,27 @@ function getChecklistState() {
 }
 
 /**
- * Save the current state of all checkboxes and dates to localStorage
+ * Save the current state of all checkboxes and dates to localStorage and Backend
  */
-function saveChecklistState() {
+async function saveChecklistState() {
     if (!currentEnquiryData?.id) return;
 
     const state = getChecklistState();
     localStorage.setItem(`checklist_${currentEnquiryData.id}`, JSON.stringify(state));
-    console.log('💾 Checklist state saved for enquiry:', currentEnquiryData.id);
+    console.log('💾 Checklist state saved to localStorage');
+
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/tracking/status/${currentEnquiryData.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(state)
+        });
+        if (response.ok) {
+            console.log('✅ Checklist state synced with backend');
+        }
+    } catch (e) {
+        console.error('❌ Failed to sync checklist state with backend:', e);
+    }
 }
 
 /**
@@ -521,19 +557,23 @@ async function loadChecklistState() {
                 return;
             }
         }
+    } catch (e) {
+        console.warn('Backend status fetch failed, falling back to localStorage:', e);
+    }
 
-        // 2. Fallback to localStorage if backend record doesn't exist
-        const saved = localStorage.getItem(`checklist_${currentEnquiryData.id}`);
-        if (saved) {
-            const state = JSON.parse(saved);
+    // 2. Fallback to localStorage
+    const savedState = localStorage.getItem(`checklist_${currentEnquiryData.id}`);
+    if (savedState) {
+        try {
+            const state = JSON.parse(savedState);
             applyChecklistState(state, false);
             console.log('🔄 Checklist state restored from localStorage');
+        } catch (e) {
+            console.error('Error parsing localStorage state:', e);
         }
-
-        // Ensure dependencies are applied after loading state
+    } else {
+        // Even if no state found, ensure dependencies are checked once
         checkAllDependencies();
-    } catch (e) {
-        console.error('Error loading checklist state:', e);
     }
 }
 
@@ -541,6 +581,8 @@ async function loadChecklistState() {
  * Apply status data to the DOM
  */
 function applyChecklistState(state, isBackend = false) {
+    if (!state) return;
+
     const checklistItems = [
         'booking_confirmed', 'booking_placed', 'booking_finalized',
         'container_picked', 'stuffing_done', 'container_gated',
@@ -556,55 +598,49 @@ function applyChecklistState(state, isBackend = false) {
 
         if (!checkbox || item === 'booking_confirmed') return;
 
-        let data = isBackend ? state[item] : state[item]?.checked;
+        let isChecked = isBackend ? !!state[item] : !!state[item]?.checked;
         let dateValue = isBackend ? state[item] : state[item]?.date;
 
         if (item === 'sob') {
             // SOB uses a date input picker — restore accordingly
-            checkbox.checked = !!data;
-            if (dateEl) {
-                if (checkbox.checked) {
-                    // Enable the date picker regardless of whether a date is saved
-                    dateEl.disabled = false;
-                    dateEl.style.cursor = 'pointer';
-                    dateEl.style.opacity = '1';
-                    dateEl.style.background = 'white';
-                    dateEl.style.borderColor = 'var(--primary)';
+            checkbox.checked = isChecked;
+            const dateInput = document.getElementById('date_sob');
+            if (dateInput) {
+                if (isChecked) {
+                    dateInput.disabled = false;
+                    dateInput.style.cursor = 'pointer';
+                    dateInput.style.opacity = '1';
+                    dateInput.style.background = 'white';
+                    dateInput.style.borderColor = 'var(--primary)';
 
-                    // Try to restore any previously saved date
-                    const sobDate = isBackend ? state['sob'] : state['sob']?.date;
-                    if (sobDate && sobDate !== '-') {
-                        const dateOnly = typeof sobDate === 'string' && sobDate.includes('T')
-                            ? sobDate.split('T')[0]
-                            : sobDate;
-                        if (dateOnly) dateEl.value = dateOnly;
+                    // Restore date from backend ISO or local string
+                    if (dateValue && dateValue !== '-') {
+                        const dateOnly = typeof dateValue === 'string' && dateValue.includes('T')
+                            ? dateValue.split('T')[0]
+                            : dateValue;
+                        if (dateOnly) dateInput.value = dateOnly;
                     }
                 } else {
-                    // Disable the date picker and clear value
-                    dateEl.disabled = true;
-                    dateEl.value = '';
-                    dateEl.style.cursor = 'not-allowed';
-                    dateEl.style.opacity = '0.5';
-                    dateEl.style.background = '#f8fafc';
-                    dateEl.style.borderColor = 'var(--border-light)';
+                    dateInput.disabled = true;
+                    dateInput.style.opacity = '0.5';
+                    dateInput.style.cursor = 'not-allowed';
+                    dateInput.value = '';
                 }
             }
-        } else if (isBackend) {
-            checkbox.checked = !!data;
-            if (dateEl && data) {
-                const date = new Date(data);
-                dateEl.textContent = date.toLocaleDateString('en-GB', {
-                    day: '2-digit', month: 'short', year: 'numeric',
-                    hour: '2-digit', minute: '2-digit'
-                });
-                dateEl.style.color = 'var(--primary)';
-                dateEl.style.fontWeight = '600';
-            }
         } else {
-            checkbox.checked = !!data;
+            // Default restoration
+            checkbox.checked = isChecked;
             if (dateEl) {
-                dateEl.textContent = dateValue || '-';
-                if (data && dateValue !== '-') {
+                // Formatting for display
+                if (isBackend && dateValue && typeof dateValue === 'string' && dateValue.includes('T')) {
+                    const d = new Date(dateValue);
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    dateEl.textContent = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}, ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+                } else {
+                    dateEl.textContent = dateValue || '-';
+                }
+
+                if (isChecked && dateEl.textContent !== '-') {
                     dateEl.style.color = 'var(--primary)';
                     dateEl.style.fontWeight = '600';
                 }
@@ -615,7 +651,9 @@ function applyChecklistState(state, isBackend = false) {
         if (checkbox.checked) {
             const detailRowId = `details_${item}`;
             const detailRow = document.getElementById(detailRowId);
-            if (detailRow) detailRow.style.display = 'table-row';
+            if (detailRow) {
+                detailRow.style.display = (item === 'bl_received') ? 'block' : 'table-row';
+            }
         }
     });
 
@@ -636,13 +674,15 @@ function applyChecklistState(state, isBackend = false) {
         const el = document.getElementById(elementId);
         if (el && state[backendKey]) {
             let value = state[backendKey];
-            // Format dates if necessary
-            if ((backendKey === 'etd' || backendKey === 'eta') && value.includes('T')) {
+            if ((backendKey === 'etd' || backendKey === 'eta') && typeof value === 'string' && value.includes('T')) {
                 value = value.split('T')[0];
             }
             el.value = value;
         }
     });
+
+    // Ensure dependencies are applied AFTER applying state
+    checkAllDependencies();
 }
 
 // Update populateShipmentInfo to handle initial status date
@@ -819,8 +859,6 @@ function removeFile(inputId, displayId) {
  * Save tracking details and uploaded documents
  */
 async function saveTracking() {
-
-
     // Prepare minimal tracking data
     const trackingData = {
         enquiry_id: currentEnquiryData?.id,
@@ -882,48 +920,7 @@ function goBack() {
     // as the quote is already finalized and locked.
     window.location.href = '/#dashboard';
 }
-/**
- * Logic for Additional Invoices
- */
-function addAdditionalInvoice() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.style.display = 'none';
-    const id = `extraInv_${Date.now()}`;
-    input.id = id;
 
-    input.onchange = async () => {
-        const file = input.files[0];
-        if (file) {
-            // Validate file size (2MB max)
-            const maxSize = 2 * 1024 * 1024;
-            if (file.size > maxSize) {
-                showModal('File Validation', 'File size exceeds 2MB limit. Please choose a smaller file.', 'warning');
-                return;
-            }
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('document_type', 'additionalInvoice');
-            formData.append('enquiry_id', currentEnquiryData.id);
-
-            try {
-                const res = await fetch(`${CONFIG.API_URL}/api/tracking/upload-single`, {
-                    method: 'POST',
-                    body: formData
-                });
-                if (res.ok) {
-                    showModal('Success', 'Additional invoice uploaded', 'success');
-                    // Refresh documents
-                    document.getElementById('additionalInvoicesList').innerHTML = '';
-                    await fetchUploadedDocuments(currentEnquiryData.id);
-                }
-            } catch (e) { console.error(e); }
-        }
-    };
-
-    document.body.appendChild(input);
-    input.click();
-}
 
 /**
  * Additional Charges & Payments Modal Logic
@@ -1011,4 +1008,91 @@ async function fetchAdditionalPayments(enquiryId) {
             });
         }
     } catch (e) { console.error(e); }
+}
+
+function handleAdditionalInvoiceUpload(input) {
+    if (input.files && input.files[0]) {
+        // Show file name
+        document.getElementById('additionalInvoiceFileName').innerText = input.files[0].name;
+
+        // Visual feedback for upload button
+        const btn = document.getElementById('btn_additional_invoice');
+        if (btn) {
+            btn.innerHTML = '<i class="fas fa-check" style="color: var(--success); font-size: 11px;"></i> Document Selected';
+        }
+    }
+}
+
+
+async function saveAdditionalInvoiceDetails() {
+    const chargeDetails = document.getElementById('add_inv_charge_details')?.value;
+    const hsnSac = document.getElementById('add_inv_hsn_sac')?.value;
+    const amount = document.getElementById('add_inv_amount')?.value;
+    const fileInput = document.getElementById('additionalInvoiceUpload');
+
+    if (!chargeDetails || !hsnSac || !amount) {
+        alert("Please fill in Charge Details, HSN/SAC Code, and Amount");
+        return;
+    }
+
+    if (!fileInput.files || !fileInput.files[0]) {
+        alert("Please upload a file first");
+        return;
+    }
+
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('document_type', 'additionalInvoice');
+    formData.append('enquiry_id', currentEnquiryData.id);
+
+    // Pass metadata
+    const metadataObj = {
+        charge_details: chargeDetails,
+        hsn_sac: hsnSac,
+        amount: amount
+    };
+    formData.append('metadata', JSON.stringify(metadataObj));
+
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/tracking/upload-single`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (res.ok) {
+            showModal('Success', 'Additional invoice uploaded and saved', 'success');
+
+            // Basic UI reset/feedback
+            const detailsForm = document.getElementById('details_additional_invoice');
+            if (detailsForm) {
+                detailsForm.style.display = 'none';
+            }
+
+            // Reset upload button
+            const btn = document.getElementById('btn_additional_invoice');
+            if (btn) {
+                btn.classList.remove('uploaded');
+                btn.innerHTML = '<i class="fas fa-file-upload"></i> Select Document';
+                btn.style.cssText = 'padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; border: 1px solid #e2e8f0; color: #334155; background: white; display: flex; align-items: center; gap: 6px;';
+            }
+            const nameDiv = document.getElementById('additionalInvoiceFileName');
+            if (nameDiv) nameDiv.innerText = 'No file chosen';
+
+            fileInput.value = '';
+            document.getElementById('add_inv_charge_details').value = '';
+            document.getElementById('add_inv_hsn_sac').value = '';
+            document.getElementById('add_inv_amount').value = '';
+
+            // Refresh documents list
+            document.getElementById('additionalInvoicesList').innerHTML = '';
+            await fetchUploadedDocuments(currentEnquiryData.id);
+        } else {
+            const error = await res.json();
+            showModal('Error', 'Failed to upload: ' + (error.detail || 'Unknown error'), 'error');
+        }
+    } catch (e) {
+        console.error(e);
+        showModal('Error', 'Failed to save additional invoice details', 'error');
+    }
 }

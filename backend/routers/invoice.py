@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, Query
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models.enquiry import Enquiry
@@ -30,6 +30,12 @@ class InvoiceCreate(BaseModel):
     payment_due_date: datetime.date
     place_of_supply: str
     irn: Optional[str] = None
+    item_type: str = "all"
+
+class InvoicePayment(BaseModel):
+    payment_date: datetime.date
+    payment_reference: str
+    received_amount: float
 
 @router.post("/record")
 def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
@@ -56,19 +62,76 @@ def get_invoice_details(enquiry_id: int, db: Session = Depends(get_db)):
         return None
     return invoice
 
+@router.get("/list")
+def list_all_invoices(db: Session = Depends(get_db)):
+    """List all recorded invoices for payment tracking"""
+    invoices = db.query(Invoice, Enquiry.enquiry_number, Enquiry.client_name)\
+        .join(Enquiry, Invoice.enquiry_id == Enquiry.id)\
+        .order_by(Invoice.created_at.desc()).all()
+    
+    result = []
+    for inv, enq_num, client in invoices:
+        inv_dict = {
+            "id": inv.id,
+            "invoice_number": inv.invoice_number,
+            "invoice_date": inv.invoice_date,
+            "enquiry_number": enq_num,
+            "client_name": client,
+            "is_paid": inv.is_paid,
+            "payment_date": inv.payment_date,
+            "payment_reference": inv.payment_reference,
+            "received_amount": inv.received_amount,
+            "status": inv.status,
+            "item_type": inv.item_type
+        }
+        result.append(inv_dict)
+    return result
+
+@router.put("/payment/{invoice_id}")
+def record_invoice_payment(invoice_id: int, payment: InvoicePayment, db: Session = Depends(get_db)):
+    """Record payment for a specific invoice"""
+    db_invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+    if not db_invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    db_invoice.is_paid = True
+    db_invoice.payment_date = payment.payment_date
+    db_invoice.payment_reference = payment.payment_reference
+    db_invoice.received_amount = payment.received_amount
+    
+    # Also update shipment status if exists
+    status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == db_invoice.enquiry_id).first()
+    if status:
+        status.pay_client = datetime.datetime.combine(payment.payment_date, datetime.time.min)
+        status.utr_number = payment.payment_reference
+        status.payment_amount = int(payment.received_amount)
+    
+    db.commit()
+    logger.info(f"Payment recorded for invoice {db_invoice.invoice_number}")
+    return {"message": "Payment recorded successfully"}
+
 
 @router.get("/generate/{enquiry_id}")
 async def generate_invoice_pdf(
     enquiry_id: int, 
-    invoice_number: Optional[str] = "INV-DRAFT",
-    invoice_date: Optional[str] = None,
-    place_of_supply: Optional[str] = None,
-    roe: Optional[float] = None,
-    irn: Optional[str] = None,
-    invoice_type: Optional[str] = "draft",
+    invoice_number: str,
+    invoice_date: str,
+    invoice_type: str = "draft",  # 'draft' or 'tax'
+    place_of_supply: str = "06AAFCL3674H1ZE/Gurugram",
+    roe: float = Query(...),
+    irn: str = None,
+    item_type: str = "all",      # 'all', 'main', or 'additional'
     db: Session = Depends(get_db)
 ):
-    # 1. Fetch Data
+    # 1. Validate mandatory fields
+    if roe is None or roe <= 0:
+        logger.warning(f"Invoice generation blocked: Exchange Rate (ROE) is mandatory but was not provided or is invalid (enquiry_id={enquiry_id})")
+        raise HTTPException(
+            status_code=422,
+            detail="Exchange Rate (ROE) is mandatory and must be a positive number. Please enter the Exchange Rate before generating the invoice."
+        )
+
+    # 2. Fetch Data
     logger.info(f"Generating invoice PDF for enquiry ID {enquiry_id}")
     enquiry = db.query(Enquiry).filter(Enquiry.id == enquiry_id).first()
     if not enquiry:
@@ -96,7 +159,7 @@ async def generate_invoice_pdf(
     # Assuming ClientMaster is linked via enquiry.client_name or similar? 
     # For now, use enquiry details.
 
-    # 2. PDF Setup
+    # 3. PDF Setup
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=15, leftMargin=15, topMargin=20, bottomMargin=20)
     elements = []
@@ -298,53 +361,119 @@ async def generate_invoice_pdf(
     # Re-map headers to Paragraphs
     table_data[0] = [Paragraph(h, t_style_header) for h in headers]
 
-    # Use provided ROE or fallback to default
-    current_roe = roe if roe is not None else 93.68
+    # ROE is validated as mandatory at the start — use it directly
+    current_roe = roe
     
-    for container in sorted(quote.containers, key=lambda c: c.container_sequence):
-        for charge in sorted(container.charges, key=lambda ch: (ch.charge_sequence, ch.id)):
-            if charge.account_type != "On Your Account":
-                continue
+    if item_type in ["all", "main"]:
+        for container in sorted(quote.containers, key=lambda c: c.container_sequence):
+            for charge in sorted(container.charges, key=lambda ch: (ch.charge_sequence, ch.id)):
+                if charge.account_type != "On Your Account":
+                    continue
 
-            # Use vendor_rate (client-facing per-unit price); fall back to shipping line rate if not set
-            vendor_rate_per_unit = charge.vendor_rate if (charge.vendor_rate and charge.vendor_rate > 0) else None
-            if vendor_rate_per_unit is None:
-                # Fallback: use the shipping line rate (same formula will apply below)
-                vendor_rate_per_unit = charge.rate
+                # Use vendor_rate (client-facing per-unit price); fall back to shipping line rate if not set
+                vendor_rate_per_unit = charge.vendor_rate if (charge.vendor_rate and charge.vendor_rate > 0) else None
+                if vendor_rate_per_unit is None:
+                    # Fallback: use the shipping line rate (same formula will apply below)
+                    vendor_rate_per_unit = charge.rate
 
-            desc_lower = charge.charge_description.lower()
+                desc_lower = charge.charge_description.lower()
 
-            # Determine SAC and GST pct
-            sac_code = "996511"  # Default
+                # Determine SAC and GST pct
+                sac_code = "996511"  # Default
+                if "ocean freight" in desc_lower or "freight" in desc_lower:
+                    sac_code = "996521"
+                    gst_pct = 5.0
+                elif "bl fee" in desc_lower or "bl charge" in desc_lower:
+                    sac_code = "996799"
+                    gst_pct = 18.0
+                elif "origin thc" in desc_lower or "origin terminal" in desc_lower:
+                    sac_code = "996711"
+                    gst_pct = 18.0
+                elif "seal charge" in desc_lower or "seal fee" in desc_lower:
+                    sac_code = "996799"
+                    gst_pct = 18.0
+                elif "muc" in desc_lower:
+                    sac_code = "996711"
+                    gst_pct = 18.0
+                elif "facilitation" in desc_lower:
+                    sac_code = "996711"
+                    gst_pct = 18.0
+                else:
+                    gst_pct = 18.0
+
+                qty = charge.quantity
+                curr = charge.currency
+
+                unit_val = f"{qty:.2f}"
+                rate_val = f"{vendor_rate_per_unit:.2f}"
+
+                # Vendor Total = vendor_rate × qty × ex_rate  (same formula as shipping line)
+                curr_amt = vendor_rate_per_unit * qty
+                if curr == "USD":
+                    roe_display = current_roe
+                    taxable_amt = curr_amt * roe_display
+                else:
+                    roe_display = 1.0
+                    taxable_amt = curr_amt
+
+                igst_amt = taxable_amt * (gst_pct / 100.0)
+                total_inr = taxable_amt + igst_amt
+                grand_total_inr += total_inr
+
+                row = [
+                    Paragraph(str(sn), t_style_row),
+                    Paragraph(charge.charge_description, t_style_row_left),
+                    Paragraph(sac_code, t_style_row),
+                    Paragraph(curr, t_style_row),
+                    Paragraph(rate_val, t_style_row),
+                    Paragraph(unit_val, t_style_row),
+                    Paragraph(f"{curr_amt:.2f}", t_style_row),
+                    Paragraph(f"{roe_display:.2f}", t_style_row),
+                    Paragraph(f"{taxable_amt:.2f}", t_style_row),
+                    Paragraph(f"{gst_pct:.0f}%", t_style_row),
+                    Paragraph(f"{igst_amt:.2f}", t_style_row),
+                    Paragraph(f"{total_inr:.2f}", t_style_row),
+                ]
+                table_data.append(row)
+                sn += 1
+            
+    # --- Add Additional Shipping Line Invoices (from tracking info metadata) ---
+    if item_type in ["all", "additional"]:
+        from backend.models.document import ShipmentDocument
+        additional_docs = db.query(ShipmentDocument).filter(
+            ShipmentDocument.enquiry_id == enquiry_id,
+            ShipmentDocument.document_type == "additionalInvoice"
+        ).all()
+
+        for add_doc in additional_docs:
+            metadata = add_doc.metadata_info or {}
+            desc_val = metadata.get("charge_details", "Additional Charge")
+            desc_lower = desc_val.lower()
+            
+            # Determine SAC and GST
+            sac_code = metadata.get("hsn_sac", "996511")
             if "ocean freight" in desc_lower or "freight" in desc_lower:
-                sac_code = "996521"
                 gst_pct = 5.0
             elif "bl fee" in desc_lower or "bl charge" in desc_lower:
-                sac_code = "996799"
                 gst_pct = 18.0
             elif "origin thc" in desc_lower or "origin terminal" in desc_lower:
-                sac_code = "996711"
                 gst_pct = 18.0
             elif "seal charge" in desc_lower or "seal fee" in desc_lower:
-                sac_code = "996799"
                 gst_pct = 18.0
             elif "muc" in desc_lower:
-                sac_code = "996711"
                 gst_pct = 18.0
             elif "facilitation" in desc_lower:
-                sac_code = "996711"
                 gst_pct = 18.0
             else:
                 gst_pct = 18.0
 
-            qty = charge.quantity
-            curr = charge.currency
-
-            unit_val = f"{qty:.2f}"
-            rate_val = f"{vendor_rate_per_unit:.2f}"
-
-            # Vendor Total = vendor_rate × qty × ex_rate  (same formula as shipping line)
-            curr_amt = vendor_rate_per_unit * qty
+            try:
+                curr_amt = float(metadata.get("amount", 0))
+            except (ValueError, TypeError):
+                curr_amt = 0.0
+                
+            curr = "INR"
+            
             if curr == "USD":
                 roe_display = current_roe
                 taxable_amt = curr_amt * roe_display
@@ -356,77 +485,21 @@ async def generate_invoice_pdf(
             total_inr = taxable_amt + igst_amt
             grand_total_inr += total_inr
 
-            row = [
+            table_data.append([
                 Paragraph(str(sn), t_style_row),
-                Paragraph(charge.charge_description, t_style_row_left),
+                Paragraph(desc_val, t_style_row_left),
                 Paragraph(sac_code, t_style_row),
                 Paragraph(curr, t_style_row),
-                Paragraph(rate_val, t_style_row),
-                Paragraph(unit_val, t_style_row),
-                Paragraph(f"{curr_amt:.2f}", t_style_row),
+                Paragraph(f"{curr_amt:.2f}", t_style_row), # Rate
+                Paragraph("1.00", t_style_row),           # Qty
+                Paragraph(f"{curr_amt:.2f}", t_style_row), # Curr Amt
                 Paragraph(f"{roe_display:.2f}", t_style_row),
                 Paragraph(f"{taxable_amt:.2f}", t_style_row),
                 Paragraph(f"{gst_pct:.0f}%", t_style_row),
                 Paragraph(f"{igst_amt:.2f}", t_style_row),
                 Paragraph(f"{total_inr:.2f}", t_style_row),
-            ]
-            table_data.append(row)
+            ])
             sn += 1
-            
-    # --- Add Additional Shipping Payments (Charges) recorded in Finance ---
-    from backend.models.finance import ShippingPayment
-    additional_payments = db.query(ShippingPayment).filter(
-        ShippingPayment.enquiry_id == enquiry_id,
-        ShippingPayment.payment_type == "Additional"
-    ).all()
-
-    for p in additional_payments:
-        desc_lower = (p.description or "").lower()
-        
-        # Determine SAC and GST
-        sac_code = "996511"
-        if "ocean freight" in desc_lower or "freight" in desc_lower:
-            sac_code = "996521"
-            gst_pct = 5.0
-        elif "bl fee" in desc_lower or "bl charge" in desc_lower:
-            sac_code = "996799"
-            gst_pct = 18.0
-        elif "origin thc" in desc_lower or "origin terminal" in desc_lower:
-            sac_code = "996711"
-            gst_pct = 18.0
-        elif "seal charge" in desc_lower or "seal fee" in desc_lower:
-            sac_code = "996799"
-            gst_pct = 18.0
-        elif "muc" in desc_lower:
-            sac_code = "996711"
-            gst_pct = 18.0
-        elif "facilitation" in desc_lower:
-            sac_code = "996711"
-            gst_pct = 18.0
-        else:
-            gst_pct = 18.0
-
-        taxable_amt = p.amount
-        igst_amt = taxable_amt * (gst_pct / 100.0)
-        total_inr = taxable_amt + igst_amt
-        grand_total_inr += total_inr
-        
-        row = [
-            Paragraph(str(sn), t_style_row),
-            Paragraph(p.description or "Additional Charge", t_style_row_left),
-            Paragraph(sac_code, t_style_row),
-            Paragraph(p.currency or "INR", t_style_row),
-            Paragraph(f"{p.amount:.2f}", t_style_row),
-            Paragraph("1.00", t_style_row),
-            Paragraph(f"{p.amount:.2f}", t_style_row),
-            Paragraph("1.00", t_style_row),
-            Paragraph(f"{taxable_amt:.2f}", t_style_row),
-            Paragraph(f"{gst_pct:.0f}%", t_style_row),
-            Paragraph(f"{igst_amt:.2f}", t_style_row),
-            Paragraph(f"{total_inr:.2f}", t_style_row),
-        ]
-        table_data.append(row)
-        sn += 1
             
     # Total Row
     total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)

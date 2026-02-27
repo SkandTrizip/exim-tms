@@ -88,6 +88,8 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     from backend.models.finance import ShippingPayment
     payments_made = db.query(ShippingPayment).count()
 
+    received_payments = db.query(Invoice).filter(Invoice.is_paid == True).count()
+
     return {
         "total_enquiries": total_enquiries,
         "pending_at_pricing": pending_at_pricing,
@@ -98,5 +100,6 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         "sob_pending": sob_pending,
         "invoices_raised": invoices_raised,
         "payment_pending": payment_pending,
-        "payments_made": payments_made
+        "payments_made": payments_made,
+        "received_payments": received_payments
     }

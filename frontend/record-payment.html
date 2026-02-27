@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Record Client Payment - Exim TMS</title>
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/modal.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">SF</div>
+                    <div class="logo-text">ShipFlow</div>
+                </div>
+                <div class="header-actions">
+                    <div class="user-profile"
+                        style="display: flex; align-items: center; gap: 12px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border-light);">
+                        <div class="user-avatar"
+                            style="width: 32px; height: 32px; background: var(--navy-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--navy-700); font-weight: 700; font-size: 14px; border: 1.5px solid var(--navy-600);">
+                            AD</div>
+                        <span id="userNameDisplay"
+                            style="font-size: 14px; font-weight: 600; color: var(--navy-800);">Admin</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="handleLogout()" title="Logout"
+                        style="padding: 8px 12px; width: 40px; justify-content: center;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container">
+            <div class="content" id="mainContent" style="margin: 0 auto; max-width: 900px;">
+                <div class="page-header" style="margin-bottom: 32px;">
+                    <h1 style="font-size: 32px; margin: 0; color: var(--navy-800);">
+                        <i class="fas fa-hand-holding-usd" style="color: var(--primary);"></i> Record Client Payment
+                    </h1>
+                    <p style="color: var(--text-secondary); margin-top: 8px;">
+                        Record payment received from client for invoice
+                    </p>
+                </div>
+
+                <div class="centered-form-layout">
+                    <div class="upload-track-container">
+                        <!-- Invoice Summary Section -->
+                        <div class="form-section"
+                            style="background: white; border: 1px solid var(--border-light); padding: 20px; border-radius: 8px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+                            <h3
+                                style="font-size: 16px; margin-bottom: 16px; color: var(--navy-800); border-bottom: 2px solid var(--navy-200); padding-bottom: 8px; display: inline-block;">
+                                📄 Invoice Details
+                            </h3>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                                <div style="display: grid; gap: 8px;">
+                                    <div
+                                        style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
+                                        <span
+                                            style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Invoice
+                                            Number</span>
+                                        <span id="display_invoice_number"
+                                            style="font-size: 13px; color: var(--navy-800); font-weight: 600;">-</span>
+                                    </div>
+                                    <div
+                                        style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
+                                        <span
+                                            style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Sale
+                                            Number</span>
+                                        <span id="display_enquiry_number"
+                                            style="font-size: 13px; color: var(--navy-800);">-</span>
+                                    </div>
+                                    <div
+                                        style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
+                                        <span
+                                            style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Client
+                                            Name</span>
+                                        <span id="display_client_name"
+                                            style="font-size: 13px; color: var(--navy-800);">-</span>
+                                    </div>
+                                </div>
+                                <div style="display: grid; gap: 8px;">
+                                    <div
+                                        style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
+                                        <span
+                                            style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Invoice
+                                            Date</span>
+                                        <span id="display_invoice_date"
+                                            style="font-size: 13px; color: var(--navy-800);">-</span>
+                                    </div>
+                                    <div
+                                        style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 10px 0; background: var(--primary-light); padding: 12px; border-radius: 6px;">
+                                        <span
+                                            style="font-size: 14px; color: var(--primary); font-weight: 700;">Status</span>
+                                        <span id="display_payment_status"
+                                            style="font-size: 14px; color: var(--primary); font-weight: 700;">-</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Payment Entry Form -->
+                        <div class="form-section"
+                            style="background: white; border: 1px solid var(--border-light); padding: 24px; border-radius: 8px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+                            <h3
+                                style="font-size: 18px; margin-bottom: 20px; color: var(--navy-800); display: flex; align-items: center; gap: 10px;">
+                                <i class="fas fa-file-invoice-dollar" style="color: var(--primary);"></i> Payment
+                                Receipt Information
+                            </h3>
+
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                <div class="form-group">
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Payment
+                                        Received Date</label>
+                                    <input type="date" id="payment_date" class="form-control" style="width: 100%;">
+                                </div>
+                                <div class="form-group">
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Amount Received
+                                        (INR)</label>
+                                    <input type="number" id="received_amount" class="form-control" placeholder="0.00"
+                                        style="width: 100%;">
+                                </div>
+                                <div class="form-group" style="grid-column: span 2;">
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Reference
+                                        Number (UTR / Check No. / Transaction ID)</label>
+                                    <input type="text" id="payment_reference" class="form-control"
+                                        placeholder="Enter reference number" style="width: 100%;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-actions" style="display: flex; gap: 16px; margin-top: 32px;">
+                            <button type="button" class="btn btn-secondary"
+                                onclick="window.location.href='/#finance-received'">
+                                <i class="fas fa-arrow-left"></i> Back to Payments
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="savePayment()">
+                                <i class="fas fa-check-circle"></i> Save Receipt
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/record-payment.js"></script>
+</body>
+
+</html>

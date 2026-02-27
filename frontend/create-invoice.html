@@ -219,6 +219,14 @@
                             <span class="field-label">ROE (Exchange Rate)</span>
                             <input type="number" step="0.01" class="manual-input" id="roe_val" placeholder="e.g. 84.50">
                         </div>
+                        <div class="form-row">
+                            <span class="field-label">Invoice Content</span>
+                            <select id="invoice_item_type" class="manual-input">
+                                <option value="all">Complete (Standard + Additional)</option>
+                                <option value="main">Main Only (Freight & Standard Charges)</option>
+                                <option value="additional">Additional Only (Detention/Extra Charges)</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 

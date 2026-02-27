@@ -35,6 +35,7 @@ async def upload_documents(
         enquiry_id = data.get("enquiry_id")
         quote_id = data.get("quote_id")
         checklist_state = data.get("checklist_state")
+        metadata_map = data.get("metadata_map", {})
         
         logger.info(f"Processing tracking documents update for enquiry ID {enquiry_id}")
         
@@ -64,8 +65,11 @@ async def upload_documents(
 
         for doc_type, file in files_to_process.items():
             if file:
+                # Use metadata from map if available for this doc_type
+                metadata_info = metadata_map.get(doc_type)
+                
                 doc = document_service.save_document(
-                    db, file, enquiry_id, quote_id, doc_type
+                    db, file, enquiry_id, quote_id, doc_type, metadata_info
                 )
                 uploaded_docs.append(doc)
 
@@ -114,10 +118,18 @@ async def get_status_bulk(ids: str, db: Session = Depends(get_db)):
     return result
 
 @router.get("/status/{enquiry_id}")
-
 async def get_status(enquiry_id: int, db: Session = Depends(get_db)):
     """Get shipment status checklist for an enquiry"""
     return status_service.get_shipment_status(db, enquiry_id)
+
+@router.post("/status/{enquiry_id}")
+async def update_status(enquiry_id: int, status_data: dict, db: Session = Depends(get_db)):
+    """Update shipment status checklist and metadata for an enquiry"""
+    try:
+        return status_service.update_shipment_status(db, enquiry_id, status_data)
+    except Exception as e:
+        logger.error(f"Failed to update status for enquiry ID {enquiry_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/enquiry/{enquiry_id}", response_model=List[ShipmentDocument])
 async def get_enquiry_documents(enquiry_id: int, db: Session = Depends(get_db)):
@@ -128,13 +140,21 @@ async def get_enquiry_documents(enquiry_id: int, db: Session = Depends(get_db)):
 async def upload_single_document(
     enquiry_id: int = Form(...),
     document_type: str = Form(...),
+    metadata: Optional[str] = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
     try:
+        metadata_info = None
+        if metadata:
+            try:
+                metadata_info = json.loads(metadata)
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid metadata JSON for enquiry ID {enquiry_id}")
+
         logger.info(f"Processing single {document_type} upload for enquiry ID {enquiry_id}")
         doc = document_service.save_document(
-            db, file, enquiry_id, None, document_type
+            db, file, enquiry_id, None, document_type, metadata_info
         )
         return doc
     except Exception as e:

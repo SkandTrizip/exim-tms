@@ -428,13 +428,12 @@ function renderContainerSection(data, index) {
                         <th class="col-ex">Ex. Rate</th>
                         <th class="col-inr">Shipping Line (INR)</th>
                         ${isConfirmMode ? '<th class="col-vendor">Client Rate</th>' : ''}
-                        <th class="col-actions"></th>
                     </tr>
                 </thead>
                 <tbody></tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="${isConfirmMode ? 11 : 10}" style="padding: 0;">
+                        <td colspan="${isConfirmMode ? 9 : 8}" style="padding: 0;">
                             <button type="button" class="btn-add-integrated" style="padding: 10px !important; font-size: 0.7rem;" onclick="addPricingRowToSection(this)">
                                 <i class="fas fa-plus-circle"></i> Add Charge Item
                             </button>
@@ -481,6 +480,11 @@ function addPricingRowToTbody(tbody, data = {}) {
     // Was vendor_rate explicitly set to a different value than rate?
     const vendorManual = (data.vendor_rate != null && data.vendor_rate > 0 && data.vendor_rate !== data.rate) ? 'true' : 'false';
 
+    // Delete button overlaid on the INR cell (only for non-core rows)
+    const deleteBtn = !isCore
+        ? `<button type="button" class="btn-icon-overlay" onclick="this.closest('tr').remove(); calculatePricingTotal()" title="Remove row"><i class="fas fa-trash"></i></button>`
+        : '';
+
     row.innerHTML = `
         <td><input type="text" class="p-desc" value="${data.desc || ''}" ${isCore ? 'readonly' : ''} oninput="calculatePricingTotal()"></td>
         <td><select class="p-account" onchange="calculatePricingTotal()"><option value="On Your Account" ${data.account === 'On Your Account' ? 'selected' : ''}>On Your Account</option><option value="Consignee Account" ${data.account === 'Consignee Account' ? 'selected' : ''}>Consignee Account</option></select></td>
@@ -489,9 +493,8 @@ function addPricingRowToTbody(tbody, data = {}) {
         <td><input type="number" class="p-qty" value="${data.on === 'Per BL' ? 1 : (data.qty || defaultQty)}" ${data.on === 'Per BL' ? 'readonly' : ''} min="0" oninput="if(this.value<0)this.value=0; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td><input type="number" class="p-rate" value="${data.rate || ''}" min="0" oninput="if(this.value<0)this.value=0; syncVendorRate(this); calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td><input type="number" class="p-ex" value="${defaultEx}" min="0" oninput="if(this.value<0)this.value=0; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
-        <td class="col-inr" style="font-weight:600;color:#1e3a8a;"><span class="p-inr-val">₹0</span></td>
+        <td class="col-inr" style="position:relative; font-weight:600; color:#1e3a8a;"><span class="p-inr-val">₹0</span>${deleteBtn}</td>
         ${isConfirmMode ? `<td class="col-vendor"><input type="number" class="p-vendor" value="${defaultVendorRate}" data-manual="${vendorManual}" min="0" placeholder="0" oninput="if(this.value<0)this.value=0; this.dataset.manual='true'; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>` : ''}
-        <td class="col-actions">${!isCore ? '<button type="button" class="btn-icon" onclick="this.closest(\'tr\').remove(); calculatePricingTotal()"><i class="fas fa-trash"></i></button>' : ''}</td>
     `;
     tbody.appendChild(row);
 }

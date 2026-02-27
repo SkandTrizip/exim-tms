@@ -425,13 +425,45 @@
 }
 
 .col-actions {
-    width: 4%;
+    width: 28px;
+    min-width: 28px;
+    max-width: 28px;
     text-align: center;
+    padding: 0 !important;
+    background: transparent !important;
+    border-left: none !important;
 }
 
 /* Show vendor total summary card only in confirm mode */
 body.confirm-mode .vendor-total-card {
     display: flex !important;
+}
+
+/* Overlay delete button inside the INR cell */
+.btn-icon-overlay {
+    position: absolute;
+    top: 50%;
+    right: 4px;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #dc2626;
+    opacity: 0;
+    padding: 2px 4px;
+    font-size: 10px;
+    line-height: 1;
+    transition: opacity 0.15s;
+    pointer-events: none;
+}
+
+.pricing-table tbody tr:hover .btn-icon-overlay {
+    opacity: 0.7;
+    pointer-events: auto;
+}
+
+.pricing-table tbody tr:hover .btn-icon-overlay:hover {
+    opacity: 1;
 }
 
 /* Vendor rate input special styling */
@@ -446,6 +478,25 @@ body.confirm-mode .vendor-total-card {
     box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.2) !important;
     border-color: #9ca3af !important;
     outline: none;
+}
+
+/* Delete-row icon button */
+.col-actions .btn-icon {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #dc2626;
+    opacity: 0.5;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    transition: opacity 0.15s;
+}
+
+.col-actions .btn-icon:hover {
+    opacity: 1;
 }
 
 /* Buttons */

@@ -23,6 +23,21 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     // Listen for invoice date changes to update due date
     document.getElementById('invoice_date').addEventListener('change', calculateDueDate);
+
+    // Auto-suffix for additional invoices
+    document.getElementById('invoice_item_type').addEventListener('change', function () {
+        const invInput = document.getElementById('invoice_number');
+        const originalVal = invInput.dataset.original || invInput.value;
+        if (!invInput.dataset.original) invInput.dataset.original = originalVal;
+
+        if (this.value === 'additional') {
+            if (!invInput.value.includes('-ADD')) {
+                invInput.value = originalVal + '-ADD-1';
+            }
+        } else {
+            invInput.value = originalVal;
+        }
+    });
 });
 
 async function fetchAllData() {
@@ -142,6 +157,17 @@ async function generateInvoice(type = 'draft') {
         return;
     }
 
+    const roeValue = parseFloat(document.getElementById('roe_val').value);
+    if (!document.getElementById('roe_val').value || isNaN(roeValue) || roeValue <= 0) {
+        if (typeof showModal === 'function') {
+            showModal('Input Required', 'Exchange Rate (ROE) is mandatory. Please enter the Exchange Rate before generating the invoice.', 'warning');
+        } else {
+            alert('Exchange Rate (ROE) is mandatory. Please enter the Exchange Rate before generating the invoice.');
+        }
+        document.getElementById('roe_val').focus();
+        return;
+    }
+
     try {
         // Generate and download the invoice PDF
         console.log('Generating invoice with data:', invoiceData);
@@ -153,7 +179,8 @@ async function generateInvoice(type = 'draft') {
             place_of_supply: invoiceData.place_of_supply,
             invoice_date: invoiceData.invoice_date,
             roe: document.getElementById('roe_val').value || '',
-            invoice_type: type           // 'draft' or 'tax'
+            invoice_type: type,           // 'draft' or 'tax'
+            item_type: document.getElementById('invoice_item_type').value || 'all'
         });
         if (irnValue) params.append('irn', irnValue);
 
@@ -237,7 +264,8 @@ async function recordInvoice() {
         invoice_number: document.getElementById('invoice_number').value,
         irn: document.getElementById('irn_val').value || null,
         invoice_date: document.getElementById('invoice_date').value,
-        payment_due_date: document.getElementById('payment_due_date').value
+        payment_due_date: document.getElementById('payment_due_date').value,
+        item_type: document.getElementById('invoice_item_type').value || 'all'
     };
 
     // Ensure dates are valid

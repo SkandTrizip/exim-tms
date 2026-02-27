@@ -3,8 +3,8 @@
 # Upload directory path (absolute path on the server)
 UPLOAD_DIR = "/home/azureuser/uploads/"
 
-# API_URL = 'http://20.193.250.226:8000'
-API_URL = 'http://localhost:8000'
+API_URL = 'http://20.193.250.226:8000'
+# API_URL = 'http://localhost:8000'
 
 AUTH_USERS = [
     {"username": "Rohit", "full_name": "Rohit", "password": "rohit@3145", "is_admin": False},

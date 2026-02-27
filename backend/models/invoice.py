@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Float
+from sqlalchemy import Column, Integer, String, Date, DateTime, ForeignKey, Float, Boolean
 from sqlalchemy.orm import relationship
 from backend.database import Base
 import datetime
@@ -14,6 +14,13 @@ class Invoice(Base):
     payment_due_date = Column(Date)
     irn = Column(String, nullable=True)
     status = Column(String, default="draft")
+    
+    # Payment Tracking
+    is_paid = Column(Boolean, default=False)
+    payment_date = Column(Date, nullable=True)
+    payment_reference = Column(String, nullable=True)
+    received_amount = Column(Float, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationship to Enquiry
