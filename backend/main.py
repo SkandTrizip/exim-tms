@@ -82,18 +82,24 @@ app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 async def serve_config_js():
     from backend.database import SessionLocal
     from backend.models.client_master import ClientMaster
+    from backend.models.shipping_line import ShippingLine
     
     config_dict = get_frontend_config()
     
-    # Get clients from Database (Client Master)
+    # Get clients and shipping lines from Database
     try:
         db = SessionLocal()
         db_clients = db.query(ClientMaster.client_name).distinct().all()
         if db_clients:
             config_dict["clients"] = [c[0] for c in db_clients if c[0]]
+        
+        db_shipping_lines = db.query(ShippingLine.shipping_line_name).filter(ShippingLine.status == 'verified').distinct().all()
+        if db_shipping_lines:
+            config_dict["shippingLines"] = [s[0] for s in db_shipping_lines if s[0]]
+            
         db.close()
     except Exception as e:
-        logger.error(f"Error fetching clients for config.js: {e}")
+        logger.error(f"Error fetching data for config.js: {e}")
         # Keep the hardcoded ones as fallback
 
     js_content = f"""

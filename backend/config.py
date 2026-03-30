@@ -10,7 +10,8 @@ AUTH_USERS = [
     {"username": "Rohit", "full_name": "Rohit", "password": "rohit@3145", "is_admin": False},
     {"username": "admin", "full_name": "Rohit", "password": "logipod@488!", "is_admin": True},
     {"username": "Sachin", "full_name": "Sachin ", "password": "sachin@5789!#$", "is_admin": False},
-    {"username": "Shokin", "full_name":"Shokin Saifi","password": "shokin@2538!#", "is_admin": False}
+    {"username": "Shokin", "full_name":"Shokin Saifi","password": "shokin@2538!#", "is_admin": False},
+    {"username": "Operations", "full_name":"Dapen","password": "ops@4567!#", "is_admin": False}
 ]
 
 # Admin usernames (case-insensitive check is done in code)
