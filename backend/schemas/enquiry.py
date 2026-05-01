@@ -37,6 +37,7 @@ class EnquiryBase(BaseModel):
 
     status: Optional[str] = "pending"
     stage: Optional[int] = 1
+    is_void: Optional[bool] = False
 
 class EnquiryCreate(EnquiryBase):
     pass

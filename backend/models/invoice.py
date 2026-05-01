@@ -18,6 +18,7 @@ class Invoice(Base):
     # Payment Tracking
     is_paid = Column(Boolean, default=False)
     payment_date = Column(Date, nullable=True)
+    payment_type = Column(String, nullable=True)
     payment_reference = Column(String, nullable=True)
     received_amount = Column(Float, nullable=True)
     

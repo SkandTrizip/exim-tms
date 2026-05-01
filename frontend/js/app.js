@@ -1,4 +1,4 @@
-﻿// Main Dashboard Logic
+// Main Dashboard Logic
 let enquiries = [];
 let PAGE_SIZE = 10;
 const paginationState = {
@@ -382,12 +382,12 @@ async function updateAllEnquiriesTable(filterType = null) {
     const paginated = filteredEnquiries.slice(start, start + PAGE_SIZE);
 
     // One bulk call for all stage>=3 IDs on this page
-    const opsIds = paginated.filter(e => e.stage >= 3).map(e => e.id);
+    const opsIds = paginated.filter(e => e.stage >= 3 && !e.is_void).map(e => e.id);
     const bulkStatus = opsIds.length > 0 ? await fetchBulkStatus(opsIds) : {};
 
     tbody.innerHTML = '';
     paginated.forEach(e => {
-        const s = e.stage >= 3 ? (bulkStatus[e.id] || null) : null;
+        const s = (e.stage >= 3 && !e.is_void) ? (bulkStatus[e.id] || null) : null;
         tbody.appendChild(createEnquiryRowWithStatus(e, s, true));
     });
 
@@ -396,6 +396,7 @@ async function updateAllEnquiriesTable(filterType = null) {
 
 function createEnquiryRowWithStatus(e, status = null, showDate = false) {
     const tr = document.createElement('tr');
+    if (e.is_void) tr.style.opacity = '0.55';
     tr.innerHTML = `
         <td><strong>${e.enquiry_number}</strong></td>
         <td>${e.client_name}</td>
@@ -406,18 +407,7 @@ function createEnquiryRowWithStatus(e, status = null, showDate = false) {
             <div class="actions-dropdown">
                 <button class="actions-btn">Actions <i class="fas fa-chevron-down"></i></button>
                 <div class="actions-menu">
-                    <button class="actions-item" onclick="viewEnquiry(${e.id})">
-                        <i class="fas fa-file-invoice"></i> View Sale
-                    </button>
-                    ${e.stage === 2 ? `
-                        <button class="actions-item confirm-item confirm-action" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=confirm'">
-                            <i class="fas fa-eye"></i> View Quote
-                        </button>
-                    ` : e.stage >= 3 ? `
-                        <button class="actions-item" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=view'">
-                            <i class="fas fa-file-invoice-dollar"></i> View Quotes
-                        </button>
-                    ` : ''}
+                    ${renderEnquiryActions(e)}
                 </div>
             </div>
         </td>
@@ -474,15 +464,7 @@ async function updateQuotesTable() {
                     <div class="actions-dropdown">
                         <button class="actions-btn">Actions <i class="fas fa-chevron-down"></i></button>
                         <div class="actions-menu">
-                            ${quoteInfo.status === 'Draft' ? `
-                                <button class="actions-item" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=edit'">
-                                    <i class="fas fa-edit"></i> Edit Quotes
-                                </button>
-                            ` : `
-                                <button class="actions-item" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=view'">
-                                    <i class="fas fa-eye"></i> View Quotes
-                                </button>
-                            `}
+                            ${renderEnquiryActions(e, quoteInfo.status)}
                         </div>
                     </div>
                 </td>
@@ -550,6 +532,7 @@ async function updateTrackingTable(filterType = null) {
                             <button class="actions-item" onclick="window.location.href='/upload-track?enquiry_id=${e.id}'">
                                 <i class="fas fa-shipping-fast"></i> View Tracking
                             </button>
+                            ${renderEnquiryActions(e)}
                         </div>
                     </div>
                 </td>
@@ -672,6 +655,8 @@ async function updateFinanceTable(subView = null) {
                                 >
                                     <i class="fas fa-file-invoice"></i> Create Invoice 
                                 </button>
+                                <hr style="margin: 4px 0; border: 0; border-top: 1px solid var(--border-light);">
+                                ${renderEnquiryActions(e)}
                             </div>
                         </div>
                     `}
@@ -719,13 +704,14 @@ function renderInvoicesTable(invoices) {
             <th>Invoice #</th>
             <th>Client</th>
             <th>Sale #</th>
+            <th>Amount</th>
             <th>Status</th>
             <th>Action</th>
         `;
     }
 
     if (invoices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No records found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
         return;
     }
 
@@ -734,14 +720,20 @@ function renderInvoicesTable(invoices) {
             <td><strong>${inv.invoice_number}</strong></td>
             <td>${inv.client_name}</td>
             <td>${inv.enquiry_number}</td>
+            <td>${inv.received_amount ? `₹${inv.received_amount.toLocaleString()}` : '---'}</td>
             <td>
                 ${inv.is_paid
-            ? `<span class="badge badge-success"><i class="fas fa-check-circle"></i> Paid</span>`
+            ? `<div style="display: flex; flex-direction: column; gap: 4px;">
+                    <span class="badge badge-success" style="width: fit-content;"><i class="fas fa-check-circle"></i> Paid</span>
+                    <small style="color: var(--text-tertiary); font-size: 11px;">
+                        ${inv.payment_type || 'Payment'}: ${inv.payment_reference || '---'}
+                    </small>
+               </div>`
             : `<span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>`}
             </td>
             <td>
                 <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openPaymentModal(${inv.id}, '${inv.invoice_number}')">
-                    <i class="fas fa-money-check-alt"></i> ${inv.is_paid ? 'View/Edit Receipt' : 'Record Receipt'}
+                    <i class="fas fa-hand-holding-usd"></i> ${inv.is_paid ? 'Edit Receipt' : 'Record Receipt'}
                 </button>
             </td>
         </tr>
@@ -785,13 +777,82 @@ function getEnquiryStatusLabel(e, status = null) {
     return { label: e.status || 'Unknown', color: '#6b7280', bg: '#f3f4f6' };
 }
 
+/**
+ * Common helper to render enquiry action items for the dropdown menu.
+ * @param {object} e - Enquiry object
+ * @param {string} quoteStatus - Optional status for quote-specific actions
+ */
+function renderEnquiryActions(e, quoteStatus = null) {
+    let isAdmin = false;
+    try {
+        const currentUser = (localStorage.getItem('user') || '').toLowerCase();
+        if (window.CONFIG && CONFIG.adminUsers) {
+            let admins = CONFIG.adminUsers;
+            if (typeof admins === 'string') admins = JSON.parse(admins);
+            isAdmin = admins.map(u => u.toLowerCase()).includes(currentUser);
+        } else if (currentUser === 'admin') {
+            isAdmin = true; // Hard-coded fallback for the 'admin' user
+        }
+    } catch (err) {
+        console.error('isAdmin check failed:', err);
+    }
+
+    const voidLabel = e.is_void ? 'Un-void Enquiry' : 'Mark as Void';
+    const voidIcon = e.is_void ? 'fa-undo' : 'fa-ban';
+    const voidStyle = e.is_void ? 'color:#10b981;' : 'color:#ef4444;'; // emerald-500 and red-500
+    
+    const voidBtn = isAdmin ? `
+        <button class="actions-item" style="${voidStyle} font-weight:600;" onclick="voidEnquiry(${e.id}, event)">
+            <i class="fas ${voidIcon}"></i> ${voidLabel}
+        </button>` : '';
+
+    // Standard buttons
+    let html = `
+        <button class="actions-item" onclick="viewEnquiry(${e.id})">
+            <i class="fas fa-file-invoice"></i> View Sale
+        </button>
+    `;
+
+    // Pricing context
+    if (!e.is_void) {
+        if (quoteStatus === 'Draft') {
+            html += `
+                <button class="actions-item" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=edit'">
+                    <i class="fas fa-edit"></i> Edit Quotes
+                </button>
+            `;
+        } else if (e.stage === 2) {
+            html += `
+                <button class="actions-item confirm-item confirm-action" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=confirm'">
+                    <i class="fas fa-check-double"></i> Confirm Quote
+                </button>
+            `;
+        } else if (e.stage >= 3) {
+            html += `
+                <button class="actions-item" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=view'">
+                    <i class="fas fa-file-invoice-dollar"></i> View Quotes
+                </button>
+            `;
+        }
+    }
+
+    // Add Admin Void/Restore at the end
+    html += voidBtn;
+
+    return html;
+}
+
 function statusBadge(e, status = null) {
+    if (e.is_void) {
+        return `<span style="display:inline-block; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 800; background:#1f2937; color:#f9fafb; letter-spacing:0.06em; white-space: nowrap; text-transform:uppercase;">⊘ VOID</span>`;
+    }
     const s = getEnquiryStatusLabel(e, status);
     return `<span style="display:inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background:${s.bg}; color:${s.color}; white-space: nowrap;">${s.label}</span>`;
 }
 
 function createEnquiryRow(e, showDate = false) {
     const tr = document.createElement('tr');
+    if (e.is_void) tr.style.opacity = '0.55';
     tr.innerHTML = `
         <td><strong>${e.enquiry_number}</strong></td>
         <td>${e.client_name}</td>
@@ -802,19 +863,7 @@ function createEnquiryRow(e, showDate = false) {
             <div class="actions-dropdown">
                 <button class="actions-btn">Actions <i class="fas fa-chevron-down"></i></button>
                 <div class="actions-menu">
-                    <button class="actions-item" onclick="viewEnquiry(${e.id})">
-                        <i class="fas fa-file-invoice"></i> View Sale
-                    </button>
-
-                    ${e.stage === 2 ? `
-                        <button class="actions-item confirm-item confirm-action" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=confirm'">
-                            <i class="fas fa-eye"></i> View Quote
-                        </button>
-                    ` : e.stage >= 3 ? `
-                        <button class="actions-item" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=view'">
-                            <i class="fas fa-file-invoice-dollar"></i> View Quotes
-                        </button>
-                    ` : ''}
+                    ${renderEnquiryActions(e)}
                 </div>
             </div>
         </td>
@@ -829,3 +878,56 @@ function viewEnquiry(id) {
 function startNewEnquiry() {
     window.location.href = '/enquiry';
 }
+
+window.voidEnquiry = async function (enquiryId, event) {
+    if (event) event.stopPropagation();
+    const enq = enquiries.find(e => e.id === enquiryId);
+    if (!enq) return;
+
+    const actionLabel = enq.is_void ? 'un-void' : 'void';
+    const confirmed = await new Promise(resolve => {
+        showModal(
+            enq.is_void ? 'Restore Enquiry' : 'Mark Enquiry as Void',
+            enq.is_void
+                ? `Are you sure you want to <strong>restore</strong> enquiry <strong>${enq.enquiry_number}</strong>? It will become active again.`
+                : `Are you sure you want to mark enquiry <strong>${enq.enquiry_number}</strong> as <strong>VOID</strong>? It will be deemed cancelled / null.`,
+            enq.is_void ? 'info' : 'warning',
+            () => resolve(true)
+        );
+        // If user closes without confirming
+        setTimeout(() => resolve(false), 30000);
+    });
+
+    if (!confirmed) return;
+
+    const token = localStorage.getItem('token') || '';
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/${enquiryId}/void`, {
+            method: 'PATCH',
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showModal('Error', err.detail || 'Could not update enquiry.', 'error');
+            return;
+        }
+        const updated = await res.json();
+        // Update local cache
+        const idx = enquiries.findIndex(e => e.id === enquiryId);
+        if (idx !== -1) enquiries[idx] = updated;
+
+        // Refresh the current view
+        updateAllEnquiriesTable(currentAllEnquiriesFilter);
+        updateDashboardTable();
+
+        showModal(
+            updated.is_void ? 'Enquiry Voided' : 'Enquiry Restored',
+            updated.is_void
+                ? `Enquiry <strong>${updated.enquiry_number}</strong> has been marked as <strong>VOID</strong> and deemed cancelled.`
+                : `Enquiry <strong>${updated.enquiry_number}</strong> has been <strong>restored</strong> and is now active again.`,
+            updated.is_void ? 'warning' : 'success'
+        );
+    } catch (err) {
+        showModal('Network Error', err.message, 'error');
+    }
+};

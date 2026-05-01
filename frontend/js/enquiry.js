@@ -36,14 +36,34 @@ async function populateInitialDropdowns() {
                 nameCount[name] = (nameCount[name] || 0) + 1;
             });
 
-            // Build option objects: { label, value }
-            // Multi-branch clients get "ClientName - Branch" label; single-branch just "ClientName"
+            // Group masters by base client_name to detect multi-branch clients
+            // Each master's base name comes from its linked origin's unique_client_name
+            // We'll use client_name as stored, but build labels using underscore notation.
+
+            // Count origins (unique_client_name) per group to detect multi-branch
+            const originCount = {};
+            masters.forEach(m => {
+                // m.unique_client_name comes from the join, fallback to client_name
+                const baseName = m.unique_client_name || m.client_name || '';
+                originCount[baseName] = (originCount[baseName] || 0) + 1;
+            });
+
+            // Build option objects
+            // Format: single-branch → "CompanyName"
+            //         multi-branch  → "CompanyName_Main" (is_main) or "CompanyName_CityName"
             const clientOptions = masters.map(m => {
-                const name = m.client_name || '';
-                const branch = m.sales_branch || '';
-                const label = (nameCount[name] > 1 && branch)
-                    ? `${name} - ${branch}`
-                    : name;
+                const baseName = m.unique_client_name || m.client_name || '';
+                const city = (m.office_location || '').trim();
+                const isMultiBranch = originCount[baseName] > 1;
+
+                let label;
+                if (!isMultiBranch) {
+                    label = baseName;  // single branch – plain name
+                } else if (m.is_main) {
+                    label = `${baseName}_Main`;
+                } else {
+                    label = city ? `${baseName}_${city}` : `${baseName}_${m.client_name}`;
+                }
                 return { label, value: label };
             });
 
@@ -98,21 +118,23 @@ async function populateInitialDropdowns() {
 }
 
 /**
- * Generate a new enquiry number based on date and count
+ * Generate a new enquiry number: max EXIM-YYYY-### for this year + 1 (server-side).
  */
 async function generateEnquiryNumber() {
+    const year = new Date().getFullYear();
     try {
-        const response = await fetch(`${CONFIG.API_URL}/api/enquiry/`);
+        const response = await fetch(`${CONFIG.API_URL}/api/enquiry/next-number?year=${year}`);
         if (response.ok) {
-            const enquiries = await response.json();
-            const date = new Date();
-            const year = date.getFullYear();
-            const count = (enquiries.length + 1).toString().padStart(3, '0');
-            document.getElementById('enquiryNumber').value = `EXIM-${year}-${count}`;
+            const data = await response.json();
+            if (data.enquiry_number) {
+                document.getElementById('enquiryNumber').value = data.enquiry_number;
+                return;
+            }
         }
     } catch (error) {
         console.error('Error generating enquiry number:', error);
     }
+    document.getElementById('enquiryNumber').value = `EXIM-${year}-001`;
 }
 
 /**

@@ -35,6 +35,7 @@ async function fetchInvoiceDetails() {
 
                 if (currentInvoice.is_paid) {
                     document.getElementById('payment_date').value = currentInvoice.payment_date;
+                    document.getElementById('payment_type').value = currentInvoice.payment_type || 'NEFT';
                     document.getElementById('payment_reference').value = currentInvoice.payment_reference || '';
                     document.getElementById('received_amount').value = currentInvoice.received_amount || 0;
                 }
@@ -50,6 +51,7 @@ async function fetchInvoiceDetails() {
 
 async function savePayment() {
     const date = document.getElementById('payment_date').value;
+    const type = document.getElementById('payment_type').value;
     const ref = document.getElementById('payment_reference').value;
     const amount = parseFloat(document.getElementById('received_amount').value);
 
@@ -60,6 +62,7 @@ async function savePayment() {
 
     const payload = {
         payment_date: date,
+        payment_type: type,
         payment_reference: ref,
         received_amount: amount
     };

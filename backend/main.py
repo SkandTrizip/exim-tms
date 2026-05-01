@@ -1,5 +1,6 @@
 import sys
 import os
+import time
 from fastapi import FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -28,11 +29,107 @@ app = FastAPI(
 
 logger.info("Starting Exim TMS API Application...")
 
+# --- Request/Response logging (targeted + safe) ---
+def _truncate_bytes(data: bytes, limit: int = 4096) -> bytes:
+    if data is None:
+        return b""
+    if len(data) <= limit:
+        return data
+    return data[:limit] + b"...<truncated>"
+
+def _is_textual_content_type(content_type: str | None) -> bool:
+    if not content_type:
+        return False
+    ct = content_type.lower()
+    return (
+        "application/json" in ct
+        or "text/" in ct
+        or "application/javascript" in ct
+        or "application/xml" in ct
+        or "application/x-www-form-urlencoded" in ct
+    )
+
+@app.middleware("http")
+async def log_http_traffic(request, call_next):
+    start = time.perf_counter()
+    path = request.url.path
+    method = request.method.upper()
+    client = getattr(request, "client", None)
+    client_ip = getattr(client, "host", None)
+
+    # Only log request/response bodies for invoice record endpoint
+    log_body = (method == "POST" and path == "/api/invoice/record")
+
+    req_body_bytes = b""
+    if log_body:
+        try:
+            req_body_bytes = await request.body()
+        except Exception:
+            req_body_bytes = b"<unreadable>"
+
+    try:
+        response = await call_next(request)
+    except Exception:
+        elapsed_ms = int((time.perf_counter() - start) * 1000)
+        if log_body:
+            logger.exception(
+                "HTTP %s %s crashed (%sms) client=%s request_body=%s",
+                method,
+                path,
+                elapsed_ms,
+                client_ip,
+                _truncate_bytes(req_body_bytes).decode("utf-8", errors="replace"),
+            )
+        else:
+            logger.exception("HTTP %s %s crashed (%sms) client=%s", method, path, elapsed_ms, client_ip)
+        raise
+
+    # FastAPI/Starlette response is already built; we can wrap the body by iterating it.
+    elapsed_ms = int((time.perf_counter() - start) * 1000)
+    status = getattr(response, "status_code", None)
+    content_type = response.headers.get("content-type")
+
+    if not log_body:
+        logger.info("HTTP %s %s -> %s (%sms) client=%s", method, path, status, elapsed_ms, client_ip)
+        return response
+
+    # Capture response body (best effort) for this endpoint only
+    try:
+        body_chunks: list[bytes] = []
+        async for chunk in response.body_iterator:
+            body_chunks.append(chunk)
+        body = b"".join(body_chunks)
+        preview = _truncate_bytes(body).decode("utf-8", errors="replace") if _is_textual_content_type(content_type) else "<non-textual>"
+
+        logger.info(
+            "HTTP %s %s -> %s (%sms) client=%s request_body=%s response_body=%s",
+            method,
+            path,
+            status,
+            elapsed_ms,
+            client_ip,
+            _truncate_bytes(req_body_bytes).decode("utf-8", errors="replace"),
+            preview,
+        )
+
+        return Response(
+            content=body,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+            media_type=response.media_type,
+        )
+    except Exception:
+        logger.exception("HTTP %s %s logging failed", method, path)
+        return response
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # In production, replace with specific origins
-    allow_credentials=True,
+    # NOTE: `allow_credentials=True` cannot be used with wildcard origins ("*").
+    # Browsers will reject such responses, causing `fetch()` to fail with
+    # "TypeError: Failed to fetch" even when the server responds.
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

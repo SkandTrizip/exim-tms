@@ -115,21 +115,29 @@
 
                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                                 <div class="form-group">
-                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Payment
-                                        Received Date</label>
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Payment Type</label>
+                                    <select id="payment_type" class="form-control" style="width: 100%;">
+                                        <option value="NEFT">NEFT</option>
+                                        <option value="RTGS">RTGS</option>
+                                        <option value="IMPS">IMPS</option>
+                                        <option value="Cheque">Cheque</option>
+                                        <option value="Cash">Cash</option>
+                                        <option value="UPI">UPI</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Payment Received Date</label>
                                     <input type="date" id="payment_date" class="form-control" style="width: 100%;">
                                 </div>
                                 <div class="form-group">
-                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Amount Received
-                                        (INR)</label>
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">UTR / Reference Number</label>
+                                    <input type="text" id="payment_reference" class="form-control"
+                                        placeholder="Enter UTR or reference number" style="width: 100%;">
+                                </div>
+                                <div class="form-group">
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Amount Received (INR)</label>
                                     <input type="number" id="received_amount" class="form-control" placeholder="0.00"
                                         style="width: 100%;">
-                                </div>
-                                <div class="form-group" style="grid-column: span 2;">
-                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Reference
-                                        Number (UTR / Check No. / Transaction ID)</label>
-                                    <input type="text" id="payment_reference" class="form-control"
-                                        placeholder="Enter reference number" style="width: 100%;">
                                 </div>
                             </div>
                         </div>

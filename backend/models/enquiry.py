@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, Date, Text
+from sqlalchemy import Column, Integer, String, DateTime, Float, Date, Text, Boolean
 from sqlalchemy.orm import relationship
 from backend.database import Base
 import datetime
@@ -40,6 +40,7 @@ class Enquiry(Base):
     remarks = Column(Text)
     status = Column(String, default="pending")
     stage = Column(Integer, default=1)
+    is_void = Column(Boolean, default=False, nullable=False, server_default='false')
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
     # Relationships with cascading deletes

@@ -34,24 +34,42 @@ class InvoiceCreate(BaseModel):
 
 class InvoicePayment(BaseModel):
     payment_date: datetime.date
+    payment_type: str = "NEFT"
     payment_reference: str
     received_amount: float
 
 @router.post("/record")
 def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
     logger.info(f"Recording invoice {invoice.invoice_number} for enquiry ID {invoice.enquiry_id}")
-    # Check if invoice number already exists
-    existing_inv = db.query(Invoice).filter(Invoice.invoice_number == invoice.invoice_number).first()
-    if existing_inv:
-         logger.warning(f"Failed to record invoice: Number {invoice.invoice_number} already exists")
-         raise HTTPException(status_code=400, detail="Invoice number already exists")
-    
-    new_invoice = Invoice(**invoice.dict())
-    db.add(new_invoice)
-    db.commit()
-    db.refresh(new_invoice)
-    logger.info(f"Successfully recorded invoice {invoice.invoice_number} with ID {new_invoice.id}")
-    return {"message": "Invoice recorded successfully", "id": new_invoice.id}
+    try:
+        # Check if invoice number already exists
+        existing_inv = db.query(Invoice).filter(Invoice.invoice_number == invoice.invoice_number).first()
+        if existing_inv:
+            logger.warning(f"Failed to record invoice: Number {invoice.invoice_number} already exists")
+            raise HTTPException(status_code=400, detail="Invoice number already exists")
+
+        # Only pass fields that exist on the SQLAlchemy model.
+        # This avoids 500s if the Pydantic schema has extra keys (e.g. `item_type`)
+        # while the DB/model doesn't.
+        allowed_fields = set(Invoice.__table__.columns.keys())
+        payload = {k: v for k, v in invoice.dict().items() if k in allowed_fields}
+
+        new_invoice = Invoice(**payload)
+        db.add(new_invoice)
+        db.commit()
+        db.refresh(new_invoice)
+        logger.info(f"Successfully recorded invoice {invoice.invoice_number} with ID {new_invoice.id}")
+        return {"message": "Invoice recorded successfully", "id": new_invoice.id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(
+            "Error recording invoice",
+            extra={"enquiry_id": invoice.enquiry_id, "invoice_number": invoice.invoice_number},
+        )
+        # Return JSON error (so the frontend doesn't fail JSON.parse on plain-text 500 responses)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/details/{enquiry_id}")
 def get_invoice_details(enquiry_id: int, db: Session = Depends(get_db)):
@@ -79,10 +97,11 @@ def list_all_invoices(db: Session = Depends(get_db)):
             "client_name": client,
             "is_paid": inv.is_paid,
             "payment_date": inv.payment_date,
+            "payment_type": inv.payment_type,
             "payment_reference": inv.payment_reference,
             "received_amount": inv.received_amount,
             "status": inv.status,
-            "item_type": inv.item_type
+            "item_type": getattr(inv, "item_type", "all")
         }
         result.append(inv_dict)
     return result
@@ -96,6 +115,7 @@ def record_invoice_payment(invoice_id: int, payment: InvoicePayment, db: Session
     
     db_invoice.is_paid = True
     db_invoice.payment_date = payment.payment_date
+    db_invoice.payment_type = payment.payment_type
     db_invoice.payment_reference = payment.payment_reference
     db_invoice.received_amount = payment.received_amount
     
@@ -200,7 +220,7 @@ async def generate_invoice_pdf(
                               ParagraphStyle('HeaderBold', parent=header_style, fontSize=12, spaceAfter=2)))
     header_text_elements.append(Paragraph("<b>HEAD-OFFICE ADDRESS:</b>", 
                               ParagraphStyle('HeaderBold', parent=header_style, fontSize=8, spaceAfter=1)))
-    header_text_elements.append(Paragraph("803, 8TH FLOOR, TOWER 5, RPS INFINIA, 12TH AVENUE, SECTOR 27C, MATHURA ROAD, FARIDABAD, HARYANA, PIN 121003", 
+    header_text_elements.append(Paragraph("LOGIPOD LOGISTICS PRIVATE LIMITED, ENKAY SQUARE, 3rd FLOOR, 448A,UDYOG VIHAR PHASE 5,GURUGRAM, HARYANA, PIN:122016", 
                               ParagraphStyle('HeaderNormal', parent=header_style, fontSize=8, leading=10)))
     header_text_elements.append(Paragraph("[Contact Phone: +91 9988553772] GSTIN: 06AAFCL3674H1ZE", 
                               ParagraphStyle('HeaderNormal', parent=header_style, fontSize=8, leading=10)))
@@ -221,14 +241,24 @@ async def generate_invoice_pdf(
     # ... Imports ...
     from backend.models.client_origin import ClientOrigin
     from backend.models.client_master import ClientMaster
-    
-    # ... Data Fetching Logic (Keep same) ...
-    client_origin = db.query(ClientOrigin).filter(ClientOrigin.unique_client_name == enquiry.client_name).first()
+    from backend.utils.client_utils import strip_branch_suffix
+
+    # Strip branch suffix before lookup: "Acme_Mumbai" → "Acme"
+    base_client_name = strip_branch_suffix(enquiry.client_name)
+    client_origin = db.query(ClientOrigin).filter(ClientOrigin.unique_client_name == base_client_name).first()
     client_master = None
     if client_origin:
-        client_master = db.query(ClientMaster).filter(ClientMaster.origin_id == client_origin.id).first()
+        # Try to find the specific branch that matches the stored client_name
+        client_master = db.query(ClientMaster).filter(
+            ClientMaster.origin_id == client_origin.id,
+            ClientMaster.client_name == enquiry.client_name
+        ).first()
+        if not client_master:
+            # Fallback to first/main branch
+            client_master = db.query(ClientMaster).filter(ClientMaster.origin_id == client_origin.id).first()
     
-    cust_name = client_origin.unique_client_name if client_origin else enquiry.client_name
+    # Always use the clean company name (without branch suffix) on the invoice
+    cust_name = client_origin.unique_client_name if client_origin else base_client_name
     cust_addr = client_origin.office_address if client_origin else "Address specific to client..."
     cust_gst = client_origin.gst_no if client_origin else "N/A"
     cust_code = client_master.client_code if client_master else "N/A"

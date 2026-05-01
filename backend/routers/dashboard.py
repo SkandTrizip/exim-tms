@@ -5,6 +5,7 @@ from backend.database import get_db
 from backend.models.enquiry import Enquiry
 from backend.models.quote import Quote
 from backend.models.document import ShipmentDocument
+from backend.utils.logger import logger
 
 router = APIRouter()
 
@@ -76,8 +77,12 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         ShipmentStatus.sob == None
     ).count()
 
-    from backend.models.invoice import Invoice
-    invoices_raised = db.query(Invoice).count()
+    try:
+        from backend.models.invoice import Invoice
+        invoices_raised = db.query(Invoice).count()
+    except Exception as e:
+        logger.error(f"Error querying invoices_raised: {e}")
+        invoices_raised = 0
     
     payment_pending = db.query(Enquiry).outerjoin(ShipmentStatus).filter(
         Enquiry.stage >= 3,
@@ -88,7 +93,11 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     from backend.models.finance import ShippingPayment
     payments_made = db.query(ShippingPayment).count()
 
-    received_payments = db.query(Invoice).filter(Invoice.is_paid == True).count()
+    try:
+        received_payments = db.query(Invoice).filter(Invoice.is_paid == True).count()
+    except Exception as e:
+        logger.error(f"Error querying received_payments: {e}")
+        received_payments = 0
 
     return {
         "total_enquiries": total_enquiries,

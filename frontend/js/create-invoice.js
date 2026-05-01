@@ -2,6 +2,18 @@ let enquiryId = null;
 let clientData = null;
 let creditPeriod = 0;
 
+/**
+ * Strip the branch suffix from a client name for invoicing.
+ * "Acme Corp_Mumbai" → "Acme Corp"
+ * "Acme Corp_Main"   → "Acme Corp"
+ * "Acme Corp"        → "Acme Corp"  (no change)
+ */
+function stripBranchSuffix(name) {
+    if (!name) return '';
+    if (name.includes('_')) return name.rsplit ? name.rsplit('_', 1)[0] : name.substring(0, name.lastIndexOf('_'));
+    return name;
+}
+
 document.addEventListener('DOMContentLoaded', async function () {
     const urlParams = new URLSearchParams(window.location.search);
     enquiryId = urlParams.get('enquiry_id');
@@ -93,13 +105,15 @@ async function fetchAllData() {
                 creditPeriod = master.credit_period || 0;
 
                 // Customer Name, Adrs & GST (Origin)
+                // Use clean company name (strip branch suffix) on invoice
+                const invoiceCustomerName = stripBranchSuffix(origin.unique_client_name || master.client_name);
                 document.getElementById('customer_info').innerHTML = `
-                    <strong>${origin.unique_client_name}</strong><br>
+                    <strong>${invoiceCustomerName}</strong><br>
                     ${origin.office_address}, ${origin.office_location}<br>
                     GST: ${origin.gst_no}
                 `;
 
-                // Shipper Name & Adrs (Master)
+                // Shipper Name & Adrs (Master branch — keeps the specific branch name)
                 document.getElementById('shipper_info').innerHTML = `
                     <strong>${master.client_name}</strong><br>
                     ${master.office_address}, ${master.office_location}

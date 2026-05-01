@@ -474,7 +474,7 @@ function addPricingRowToTbody(tbody, data = {}) {
     const defaultQty = currentEnquiry ? (currentEnquiry.container_count || 1) : 1;
     const core = ["Ocean Freight", "BL Fee", "Origin THC", "Seal Charge", "MUC"];
     const isCore = data.desc && core.includes(data.desc);
-    const defaultEx = data.on === 'Per BL' ? 1 : (data.ex || (data.curr === 'USD' ? currentExchangeRate : 1));
+    const defaultEx = (data.curr === 'USD') ? (data.ex || currentExchangeRate) : (data.ex || 1);
     // Default vendor_rate mirrors rate — user can override in confirm mode
     const defaultVendorRate = (data.vendor_rate != null && data.vendor_rate > 0) ? data.vendor_rate : (data.rate || '');
     // Was vendor_rate explicitly set to a different value than rate?
@@ -521,13 +521,15 @@ function calculatePricingTotal() {
             const vendorEl = row.querySelector('.p-vendor');
             const vendorRate = parseFloat(vendorEl ? vendorEl.value : 0) || 0;
 
-            // Shipping Line Total INR: qty × rate × ex_rate
+            // INR calculation: USD charges always multiply by exchange rate;
+            // INR charges don't need conversion.
+            // Per BL + USD → qty(1) × rate × ex  (exchange rate still applies)
+            // Per BL + INR → qty(1) × rate  (no conversion needed)
             const tot = qty * rate;
-            const inr = on === 'Per BL' ? tot : (curr === 'USD' ? tot * ex : tot);
+            const inr = curr === 'USD' ? tot * ex : tot;
 
-            // Vendor Total INR: vendor_rate × qty × ex_rate (same formula)
             const vendorTot = qty * vendorRate;
-            const vendorInr = on === 'Per BL' ? vendorTot : (curr === 'USD' ? vendorTot * ex : vendorTot);
+            const vendorInr = curr === 'USD' ? vendorTot * ex : vendorTot;
 
             row.querySelector('.p-inr-val').textContent = '₹' + Math.round(inr).toLocaleString();
 
@@ -548,7 +550,13 @@ function handleChargedOnChange(sel) {
     const ex = row.querySelector('.p-ex');
     if (sel.value === 'Per BL') {
         qty.value = 1; qty.readOnly = true;
-        ex.value = 1; ex.readOnly = true;
+        // For USD+Per BL, keep exchange rate active; for INR reset to 1
+        if (row.querySelector('.p-curr').value !== 'USD') {
+            ex.value = 1;
+        } else {
+            ex.value = currentExchangeRate;
+        }
+        ex.readOnly = false; // Always allow override
     } else {
         qty.readOnly = false; ex.readOnly = false;
         ex.value = row.querySelector('.p-curr').value === 'USD' ? currentExchangeRate : 1;
@@ -559,8 +567,12 @@ function handleChargedOnChange(sel) {
 function handleCurrencyChange(sel) {
     const row = sel.closest('tr');
     const ex = row.querySelector('.p-ex');
-    if (row.querySelector('.p-on').value === 'Per BL') ex.value = 1;
-    else ex.value = sel.value === 'USD' ? currentExchangeRate : 1;
+    // For Per BL: USD should use exchange rate, INR should be 1
+    if (row.querySelector('.p-on').value === 'Per BL') {
+        ex.value = sel.value === 'USD' ? currentExchangeRate : 1;
+    } else {
+        ex.value = sel.value === 'USD' ? currentExchangeRate : 1;
+    }
     calculatePricingTotal();
 }
 
@@ -675,10 +687,10 @@ function getQuoteSummary(quote) {
             const ex = parseFloat(ch.ex) || 1;
             const vendorRate = parseFloat(ch.vendor_rate) || 0;
             const tot = qty * rate;
-            const inr = ch.on === 'Per BL' ? tot : (ch.curr === 'USD' ? tot * ex : tot);
-            // Vendor total: vendor_rate × qty × ex_rate (same formula)
+            // USD charges always multiply by exchange rate (including Per BL)
+            const inr = ch.curr === 'USD' ? tot * ex : tot;
             const vendorTot = qty * vendorRate;
-            const vendorInr = ch.on === 'Per BL' ? vendorTot : (ch.curr === 'USD' ? vendorTot * ex : vendorTot);
+            const vendorInr = ch.curr === 'USD' ? vendorTot * ex : vendorTot;
             if (ch.account === 'On Your Account') {
                 totShippingLine += inr;
                 totVendor += vendorInr;
