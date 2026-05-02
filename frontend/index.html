@@ -52,7 +52,7 @@
                                 Pricing</a></li>
                         <li><a href="#tracking" class="sidebar-link" id="navTracking"><span class="icon">📦</span>
                                 Tracking</a></li>
-                        <li><a href="#finance-payments" class="sidebar-link" id="navFinance"><span
+                        <li><a href="#finance" class="sidebar-link" id="navFinance"><span
                                     class="icon">💼</span>
                                 Finance</a>
                             <ul class="sidebar-subnav"
@@ -261,7 +261,7 @@
                             </div>
                         </div>
 
-                        <div class="table-container"
+                        <div id="financeTableWrap" class="table-container"
                             style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
                             <table class="data-table">
                                 <thead>
@@ -275,8 +275,10 @@
                                 </thead>
                                 <tbody id="financeTable"></tbody>
                             </table>
-                            <div class="pagination-container" id="financePagination"></div>
                         </div>
+
+                        <div id="financeReceivedSections" style="display: none;"></div>
+                        <div class="pagination-container" id="financePagination"></div>
                     </div>
                 </div>
             </div>

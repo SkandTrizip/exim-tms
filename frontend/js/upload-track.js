@@ -9,11 +9,11 @@ let uploadedFiles = {};
 // ==========================================
 // Initialization
 // ==========================================
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', async function () {
     console.log('📦 Upload & Track page loaded');
-    loadEnquiryData();
-    // After everything is populated, try to load any saved checklist state
-    setTimeout(loadChecklistState, 500);
+    await loadEnquiryData();
+    // Run after enquiry + documents load so BL View link and checklist stay in sync
+    await loadChecklistState();
 
     // Attach autosave to metadata fields
     const metadataFields = [
@@ -29,13 +29,13 @@ document.addEventListener('DOMContentLoaded', function () {
 /**
  * Load enquiry and pricing data from URL parameters or localStorage
  */
-function loadEnquiryData() {
+async function loadEnquiryData() {
     // Try to get enquiry ID from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const enquiryId = urlParams.get('enquiry_id');
 
     if (enquiryId) {
-        fetchEnquiryById(enquiryId);
+        await fetchEnquiryById(enquiryId);
     } else {
         // Try to load from localStorage as fallback
         const storedEnquiry = localStorage.getItem('currentEnquiry');
@@ -141,6 +141,56 @@ async function fetchPricingData(enquiryId) {
 }
 
 /**
+ * Map API document_type / aliases → DOM element id suffix (…FileName), incl. BL → blFileName.
+ */
+function getTrackingDocDisplayId(documentType) {
+    const raw = (documentType || '').toString().trim();
+    if (!raw) return 'unknownFileName';
+    const norm = raw.toLowerCase().replace(/[\s_-]/g, '');
+    const byNorm = {
+        bol: 'blFileName',
+        billoflading: 'blFileName',
+        housebilloflading: 'blFileName',
+        masterbilloflading: 'blFileName',
+        bl: 'blFileName',
+        blreceived: 'blFileName',
+        mbl: 'blFileName',
+        hbl: 'blFileName',
+        shippinginvoice: 'shippingInvoiceFileName',
+        clientconfirm: 'clientConfirmFileName',
+        booking: 'bookingFileName',
+        draftsi: 'draftSiFileName',
+        si: 'siFileName',
+        shippingbill: 'shippingBillFileName',
+        origincert: 'originCertFileName',
+        customsdeclaration: 'customsDeclarationFileName',
+        insurancecert: 'insuranceCertFileName',
+        commercialinvoice: 'commercialInvoiceFileName',
+        packinglist: 'packingListFileName'
+    };
+    if (byNorm[norm]) return byNorm[norm];
+    // e.g. bl_received, BL_copy → normalize underscores away above; catch remaining *bl* doc labels
+    if (norm.includes('billoflading') || norm === 'masterbl' || norm === 'housebl') {
+        return 'blFileName';
+    }
+    return `${raw}FileName`;
+}
+
+function setBlReceivedViewLink(fileUrl) {
+    const link = document.getElementById('link_view_bl_received');
+    if (!link || !fileUrl) return;
+    link.href = fileUrl;
+    link.style.display = 'inline-flex';
+}
+
+function hideBlReceivedViewLink() {
+    const link = document.getElementById('link_view_bl_received');
+    if (!link) return;
+    link.style.display = 'none';
+    link.removeAttribute('href');
+}
+
+/**
  * Fetch and display already uploaded documents
  */
 async function fetchUploadedDocuments(enquiryId) {
@@ -150,9 +200,11 @@ async function fetchUploadedDocuments(enquiryId) {
             const documents = await response.json();
             console.log('📎 Existing documents found:', documents);
 
+            hideBlReceivedViewLink();
+
             documents.forEach(doc => {
-                const filename = doc.file_path.split(/[\\\/]/).pop();
-                const fileUrl = `${CONFIG.API_URL}/uploads/${filename}`;
+                const filename = (doc.file_path || '').split(/[/\\]/).pop();
+                const fileUrl = `${CONFIG.API_URL}/uploads/${encodeURIComponent(filename)}`;
                 const metadata = doc.metadata_info || {};
 
                 // 1. Handling for Additional Invoices
@@ -187,23 +239,8 @@ async function fetchUploadedDocuments(enquiryId) {
                 }
 
                 // 2. Mapping for all other documents (including Main Shipping Invoice)
-                let displayId = `${doc.document_type}FileName`;
-                const specialMappings = {
-                    'bol': 'blFileName',
-                    'shippingInvoice': 'shippingInvoiceFileName',
-                    'clientConfirm': 'clientConfirmFileName',
-                    'booking': 'bookingFileName',
-                    'draftSi': 'draftSiFileName',
-                    'si': 'siFileName',
-                    'shippingBill': 'shippingBillFileName',
-                    'originCert': 'originCertFileName',
-                    'customsDeclaration': 'customsDeclarationFileName',
-                    'insuranceCert': 'insuranceCertFileName'
-                };
-
-                if (specialMappings[doc.document_type]) {
-                    displayId = specialMappings[doc.document_type];
-                }
+                const displayId = getTrackingDocDisplayId(doc.document_type);
+                const isBlDoc = displayId === 'blFileName';
 
                 const displayElement = document.getElementById(displayId);
                 if (displayElement) {
@@ -211,11 +248,14 @@ async function fetchUploadedDocuments(enquiryId) {
                         <div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: white; border-radius: 4px; border: 1px solid var(--border-light); margin-top: 4px;">
                             <i class="fas fa-check-circle" style="color: var(--success);"></i>
                             <span style="flex: 1; font-weight: 500; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${doc.file_name}">${doc.file_name}</span>
-                            <a href="${fileUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px; padding: 2px 4px;">
+                            <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: none; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px; padding: 2px 4px;">
                                 <i class="fas fa-eye"></i> View
                             </a>
                         </div>
                     `;
+                }
+                if (isBlDoc) {
+                    setBlReceivedViewLink(fileUrl);
                 }
             });
         }
@@ -778,7 +818,7 @@ function handleFileUpload(input, displayId) {
             <div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: white; border-radius: 4px; border: 1px solid var(--border-light); margin-top: 4px;">
                 <i class="fas fa-file-${getFileIcon(file.type)}" style="color: var(--primary);"></i>
                 <span style="flex: 1; font-weight: 500; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${file.name}">${file.name}</span>
-                <a href="${tempUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px; padding: 2px 4px;">
+                <a href="${tempUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: none; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px; padding: 2px 4px;">
                     <i class="fas fa-eye"></i> View
                 </a>
                 <button type="button" onclick="removeFile('${input.id}', '${displayId}')" 
@@ -788,10 +828,17 @@ function handleFileUpload(input, displayId) {
             </div>
         `;
 
+        if (displayId === 'blFileName') {
+            setBlReceivedViewLink(tempUrl);
+        }
+
         console.log(`✅ File selected: ${file.name} (${fileSize} KB) for ${fileKey}`);
     } else {
         displayElement.innerHTML = '';
         delete uploadedFiles[fileKey];
+        if (displayId === 'blFileName') {
+            hideBlReceivedViewLink();
+        }
     }
 }
 
@@ -817,6 +864,10 @@ function removeFile(inputId, displayId) {
 
     const fileKey = inputId.replace('Upload', '');
     delete uploadedFiles[fileKey];
+
+    if (fileKey === 'bl') {
+        hideBlReceivedViewLink();
+    }
 
     // Automatically uncheck the corresponding status checkbox if it exists
     const mapping = {
@@ -875,7 +926,9 @@ async function saveTracking() {
 
     // Append all uploaded files
     Object.entries(uploadedFiles).forEach(([key, file]) => {
-        formData.append(key, file);
+        // Backend expects `bol` for Bill of Lading; file input key from blUpload is `bl`.
+        const formKey = key === 'bl' ? 'bol' : key;
+        formData.append(formKey, file);
     });
 
     try {

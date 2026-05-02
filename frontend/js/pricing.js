@@ -8,6 +8,7 @@ let isConfirmMode = false;  // controls vendor rate column visibility
 document.addEventListener('DOMContentLoaded', async function () {
     // 1. Initial UI Setup
     populateInitialDropdowns();
+    bindQuoteConfirmationActions();
 
     // 2. Load Data
     const urlParams = new URLSearchParams(window.location.search);
@@ -54,15 +55,16 @@ function initViewMode() {
             }
         });
 
-        // Specifically hide add/remove buttons
+        // Hide calculator/quote tabs actions — not post-confirm actions on #quoteConfirmationPage
         document.querySelectorAll('.btn-add, .btn-remove, .btn-primary, .tab-actions').forEach(el => {
+            if (el.closest('#quoteConfirmationPage')) return;
             el.style.display = 'none';
         });
     }, 500);
 }
 
 function initConfirmMode() {
-    console.log('🛡️ Entering Confirm Mode — Vendor Rate editable only');
+    console.log('🛡️ Entering Confirm Mode — shipping line rate & client rate editable');
     isConfirmMode = true;                          // show vendor column in newly rendered rows
     document.body.classList.add('confirm-mode');   // show vendor total card via CSS
 
@@ -79,14 +81,15 @@ function initConfirmMode() {
     const confirmBtn = document.getElementById('confirmQuoteBtn');
     if (confirmBtn) confirmBtn.style.display = 'flex';
 
-    // Lock everything EXCEPT .p-vendor inputs
+    // Lock everything EXCEPT shipping line rate / ex. rate + client rate columns
+    const confirmEditableInputs = '.p-vendor, .p-rate, .p-ex';
     setTimeout(() => {
         const containers = ['#calculatorSection', '.route-section'];
         containers.forEach(selector => {
             const container = document.querySelector(selector);
             if (container) {
                 const elements = container.querySelectorAll(
-                    'input:not(.p-vendor), select, textarea, button:not(.btn-secondary):not(#confirmQuoteBtn)'
+                    'input:not(.p-vendor, .p-rate, .p-ex), select, textarea, button:not(.btn-secondary):not(#confirmQuoteBtn)'
                 );
                 elements.forEach(el => {
                     el.disabled = true;
@@ -95,8 +98,7 @@ function initConfirmMode() {
                 });
             }
         });
-        // Keep vendor rate cells clearly editable
-        document.querySelectorAll('.p-vendor').forEach(el => {
+        document.querySelectorAll(confirmEditableInputs).forEach(el => {
             el.style.opacity = '1';
             el.style.cursor = 'text';
             el.disabled = false;
@@ -196,7 +198,7 @@ async function fetchQuotesForEnquiry(enquiryId) {
                             qty: ch.quantity,
                             rate: ch.rate,
                             ex: ch.exchange_rate,
-                            vendor_rate: ch.vendor_rate || 0
+                            vendor_rate: ch.vendor_rate != null ? ch.vendor_rate : null
                         })) : []
                     })) : [],
                     status: q.status || 'draft'
@@ -376,19 +378,30 @@ function saveCurrentQuoteState() {
     const sections = document.querySelectorAll('.container-pricing-section');
     quote.container_prices = Array.from(sections).map(section => ({
         container_type: section.querySelector('.c-type').value,
-        charges: Array.from(section.querySelectorAll('tbody tr')).map(row => ({
-            desc: row.querySelector('.p-desc').value,
-            account: row.querySelector('.p-account').value,
-            curr: row.querySelector('.p-curr').value,
-            on: row.querySelector('.p-on').value,
-            qty: row.querySelector('.p-qty').value,
-            rate: row.querySelector('.p-rate').value,
-            ex: row.querySelector('.p-ex').value,
-            // If vendor input exists use it; otherwise default to rate (mirrors rate in normal mode)
-            vendor_rate: row.querySelector('.p-vendor')
-                ? (row.querySelector('.p-vendor').value || row.querySelector('.p-rate').value)
-                : row.querySelector('.p-rate').value
-        }))
+        charges: Array.from(section.querySelectorAll('tbody tr')).map(row => {
+            const vendorInput = row.querySelector('.p-vendor');
+            const rateVal = row.querySelector('.p-rate').value;
+            let vendorRateVal;
+            if (vendorInput) {
+                vendorRateVal = vendorInput.value !== ''
+                    ? vendorInput.value
+                    : (row.dataset.vendorRate !== undefined && row.dataset.vendorRate !== '' ? row.dataset.vendorRate : rateVal);
+            } else {
+                vendorRateVal = (row.dataset.vendorRate !== undefined && row.dataset.vendorRate !== '')
+                    ? row.dataset.vendorRate
+                    : rateVal;
+            }
+            return {
+                desc: row.querySelector('.p-desc').value,
+                account: row.querySelector('.p-account').value,
+                curr: row.querySelector('.p-curr').value,
+                on: row.querySelector('.p-on').value,
+                qty: row.querySelector('.p-qty').value,
+                rate: rateVal,
+                ex: row.querySelector('.p-ex').value,
+                vendor_rate: vendorRateVal
+            };
+        })
     }));
 }
 
@@ -488,10 +501,9 @@ function addPricingRowToTbody(tbody, data = {}) {
     const core = ["Ocean Freight", "BL Fee", "Origin THC", "Seal Charge", "MUC"];
     const isCore = data.desc && core.includes(data.desc);
     const defaultEx = (data.curr === 'USD') ? (data.ex || currentExchangeRate) : (data.ex || 1);
-    // Default vendor_rate mirrors rate — user can override in confirm mode
-    const defaultVendorRate = (data.vendor_rate != null && data.vendor_rate > 0) ? data.vendor_rate : (data.rate || '');
-    // Was vendor_rate explicitly set to a different value than rate?
-    const vendorManual = (data.vendor_rate != null && data.vendor_rate > 0 && data.vendor_rate !== data.rate) ? 'true' : 'false';
+    const hasStoredVendor = data.vendor_rate != null && data.vendor_rate !== '';
+    const defaultVendorRate = hasStoredVendor ? data.vendor_rate : (data.rate || '');
+    const vendorManual = hasStoredVendor && String(data.vendor_rate) !== String(data.rate ?? '') ? 'true' : 'false';
 
     // Delete button overlaid on the INR cell (only for non-core rows)
     const deleteBtn = !isCore
@@ -507,8 +519,10 @@ function addPricingRowToTbody(tbody, data = {}) {
         <td><input type="number" class="p-rate" value="${data.rate || ''}" min="0" oninput="if(this.value<0)this.value=0; syncVendorRate(this); calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td><input type="number" class="p-ex" value="${defaultEx}" min="0" oninput="if(this.value<0)this.value=0; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td class="col-inr" style="position:relative; font-weight:600; color:#1e3a8a;"><span class="p-inr-val">₹0</span>${deleteBtn}</td>
-        ${isConfirmMode ? `<td class="col-vendor"><input type="number" class="p-vendor" value="${defaultVendorRate}" data-manual="${vendorManual}" min="0" placeholder="0" oninput="if(this.value<0)this.value=0; this.dataset.manual='true'; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>` : ''}
+        ${isConfirmMode ? `<td class="col-vendor"><input type="number" class="p-vendor" value="${defaultVendorRate}" data-manual="${vendorManual}" min="0" placeholder="0" oninput="if(this.value<0)this.value=0; this.dataset.manual='true'; const tr=this.closest('tr'); if(tr) tr.dataset.vendorRate=this.value; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>` : ''}
     `;
+    const vrPersist = hasStoredVendor ? String(data.vendor_rate) : String(data.rate ?? '');
+    row.dataset.vendorRate = vrPersist;
     tbody.appendChild(row);
 }
 
@@ -803,6 +817,32 @@ function postConfirmGoTracking(enquiryId) {
     if (!enquiryId) return;
     closeModal();
     window.location.href = `/upload-track?enquiry_id=${enquiryId}`;
+}
+
+/** Inline onclick uses a legacy scope; expose handlers on window for modal HTML + consistency */
+window.postConfirmEditDetails = postConfirmEditDetails;
+window.postConfirmViewBreakdown = postConfirmViewBreakdown;
+window.postConfirmGoTracking = postConfirmGoTracking;
+
+function bindQuoteConfirmationActions() {
+    const editBtn = document.getElementById('postConfirmEditDetailsBtn');
+    const breakdownBtn = document.getElementById('postConfirmViewBreakdownBtn');
+    const trackingBtn = document.getElementById('postConfirmGoTrackingBtn');
+    if (editBtn) {
+        editBtn.addEventListener('click', () => {
+            const id = currentEnquiry?.id;
+            if (id) postConfirmEditDetails(id);
+        });
+    }
+    if (breakdownBtn) {
+        breakdownBtn.addEventListener('click', () => postConfirmViewBreakdown());
+    }
+    if (trackingBtn) {
+        trackingBtn.addEventListener('click', () => {
+            const id = currentEnquiry?.id;
+            if (id) postConfirmGoTracking(id);
+        });
+    }
 }
 
 function renderConfirmedTable(quote) {

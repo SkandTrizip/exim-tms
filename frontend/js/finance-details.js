@@ -75,60 +75,110 @@ async function fetchEnquiryDetails() {
     }
 }
 
+/** Map stored document_type (and common variants) → label for Finance reference docs */
+function financeDocumentTypeLabel(docType) {
+    const raw = (docType || '').toString().trim();
+    const norm = raw.toLowerCase().replace(/[\s_-]/g, '');
+    const byNorm = {
+        bol: 'Bill of Lading',
+        billoflading: 'Bill of Lading',
+        bl: 'Bill of Lading',
+        commercialinvoice: 'Commercial Invoice',
+        packinglist: 'Packing List',
+        shippinginvoice: 'Shipping Invoice',
+        shippingbill: 'Shipping Bill',
+        origincert: 'Certificate of Origin',
+        customsdeclaration: 'Customs Declaration',
+        insurancecert: 'Insurance Certificate',
+        clientconfirm: 'Client Confirmation',
+        booking: 'Booking Confirmation',
+        draftsi: 'Draft SI',
+        si: 'Shipping Instruction',
+        additionalinvoice: 'Additional Invoice'
+    };
+    if (byNorm[norm]) return byNorm[norm];
+    if (norm.includes('billoflading')) return 'Bill of Lading';
+    if (!raw) return 'Document';
+    return raw.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()).trim();
+}
+
 async function fetchUploadedDocuments() {
+    const listElement = document.getElementById('referenceDocumentsList');
+    if (!listElement) return;
+
+    const apiBase =
+        typeof CONFIG !== 'undefined' && CONFIG.API_URL != null ? String(CONFIG.API_URL) : '';
+    const requestUrl = `${apiBase}/api/tracking/enquiry/${encodeURIComponent(String(enquiryId))}`;
+
+    const setMessage = (text, isError = false) => {
+        listElement.innerHTML = `<p style="color: ${isError ? 'var(--danger, #b91c1c)' : 'var(--text-tertiary)'}; font-size: 14px;">${text}</p>`;
+    };
+
     try {
-        const response = await fetch(`${CONFIG.API_URL}/api/tracking/enquiry/${enquiryId}`);
-        const listElement = document.getElementById('referenceDocumentsList');
+        const response = await fetch(requestUrl);
 
-        if (response.ok) {
-            const documents = await response.json();
-
-            if (documents && documents.length > 0) {
-                listElement.innerHTML = '';
-                documents.forEach(doc => {
-                    const filename = doc.file_path.split(/[\\\/]/).pop();
-                    const fileUrl = `${CONFIG.API_URL}/uploads/${filename}`;
-                    const card = document.createElement('div');
-                    card.style.cssText = 'padding: 12px; background: #f8fafc; border: 1px solid var(--border-light); border-radius: 6px; display: flex; align-items: center; gap: 12px;';
-
-                    // Human readable type
-                    const typeLabels = {
-                        'bol': 'Bill of Lading',
-                        'commercialInvoice': 'Commercial Invoice',
-                        'packingList': 'Packing List',
-                        'shippingInvoice': 'Shipping Invoice',
-                        'shippingBill': 'Shipping Bill',
-                        'originCert': 'Certificate of Origin',
-                        'customsDeclaration': 'Customs Declaration',
-                        'insuranceCert': 'Insurance Certificate',
-                        'clientConfirm': 'Client Confirmation',
-                        'booking': 'Booking Confirmation',
-                        'draftSi': 'Draft SI',
-                        'si': 'Shipping Instruction'
-                    };
-
-                    const label = typeLabels[doc.document_type] || doc.document_type;
-
-                    card.innerHTML = `
-                        <div style="width: 32px; height: 32px; background: white; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--primary);">
-                            <i class="fas fa-file-pdf"></i>
-                        </div>
-                        <div style="flex: 1; overflow: hidden;">
-                            <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 2px;">${label}</div>
-                            <div style="font-size: 13px; font-weight: 600; color: var(--navy-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${doc.file_name}">${doc.file_name}</div>
-                        </div>
-                        <a href="${fileUrl}" target="_blank" class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; white-space: nowrap;">
-                            <i class="fas fa-eye"></i> View
-                        </a>
-                    `;
-                    listElement.appendChild(card);
-                });
-            } else {
-                listElement.innerHTML = '<p style="color: var(--text-tertiary); font-size: 14px;">No documents uploaded yet.</p>';
-            }
+        if (!response.ok) {
+            setMessage(`Could not load reference documents (${response.status}). Refresh the page or try again later.`, true);
+            return;
         }
+
+        let documents;
+        try {
+            documents = await response.json();
+        } catch (_) {
+            setMessage('Documents response was invalid. Please try again.', true);
+            return;
+        }
+
+        if (!Array.isArray(documents)) {
+            documents = [];
+        }
+
+        listElement.innerHTML = '';
+
+        if (documents.length === 0) {
+            setMessage('No documents uploaded yet.');
+            return;
+        }
+
+        documents.forEach((doc) => {
+            const rawPath = (doc.file_path || '').trim();
+            let storageName = rawPath.split(/[/\\]/).pop() || '';
+            if (!storageName && doc.file_name) {
+                storageName = String(doc.file_name).split(/[/\\]/).pop() || '';
+            }
+            const displayName = (doc.file_name && String(doc.file_name).trim()) || storageName || 'Document';
+            const fileUrl = storageName ? `${apiBase}/uploads/${encodeURIComponent(storageName)}` : '#';
+
+            const card = document.createElement('div');
+            card.style.cssText =
+                'padding: 12px; background: #f8fafc; border: 1px solid var(--border-light); border-radius: 6px; display: flex; align-items: center; gap: 12px;';
+
+            const iconClass = /\.(png|jpg|jpeg|gif|webp)$/i.test(storageName || displayName) ? 'fa-file-image' : 'fa-file-pdf';
+            const label = financeDocumentTypeLabel(doc.document_type);
+            const safeTitle = displayName.replace(/"/g, '&quot;');
+            const viewDisabled = !storageName;
+            const viewBtnStyle =
+                'padding: 4px 8px; font-size: 11px; white-space: nowrap;' +
+                (viewDisabled ? ' opacity: 0.55; pointer-events: none;' : '');
+
+            card.innerHTML = `
+                <div style="width: 32px; height: 32px; background: white; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--primary);">
+                    <i class="fas ${iconClass}"></i>
+                </div>
+                <div style="flex: 1; overflow: hidden;">
+                    <div style="font-size: 11px; color: var(--text-tertiary); margin-bottom: 2px;">${label}</div>
+                    <div style="font-size: 13px; font-weight: 600; color: var(--navy-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${safeTitle}">${displayName}</div>
+                </div>
+                <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-outline"${viewDisabled ? ' aria-disabled="true"' : ''} style="${viewBtnStyle}">
+                    <i class="fas fa-eye"></i> View
+                </a>
+            `;
+            listElement.appendChild(card);
+        });
     } catch (error) {
         console.error('Error fetching documents:', error);
+        setMessage('Could not load reference documents. Check your connection and try again.', true);
     }
 }
 

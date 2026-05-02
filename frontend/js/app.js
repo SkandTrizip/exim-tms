@@ -15,9 +15,264 @@ document.addEventListener('DOMContentLoaded', async function () {
         fetchAllEnquiries()
     ]);
 
+    document.getElementById('financeView')?.addEventListener('click', handleFinanceReceivedClick);
+
     // Initial routing
     handleRouting();
 });
+
+/** Document type labels — aligned with finance-details.js */
+const FINANCE_DOC_TYPE_LABELS = {
+    bol: 'Bill of Lading',
+    commercialInvoice: 'Commercial Invoice',
+    packingList: 'Packing List',
+    shippingInvoice: 'Shipping Invoice',
+    shippingBill: 'Shipping Bill',
+    originCert: 'Certificate of Origin',
+    customsDeclaration: 'Customs Declaration',
+    insuranceCert: 'Insurance Certificate',
+    clientConfirm: 'Client Confirmation',
+    booking: 'Booking Confirmation',
+    draftSi: 'Draft SI',
+    si: 'Shipping Instruction',
+    additionalInvoice: 'Additional Invoice'
+};
+
+async function fetchDocumentsMapForEnquiries(enquiryIds) {
+    const map = {};
+    await Promise.all(
+        enquiryIds.map(async (id) => {
+            try {
+                const r = await fetch(`${CONFIG.API_URL}/api/tracking/enquiry/${id}`);
+                map[id] = r.ok ? await r.json() : [];
+            } catch {
+                map[id] = [];
+            }
+        })
+    );
+    return map;
+}
+
+function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
+
+function escapeAttr(s) {
+    if (s == null) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+}
+
+/** Value for <input type="date"> — never throws */
+function safeDateInputValue(val) {
+    const fallback = () => new Date().toISOString().split('T')[0];
+    if (val == null || val === '') return fallback();
+    if (typeof val === 'string') {
+        const head = val.split('T')[0];
+        if (/^\d{4}-\d{2}-\d{2}$/.test(head)) return head;
+        const d = new Date(val);
+        return Number.isNaN(d.getTime()) ? fallback() : d.toISOString().split('T')[0];
+    }
+    const d = new Date(val);
+    return Number.isNaN(d.getTime()) ? fallback() : d.toISOString().split('T')[0];
+}
+
+function renderFinanceReceivedDocCards(documents) {
+    if (!documents || documents.length === 0) {
+        return '<p style="margin:0; color: var(--text-tertiary); font-size: 13px;">No documents uploaded for this sale yet. Upload from Tracking.</p>';
+    }
+    return `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;">
+        ${documents.map((doc) => {
+        const filename = (doc.file_path || '').split(/[/\\]/).pop();
+        const fileUrl = `${CONFIG.API_URL}/uploads/${encodeURIComponent(filename)}`;
+        const label = FINANCE_DOC_TYPE_LABELS[doc.document_type] || doc.document_type;
+        return `
+            <div style="padding: 10px; background: var(--gray-50); border: 1px solid var(--border-light); border-radius: 8px; display: flex; align-items: center; gap: 10px;">
+                <div style="width: 32px; height: 32px; background: white; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--primary);">
+                    <i class="fas fa-file-alt"></i>
+                </div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-size: 10px; color: var(--text-tertiary); text-transform: uppercase;">${escapeHtml(label)}</div>
+                    <div style="font-size: 12px; font-weight: 600; color: var(--navy-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(doc.file_name)}">${escapeHtml(doc.file_name)}</div>
+                </div>
+                <a href="${fileUrl}" target="_blank" rel="noopener" class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; flex-shrink: 0;"><i class="fas fa-eye"></i></a>
+            </div>`;
+    }).join('')}
+    </div>`;
+}
+
+function financeReceivedDetailInner(inv, docs, eid) {
+    const invDate = inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString() : '—';
+    const dueDate = inv.payment_due_date ? new Date(inv.payment_due_date).toLocaleDateString() : '—';
+    const payDateVal = safeDateInputValue(inv.payment_date);
+    return `
+        <div style="padding: 16px 20px; background: var(--gray-50); border-top: 1px solid var(--border-light);">
+            <div style="display: flex; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 14px; font-size: 12px; color: var(--text-secondary);">
+                <span><strong style="color: var(--text-tertiary);">Invoice</strong> ${escapeHtml(inv.invoice_number || '—')}</span>
+                <span><strong style="color: var(--text-tertiary);">Invoice date</strong> ${invDate}</span>
+                <span><strong style="color: var(--text-tertiary);">Due</strong> ${dueDate}</span>
+            </div>
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 8px;">Related documents</div>
+                ${renderFinanceReceivedDocCards(docs)}
+                ${eid ? `<div style="margin-top: 10px;"><a href="/upload-track?enquiry_id=${eid}" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;"><i class="fas fa-upload"></i> Tracking</a></div>` : ''}
+            </div>
+            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 10px;">Payment received</div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; align-items: end;">
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 11px; font-weight: 600; color: var(--text-tertiary);">Type</label>
+                    <select class="form-control fr-pay-type" style="padding: 8px; font-size: 13px;">
+                        <option value="NEFT" ${inv.payment_type === 'NEFT' || !inv.payment_type ? 'selected' : ''}>NEFT</option>
+                        <option value="RTGS" ${inv.payment_type === 'RTGS' ? 'selected' : ''}>RTGS</option>
+                        <option value="IMPS" ${inv.payment_type === 'IMPS' ? 'selected' : ''}>IMPS</option>
+                        <option value="Cheque" ${inv.payment_type === 'Cheque' ? 'selected' : ''}>Cheque</option>
+                        <option value="Cash" ${inv.payment_type === 'Cash' ? 'selected' : ''}>Cash</option>
+                        <option value="UPI" ${inv.payment_type === 'UPI' ? 'selected' : ''}>UPI</option>
+                    </select>
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 11px; font-weight: 600; color: var(--text-tertiary);">Received date</label>
+                    <input type="date" class="form-control fr-pay-date" value="${payDateVal}" style="padding: 8px; font-size: 13px;">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 11px; font-weight: 600; color: var(--text-tertiary);">UTR / reference</label>
+                    <input type="text" class="form-control fr-pay-ref" placeholder="Reference" value="${escapeAttr(inv.payment_reference || '')}" style="padding: 8px; font-size: 13px;">
+                </div>
+                <div class="form-group" style="margin: 0;">
+                    <label style="font-size: 11px; font-weight: 600; color: var(--text-tertiary);">Amount (INR)</label>
+                    <input type="number" class="form-control fr-pay-amt" placeholder="0" min="0" step="0.01" value="${inv.received_amount != null && inv.received_amount !== '' ? escapeHtml(String(inv.received_amount)) : ''}" style="padding: 8px; font-size: 13px;">
+                </div>
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
+                    <button type="button" class="btn btn-primary fr-save-pay" data-invoice-id="${inv.id}" style="padding: 10px 16px; font-size: 13px;">
+                        <i class="fas fa-coins"></i> Save payment
+                    </button>
+                </div>
+            </div>
+        </div>`;
+}
+
+async function renderFinanceReceivedView(invoices) {
+    const container = document.getElementById('financeReceivedSections');
+    if (!container) return;
+
+    updateFinanceStats();
+
+    if (!invoices || invoices.length === 0) {
+        container.innerHTML = `
+            <div class="table-container" style="background: white; border-radius: 8px; border: 1px solid var(--border-light); padding: 48px; text-align: center; box-shadow: var(--shadow-sm);">
+                <p style="color: var(--text-secondary); margin: 0;">No invoices recorded in the database yet. Save an invoice from <strong>Create Client Invoice</strong> first.</p>
+            </div>`;
+        renderPagination('financePagination', 0, 1, 'changeFinancePage');
+        return;
+    }
+
+    const page = paginationState.finance.currentPage;
+    const total = invoices.length;
+    const startIdx = (page - 1) * PAGE_SIZE;
+    const slice = invoices.slice(startIdx, startIdx + PAGE_SIZE);
+
+    const enquiryIds = [...new Set(slice.map((i) => i.enquiry_id).filter(Boolean))];
+    const docsMap = await fetchDocumentsMapForEnquiries(enquiryIds);
+
+    const bodyRows = slice.map((inv) => {
+        const eid = inv.enquiry_id;
+        const docs = eid ? docsMap[eid] || [] : [];
+        const paid = !!inv.is_paid;
+        const origin = inv.origin || '—';
+        const dest = inv.destination || '—';
+        const route = `${escapeHtml(origin)} → ${escapeHtml(dest)}`;
+        const statusHtml = paid
+            ? '<span class="badge badge-success"><i class="fas fa-check-circle"></i> PAID</span>'
+            : '<span class="badge badge-warning"><i class="fas fa-clock"></i> AWAITING PAYMENT</span>';
+
+        return `
+            <tr class="fr-sum-row">
+                <td><strong>${escapeHtml(inv.enquiry_number || '—')}</strong></td>
+                <td>${escapeHtml(inv.client_name || '—')}</td>
+                <td>${route}</td>
+                <td>${statusHtml}</td>
+                <td>
+                    <button type="button" class="btn btn-primary" style="padding: 6px 14px; font-size: 12px;" onclick="toggleFinanceReceivedDetail(${inv.id})">
+                        <i class="fas fa-money-bill-wave"></i> Record Amount
+                    </button>
+                </td>
+            </tr>
+            <tr class="fr-detail-row" id="fr-detail-${inv.id}" style="display: none;">
+                <td colspan="5" style="padding: 0; vertical-align: top;">
+                    ${financeReceivedDetailInner(inv, docs, eid)}
+                </td>
+            </tr>`;
+    }).join('');
+
+    container.innerHTML = `
+        <div class="table-container" style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Sale #</th>
+                        <th>Client</th>
+                        <th>Route</th>
+                        <th>Finance Status</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>${bodyRows}</tbody>
+            </table>
+        </div>`;
+
+    renderPagination('financePagination', total, page, 'changeFinancePage');
+}
+
+window.toggleFinanceReceivedDetail = function (invoiceId) {
+    const row = document.getElementById(`fr-detail-${invoiceId}`);
+    if (!row) return;
+    const open = row.style.display !== 'none';
+    row.style.display = open ? 'none' : 'table-row';
+};
+
+async function handleFinanceReceivedClick(ev) {
+    const btn = ev.target.closest('.fr-save-pay');
+    if (!btn || currentFinanceSubView !== 'received') return;
+
+    const invoiceId = btn.dataset.invoiceId;
+    const detailRow = btn.closest('tr.fr-detail-row');
+    if (!invoiceId || !detailRow) return;
+
+    const payment_date = detailRow.querySelector('.fr-pay-date')?.value;
+    const payment_type = detailRow.querySelector('.fr-pay-type')?.value;
+    const payment_reference = (detailRow.querySelector('.fr-pay-ref')?.value || '').trim();
+    const received_amount = parseFloat(detailRow.querySelector('.fr-pay-amt')?.value);
+
+    if (!payment_date || !payment_reference || Number.isNaN(received_amount) || received_amount <= 0) {
+        showModal('Missing details', 'Please enter received date, UTR/reference, and a positive amount.', 'warning');
+        return;
+    }
+
+    const payload = { payment_date, payment_type, payment_reference, received_amount };
+
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/invoice/payment/${invoiceId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (response.ok) {
+            showModal('Saved', 'Payment details recorded successfully.', 'success');
+            await updateFinanceTable('received');
+            await fetchDashboardStats();
+        } else {
+            const err = await response.json().catch(() => ({}));
+            showModal('Error', err.detail || 'Failed to save payment', 'error');
+        }
+    } catch (e) {
+        showModal('Error', e.message || 'Network error', 'error');
+    }
+}
 
 async function fetchDashboardStats() {
     try {
@@ -547,7 +802,61 @@ async function updateTrackingTable(filterType = null) {
 async function updateFinanceTable(subView = null) {
     currentFinanceSubView = subView;
     const tbody = document.getElementById('financeTable');
+    const tableWrap = document.getElementById('financeTableWrap');
+    const receivedEl = document.getElementById('financeReceivedSections');
+
+    if (subView === 'received') {
+        if (tableWrap) tableWrap.style.display = 'none';
+        if (receivedEl) {
+            receivedEl.style.display = 'block';
+            receivedEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-tertiary);">Loading invoices…</div>';
+        }
+        try {
+            const res = await fetch(`${CONFIG.API_URL}/api/invoice/list`);
+            let payload;
+            try {
+                payload = await res.json();
+            } catch (je) {
+                throw new Error('Server did not return JSON (check API URL / login).');
+            }
+            if (res.ok && Array.isArray(payload)) {
+                try {
+                    await renderFinanceReceivedView(payload);
+                } catch (re) {
+                    console.error('renderFinanceReceivedView:', re);
+                    if (receivedEl) {
+                        receivedEl.innerHTML = `<div class="table-container" style="padding:32px;text-align:center;color:var(--text-secondary);">Could not render invoice list. ${escapeHtml(re.message || String(re))}</div>`;
+                    }
+                    renderPagination('financePagination', 0, 1, 'changeFinancePage');
+                    updateFinanceStats();
+                }
+            } else {
+                const detail = payload && payload.detail != null ? String(payload.detail) : `HTTP ${res.status}`;
+                if (receivedEl) {
+                    receivedEl.innerHTML = `<div class="table-container" style="padding:32px;text-align:center;color:var(--text-secondary);">Could not load invoices. ${escapeHtml(detail)}</div>`;
+                }
+                renderPagination('financePagination', 0, 1, 'changeFinancePage');
+                updateFinanceStats();
+            }
+        } catch (err) {
+            console.error('Error fetching invoices:', err);
+            const hint = err && err.message ? err.message : String(err);
+            if (receivedEl) {
+                receivedEl.innerHTML = `<div class="table-container" style="padding:32px;text-align:center;color:var(--text-secondary);"><p>Error loading invoices.</p><p style="font-size:13px;margin-top:8px;color:var(--text-tertiary);">${escapeHtml(hint)}</p><p style="font-size:12px;margin-top:12px;">Tip: open the app using the same host as in your browser (e.g. <code>127.0.0.1</code> vs <code>localhost</code>) or rely on same-origin API URLs.</p></div>`;
+            }
+            renderPagination('financePagination', 0, 1, 'changeFinancePage');
+            updateFinanceStats();
+        }
+        return;
+    }
+
     if (!tbody) return;
+
+    if (tableWrap) tableWrap.style.display = 'block';
+    if (receivedEl) {
+        receivedEl.style.display = 'none';
+        receivedEl.innerHTML = '';
+    }
 
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Loading...</td></tr>';
 
@@ -559,13 +868,11 @@ async function updateFinanceTable(subView = null) {
         return;
     }
 
-    // One bulk call for all IDs
     const ids = operationalEnquiries.map(e => e.id);
     const bulkStatus = await fetchBulkStatus(ids);
 
-    // Update table headers for enquiries (default)
     const thead = document.querySelector('#financeView .data-table thead tr');
-    if (thead && subView !== 'received') {
+    if (thead) {
         thead.innerHTML = `
             <th>Sale #</th>
             <th>Client</th>
@@ -573,20 +880,6 @@ async function updateFinanceTable(subView = null) {
             <th>Finance Status</th>
             <th>Action</th>
         `;
-    }
-
-    // For Payments Received, we use a different data source (Invoices)
-    if (subView === 'received') {
-        try {
-            const res = await fetch(`${CONFIG.API_URL}/api/invoice/list`);
-            if (res.ok) {
-                const invoices = await res.json();
-                renderInvoicesTable(invoices);
-                return;
-            }
-        } catch (err) {
-            console.error('Error fetching invoices:', err);
-        }
     }
 
     // Filter to those that have a shipping invoice
@@ -643,22 +936,9 @@ async function updateFinanceTable(subView = null) {
                             <i class="fas fa-file-invoice"></i> Create Invoice
                         </button>
                     ` : `
-                        <div class="actions-dropdown">
-                            <button class="actions-btn">Actions <i class="fas fa-chevron-down"></i></button>
-                            <div class="actions-menu">
-                                <button class="actions-item" onclick="window.location.href='/finance-details?enquiry_id=${e.id}'">
-                                    <i class="fas fa-${e.payment_done ? 'check-circle' : 'money-bill-wave'}"></i> 
-                                    ${e.payment_done ? 'View/Edit Payment' : 'Payment to Shipping Line'}
-                                </button>
-                                <button class="actions-item" 
-                                        ${e.bl_received ? `onclick="window.location.href='/create-invoice?enquiry_id=${e.id}'"` : 'disabled style="opacity: 0.5; cursor: not-allowed;" title="Wait for BL Received status"'}
-                                >
-                                    <i class="fas fa-file-invoice"></i> Create Invoice 
-                                </button>
-                                <hr style="margin: 4px 0; border: 0; border-top: 1px solid var(--border-light);">
-                                ${renderEnquiryActions(e)}
-                            </div>
-                        </div>
+                        <button type="button" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="recordAmountForEnquiry(${e.id})">
+                            <i class="fas fa-coins"></i> Record Amount
+                        </button>
                     `}
                 </td>
             </tr>
@@ -693,59 +973,25 @@ async function updateFinanceStats() {
     }
 }
 
-function renderInvoicesTable(invoices) {
-    const tbody = document.getElementById('financeTable');
-    if (!tbody) return;
-
-    // Update table headers for invoices
-    const thead = document.querySelector('#financeView .data-table thead tr');
-    if (thead) {
-        thead.innerHTML = `
-            <th>Invoice #</th>
-            <th>Client</th>
-            <th>Sale #</th>
-            <th>Amount</th>
-            <th>Status</th>
-            <th>Action</th>
-        `;
-    }
-
-    if (invoices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = invoices.map(inv => `
-        <tr>
-            <td><strong>${inv.invoice_number}</strong></td>
-            <td>${inv.client_name}</td>
-            <td>${inv.enquiry_number}</td>
-            <td>${inv.received_amount ? `₹${inv.received_amount.toLocaleString()}` : '---'}</td>
-            <td>
-                ${inv.is_paid
-            ? `<div style="display: flex; flex-direction: column; gap: 4px;">
-                    <span class="badge badge-success" style="width: fit-content;"><i class="fas fa-check-circle"></i> Paid</span>
-                    <small style="color: var(--text-tertiary); font-size: 11px;">
-                        ${inv.payment_type || 'Payment'}: ${inv.payment_reference || '---'}
-                    </small>
-               </div>`
-            : `<span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>`}
-            </td>
-            <td>
-                <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openPaymentModal(${inv.id}, '${inv.invoice_number}')">
-                    <i class="fas fa-hand-holding-usd"></i> ${inv.is_paid ? 'Edit Receipt' : 'Record Receipt'}
-                </button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-// Global function for modal (will be implemented in separate JS or here)
-window.openPaymentModal = async function (invoiceId, invNum) {
-    // We'll use a modal to record payment
-    // For now, let's redirect to a details page or implement a modal here
-    // Redirecting is easier for complex forms
+window.openPaymentModal = function (invoiceId) {
     window.location.href = `/record-payment?invoice_id=${invoiceId}`;
+};
+
+/** Client receipt: open record-payment if this sale has a saved invoice, else Finance Received list */
+window.recordAmountForEnquiry = async function (enquiryId) {
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/invoice/details/${enquiryId}`);
+        if (res.ok) {
+            const inv = await res.json();
+            if (inv && inv.id) {
+                window.location.href = `/record-payment?invoice_id=${inv.id}`;
+                return;
+            }
+        }
+    } catch (err) {
+        console.error('recordAmountForEnquiry:', err);
+    }
+    window.location.href = '/#finance-received';
 };
 
 /**
