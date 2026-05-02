@@ -4,6 +4,12 @@ let pricingQuotes = [];
 let activeQuoteIndex = 0;
 let currentExchangeRate = 86.8;
 let isConfirmMode = false;  // controls vendor rate column visibility
+/** URL `mode=` so we can keep the calculator open for Confirm Quote flows even after a quote is already accepted */
+let pricingPageMode = '';
+
+function isQuoteAcceptedStatus(q) {
+    return q && String(q.status || '').toLowerCase() === 'accepted';
+}
 
 document.addEventListener('DOMContentLoaded', async function () {
     // 1. Initial UI Setup
@@ -14,6 +20,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const urlParams = new URLSearchParams(window.location.search);
     const enquiryId = urlParams.get('enquiry_id');
     const mode = urlParams.get('mode');
+    pricingPageMode = mode ? String(mode) : '';
 
     if (enquiryId) {
         await fetchEnquiryData(enquiryId);
@@ -21,14 +28,26 @@ document.addEventListener('DOMContentLoaded', async function () {
         await fetchQuotesForEnquiry(enquiryId);
         await fetchExchangeRate();
 
-        if (mode === 'confirm') {
+        if (pricingPageMode === 'confirm') {
             initConfirmMode();
-        } else if (mode === 'view') {
+        } else if (pricingPageMode === 'view') {
+            isConfirmMode = false;
+            document.body.classList.remove('confirm-mode');
             initViewMode();
-        } else if (mode === 'edit') {
+        } else if (pricingPageMode === 'edit') {
+            const hasAcceptedEdit = pricingQuotes.some(isQuoteAcceptedStatus);
+            if (hasAcceptedEdit) {
+                isConfirmMode = true;
+                document.body.classList.add('confirm-mode');
+            } else {
+                isConfirmMode = false;
+                document.body.classList.remove('confirm-mode');
+            }
             initPricingTable(true); // true means force edit
         } else {
-            // Default behavior
+            // Default behaviour (dashboard open with no mode)
+            isConfirmMode = false;
+            document.body.classList.remove('confirm-mode');
             initPricingTable();
         }
     }
@@ -36,7 +55,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
 function initViewMode() {
     console.log('👁️ Entering View-Only Mode');
-    initPricingTable(false, true); // forceView = true
+    initPricingTable(false, true); // forceView = true (unused in table; kept for future)
 
     // Disable all inputs after a short delay to ensure dynamic content is loaded
     setTimeout(() => {
@@ -68,18 +87,27 @@ function initConfirmMode() {
     isConfirmMode = true;                          // show vendor column in newly rendered rows
     document.body.classList.add('confirm-mode');   // show vendor total card via CSS
 
-    // Show calculator but mostly read-only
     initPricingTable(false, true);
 
-    // Hide administrative actions
+    const hasAccepted = pricingQuotes.some(isQuoteAcceptedStatus);
+
+    // Hide administrative actions; allow Save once a quote exists so totals can persist from Confirm flow.
     const saveBtn = document.querySelector('button[onclick="savePricing()"]');
     const addQuoteBtn = document.querySelector('button[onclick="addNewQuote()"]');
-    if (saveBtn) saveBtn.style.display = 'none';
+    if (saveBtn) saveBtn.style.display = hasAccepted ? '' : 'none';
     if (addQuoteBtn) addQuoteBtn.style.display = 'none';
 
-    // Show the Confirm button
     const confirmBtn = document.getElementById('confirmQuoteBtn');
-    if (confirmBtn) confirmBtn.style.display = 'flex';
+    if (confirmBtn) {
+        if (hasAccepted) {
+            confirmBtn.style.display = 'none';
+        } else {
+            confirmBtn.style.display = 'flex';
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = 'Confirm This Quote <i class="fas fa-check-circle" style="margin-left: 8px;"></i>';
+            confirmBtn.style.background = '';
+        }
+    }
 
     // Lock everything EXCEPT shipping line rate / ex. rate + client rate columns
     const confirmEditableInputs = '.p-vendor, .p-rate, .p-ex';
@@ -99,6 +127,7 @@ function initConfirmMode() {
             }
         });
         document.querySelectorAll(confirmEditableInputs).forEach(el => {
+            el.readOnly = false;
             el.style.opacity = '1';
             el.style.cursor = 'text';
             el.disabled = false;
@@ -263,10 +292,14 @@ function initPricingTable(forceEdit = false, forceView = false) {
     } else {
         renderQuoteTabs();
 
-        const confirmedIdx = pricingQuotes.findIndex(q => q.status === 'accepted');
+        const confirmedIdx = pricingQuotes.findIndex(isQuoteAcceptedStatus);
 
-        // Auto-lock logic (Skip if forceEdit is true)
-        if (confirmedIdx !== -1 && !forceEdit) {
+        // Locked summary sheet: accepted quote exists and user isn’t forcing edit —
+        // except `mode=confirm`, where they must still tweak shipping/client rates before client sign-off.
+        const useLockedSummary =
+            confirmedIdx !== -1 && !forceEdit && pricingPageMode !== 'confirm';
+
+        if (useLockedSummary) {
             activeQuoteIndex = confirmedIdx;
             loadQuote(confirmedIdx);
 
@@ -284,13 +317,14 @@ function initPricingTable(forceEdit = false, forceView = false) {
                 btn.disabled = true;
             }
         } else {
-            // Edit mode: if a quote is already accepted, load that one so user edits the right values
-            if (forceEdit && confirmedIdx !== -1) {
+            const openCalculator =
+                forceEdit || (pricingPageMode === 'confirm' && confirmedIdx !== -1);
+            // Load the accepted quote whenever we’re deliberately opening the calculator for it.
+            if (openCalculator && confirmedIdx !== -1) {
                 activeQuoteIndex = confirmedIdx;
             }
 
-            // Make sure calculator is visible in edit mode
-            if (forceEdit) {
+            if (openCalculator) {
                 const calc = document.getElementById('calculatorSection');
                 const conf = document.getElementById('quoteConfirmationPage');
                 if (calc) calc.style.display = 'block';
@@ -657,9 +691,30 @@ async function savePricingData(silent = false) {
     }
 }
 
+function syncPostConfirmChromeAfterQuoteSave() {
+    const pg = document.getElementById('quoteConfirmationPage');
+    const btn = document.getElementById('postConfirmEditDetailsBtn');
+    const hint = document.getElementById('confirmPricingHint');
+    if (!pg || !btn) return;
+    let confirmPageVisible = false;
+    try {
+        confirmPageVisible = window.getComputedStyle(pg).display !== 'none';
+    } catch (_) {
+        confirmPageVisible = pg.style.display === 'block';
+    }
+    if (!confirmPageVisible) return;
+    btn.style.display = 'none';
+    if (hint) {
+        hint.innerHTML =
+            '<i class="fas fa-info-circle" style="margin-right: 8px; color: var(--navy-400);"></i>' +
+            'This quote is saved. Review the <strong>Final rate breakdown</strong>, or proceed to tracking.';
+    }
+}
+
 async function savePricing() {
     try {
         await savePricingData();
+        syncPostConfirmChromeAfterQuoteSave();
         showModal('Success', 'Pricing saved successfully!', 'success');
     } catch (e) {
         showModal('Error', 'Failed to save pricing: ' + e.message, 'error');
@@ -745,7 +800,10 @@ async function finalizeSelectedQuote(idx) {
                     method: 'PATCH'
                 });
                 if (!statusRes.ok) console.error('Failed to update quote status:', await statusRes.text());
-                else console.log('✅ Quote status updated to accepted');
+                else {
+                    quote.status = 'accepted';
+                    console.log('✅ Quote status updated to accepted');
+                }
             }
 
             // Update enquiry stage to 3 (Upload & Track)
