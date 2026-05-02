@@ -282,6 +282,19 @@ function initPricingTable(forceEdit = false, forceView = false) {
                 btn.disabled = true;
             }
         } else {
+            // Edit mode: if a quote is already accepted, load that one so user edits the right values
+            if (forceEdit && confirmedIdx !== -1) {
+                activeQuoteIndex = confirmedIdx;
+            }
+
+            // Make sure calculator is visible in edit mode
+            if (forceEdit) {
+                const calc = document.getElementById('calculatorSection');
+                const conf = document.getElementById('quoteConfirmationPage');
+                if (calc) calc.style.display = 'block';
+                if (conf) conf.style.display = 'none';
+            }
+
             loadQuote(activeQuoteIndex);
         }
     }
@@ -736,13 +749,60 @@ async function finalizeSelectedQuote(idx) {
 
             renderConfirmedTable(quote);
 
-            showModal('Quote Finalized', `Quotation for <strong>${quote.line}</strong> has been confirmed. You can now proceed to Tracking.`, 'success', () => {
-                window.location.href = `/upload-track?enquiry_id=${currentEnquiry.id}`;
-            });
+            showPostConfirmOptions(quote);
         } catch (e) {
             showModal('Error', 'Failed to lock quote: ' + e.message, 'error');
         }
     });
+}
+
+function showPostConfirmOptions(quote) {
+    const enquiryId = currentEnquiry?.id;
+    const quoteName = quote?.name || 'this quote';
+    const lineName = quote?.line || '-';
+
+    const message = `
+        <div style="display:flex; flex-direction:column; gap:12px;">
+            <div style="color: var(--text-secondary); font-weight: 600;">
+                <strong>${quoteName}</strong> (${lineName}) is confirmed. What would you like to do next?
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-end;">
+                <button class="btn btn-secondary" onclick="postConfirmEditDetails(${enquiryId})" style="padding: 10px 14px;">
+                    <i class="fas fa-pen"></i> Edit details
+                </button>
+                <button class="btn btn-primary" onclick="postConfirmViewBreakdown()" style="padding: 10px 14px; background: #2563eb; border: none;">
+                    <i class="fas fa-list"></i> Final rate breakdown
+                </button>
+                <button class="btn btn-primary" onclick="postConfirmGoTracking(${enquiryId})" style="padding: 10px 14px; background: #059669; border: none;">
+                    <i class="fas fa-route"></i> Proceed to tracking
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal('Quote Confirmed', message, 'success');
+}
+
+function postConfirmEditDetails(enquiryId) {
+    if (!enquiryId) return;
+    closeModal();
+    window.location.href = `/pricing?enquiry_id=${enquiryId}&mode=edit`;
+}
+
+function postConfirmViewBreakdown() {
+    closeModal();
+    const confirmedPage = document.getElementById('quoteConfirmationPage');
+    if (confirmedPage) confirmedPage.style.display = 'block';
+    const anchor = document.getElementById('confirmationDocumentTable') || confirmedPage;
+    if (anchor && anchor.scrollIntoView) {
+        setTimeout(() => anchor.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+}
+
+function postConfirmGoTracking(enquiryId) {
+    if (!enquiryId) return;
+    closeModal();
+    window.location.href = `/upload-track?enquiry_id=${enquiryId}`;
 }
 
 function renderConfirmedTable(quote) {

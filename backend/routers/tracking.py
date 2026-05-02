@@ -13,6 +13,7 @@ router = APIRouter(prefix="/tracking", tags=["Tracking & Documents"])
 async def upload_documents(
     tracking_data: str = Form(...),
     bol: Optional[UploadFile] = File(None),
+    bl: Optional[UploadFile] = File(None),
     commercialInvoice: Optional[UploadFile] = File(None),
     packingList: Optional[UploadFile] = File(None),
     originCert: Optional[UploadFile] = File(None),
@@ -48,8 +49,10 @@ async def upload_documents(
 
 
         uploaded_docs = []
+        # Frontend historically sent the BL file under `bl`; persist as `bol` for one canonical type.
+        bol_upload = bol if bol and getattr(bol, "filename", None) else bl
         files_to_process = {
-            "bol": bol,
+            "bol": bol_upload,
             "commercialInvoice": commercialInvoice,
             "packingList": packingList,
             "shippingInvoice": shippingInvoice,

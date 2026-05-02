@@ -249,9 +249,15 @@
                     <div id="quoteConfirmationPage" style="display: none;">
                         <div class="pricing-card">
                             <div class="pricing-card-header"
-                                style="background: #ecfdf5; border-bottom: 2px solid #10b981;">
-                                <i class="fas fa-check-circle" style="color: #059669;"></i>
-                                <h3 style="color: #064e3b;">Quote Confirmed & Locked</h3>
+                                style="background: #ecfdf5; border-bottom: 2px solid #10b981; justify-content: space-between;">
+                                <div style="display:flex; align-items:center; gap: 12px;">
+                                    <i class="fas fa-check-circle" style="color: #059669;"></i>
+                                    <h3 style="color: #064e3b; margin: 0;">Quote Confirmed & Locked</h3>
+                                </div>
+                                <button type="button" class="btn btn-secondary" onclick="postConfirmEditDetails(currentEnquiry && currentEnquiry.id)"
+                                    style="padding: 8px 14px; font-size: 13px;">
+                                    <i class="fas fa-pen"></i> Edit details
+                                </button>
                             </div>
                             <div class="pricing-card-body">
                                 <div style="text-align: center; margin-bottom: 40px;">
@@ -273,8 +279,17 @@
                                     style="margin-top: 32px; padding: 20px; background: #f9fafb; border-radius: 12px; border: 1px solid var(--border-light); font-size: 14px; color: var(--text-secondary);">
                                     <i class="fas fa-info-circle"
                                         style="margin-right: 8px; color: var(--navy-400);"></i>
-                                    This quote is now confirmed and cannot be edited. You can download the PDF version
-                                    or proceed to track your shipment.
+                                    This quote is now confirmed and locked. If you need to correct details, use <strong>Edit details</strong>,
+                                    or review the <strong>Final rate breakdown</strong>, or proceed to tracking.
+                                </div>
+
+                                <div style="margin-top: 16px; display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-end;">
+                                    <button type="button" class="btn btn-primary" onclick="postConfirmViewBreakdown()" style="background:#2563eb; border:none;">
+                                        <i class="fas fa-list"></i> Final rate breakdown
+                                    </button>
+                                    <button type="button" class="btn btn-primary" onclick="postConfirmGoTracking(currentEnquiry && currentEnquiry.id)" style="background:#059669; border:none;">
+                                        <i class="fas fa-route"></i> Proceed to tracking
+                                    </button>
                                 </div>
                             </div>
                         </div>

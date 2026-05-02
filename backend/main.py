@@ -199,9 +199,11 @@ async def serve_config_js():
         logger.error(f"Error fetching data for config.js: {e}")
         # Keep the hardcoded ones as fallback
 
+    # Same-origin relative API paths (/api/...) — never inject a different host than the page URL
+    api_base_js = json.dumps(API_URL if API_URL else "")
     js_content = f"""
 const CONFIG = {json.dumps(config_dict)};
-CONFIG.API_URL = '{API_URL}';
+CONFIG.API_URL = {api_base_js};
 CONFIG.adminUsers = {json.dumps(ADMIN_USERS)};
 """
     return Response(content=js_content, media_type="application/javascript")

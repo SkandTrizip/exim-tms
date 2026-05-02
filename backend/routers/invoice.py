@@ -83,18 +83,29 @@ def get_invoice_details(enquiry_id: int, db: Session = Depends(get_db)):
 @router.get("/list")
 def list_all_invoices(db: Session = Depends(get_db)):
     """List all recorded invoices for payment tracking"""
-    invoices = db.query(Invoice, Enquiry.enquiry_number, Enquiry.client_name)\
+    invoices = db.query(
+            Invoice,
+            Enquiry.enquiry_number,
+            Enquiry.client_name,
+            Enquiry.origin,
+            Enquiry.destination,
+        )\
         .join(Enquiry, Invoice.enquiry_id == Enquiry.id)\
         .order_by(Invoice.created_at.desc()).all()
     
     result = []
-    for inv, enq_num, client in invoices:
+    for inv, enq_num, client, origin, destination in invoices:
         inv_dict = {
             "id": inv.id,
+            "enquiry_id": inv.enquiry_id,
             "invoice_number": inv.invoice_number,
             "invoice_date": inv.invoice_date,
+            "payment_due_date": inv.payment_due_date,
+            "place_of_supply": inv.place_of_supply,
             "enquiry_number": enq_num,
             "client_name": client,
+            "origin": origin or "",
+            "destination": destination or "",
             "is_paid": inv.is_paid,
             "payment_date": inv.payment_date,
             "payment_type": inv.payment_type,
