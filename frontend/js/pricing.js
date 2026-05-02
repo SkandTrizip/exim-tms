@@ -6,9 +6,106 @@ let currentExchangeRate = 86.8;
 let isConfirmMode = false;  // controls vendor rate column visibility
 /** URL `mode=` so we can keep the calculator open for Confirm Quote flows even after a quote is already accepted */
 let pricingPageMode = '';
+/** True after Save Quote until user opens via mode=edit / mode=confirm or finalizes quote (sessionStorage-backed). */
+let pricingLockedAfterSave = false;
+let _confirmUiSetupTimer = null;
 
 function isQuoteAcceptedStatus(q) {
     return q && String(q.status || '').toLowerCase() === 'accepted';
+}
+
+function pricingSavedLockStorageKey() {
+    return currentEnquiry && currentEnquiry.id != null
+        ? `pricing_saved_lock_${currentEnquiry.id}`
+        : null;
+}
+
+function isPricingSheetSavedLocked() {
+    if (pricingLockedAfterSave) return true;
+    const k = pricingSavedLockStorageKey();
+    if (!k) return false;
+    try {
+        return sessionStorage.getItem(k) === '1';
+    } catch (_) {
+        return false;
+    }
+}
+
+function resetSaveQuoteButtonAppearance() {
+    const saveBtn = document.querySelector('.form-actions button[onclick="savePricing()"]');
+    if (!saveBtn) return;
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '';
+    saveBtn.style.cursor = '';
+    saveBtn.innerHTML =
+        '<i class="fas fa-save" style="color: var(--navy-600)"></i> Save Quote';
+}
+
+function clearPricingSavedLock() {
+    pricingLockedAfterSave = false;
+    const k = pricingSavedLockStorageKey();
+    if (k) {
+        try {
+            sessionStorage.removeItem(k);
+        } catch (_) { /* ignore */ }
+    }
+    resetSaveQuoteButtonAppearance();
+}
+
+/** Disable route + calculator after Save Quote; keep Export PDF & (if draft) Confirm This Quote. */
+function applyPricingSheetSavedLock() {
+    if (!isPricingSheetSavedLocked()) return;
+
+    const route = document.querySelector('.route-section');
+    const calc = document.getElementById('calculatorSection');
+    const targets = [route, calc].filter(Boolean);
+
+    targets.forEach(container => {
+        container.querySelectorAll('input, select, textarea').forEach(el => {
+            el.disabled = true;
+            el.readOnly = true;
+            el.style.opacity = '0.78';
+            el.style.cursor = 'not-allowed';
+        });
+        container.querySelectorAll('button').forEach(btn => {
+            const oc = btn.getAttribute('onclick') || '';
+            if (oc.includes('generatePDF')) {
+                btn.disabled = false;
+                btn.style.display = '';
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+                return;
+            }
+            btn.disabled = true;
+            btn.style.display = 'none';
+        });
+    });
+
+    const saveBtn = document.querySelector('.form-actions button[onclick="savePricing()"]');
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.style.display = 'inline-flex';
+        saveBtn.style.opacity = '0.72';
+        saveBtn.style.cursor = 'not-allowed';
+        saveBtn.innerHTML =
+            '<i class="fas fa-lock" style="color: var(--navy-600);"></i> Saved (locked)';
+    }
+
+    const confirmBtn = document.getElementById('confirmQuoteBtn');
+    if (!confirmBtn) return;
+    const hasAccepted = pricingQuotes.some(isQuoteAcceptedStatus);
+    let calcVisible = false;
+    try {
+        calcVisible = calc && window.getComputedStyle(calc).display !== 'none';
+    } catch (_) {
+        calcVisible = calc && calc.style.display !== 'none' && calc.style.display !== '';
+    }
+    if (!hasAccepted && calcVisible) {
+        confirmBtn.style.display = 'inline-flex';
+        confirmBtn.disabled = false;
+        confirmBtn.style.opacity = '1';
+        confirmBtn.style.cursor = 'pointer';
+    }
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
@@ -23,6 +120,13 @@ document.addEventListener('DOMContentLoaded', async function () {
     pricingPageMode = mode ? String(mode) : '';
 
     if (enquiryId) {
+        if (pricingPageMode === 'edit' || pricingPageMode === 'confirm') {
+            pricingLockedAfterSave = false;
+            try {
+                sessionStorage.removeItem(`pricing_saved_lock_${enquiryId}`);
+            } catch (_) { /* ignore */ }
+        }
+
         await fetchEnquiryData(enquiryId);
         updateEnquirySummary(); // Populate the top summary bar
         await fetchQuotesForEnquiry(enquiryId);
@@ -44,11 +148,21 @@ document.addEventListener('DOMContentLoaded', async function () {
                 document.body.classList.remove('confirm-mode');
             }
             initPricingTable(true); // true means force edit
+            resetSaveQuoteButtonAppearance();
         } else {
             // Default behaviour (dashboard open with no mode)
             isConfirmMode = false;
             document.body.classList.remove('confirm-mode');
             initPricingTable();
+        }
+
+        if (
+            enquiryId &&
+            pricingPageMode !== 'edit' &&
+            pricingPageMode !== 'confirm' &&
+            isPricingSheetSavedLocked()
+        ) {
+            setTimeout(() => applyPricingSheetSavedLock(), 620);
         }
     }
 });
@@ -91,6 +205,8 @@ function initConfirmMode() {
 
     const hasAccepted = pricingQuotes.some(isQuoteAcceptedStatus);
 
+    resetSaveQuoteButtonAppearance();
+
     // Hide administrative actions; allow Save once a quote exists so totals can persist from Confirm flow.
     const saveBtn = document.querySelector('button[onclick="savePricing()"]');
     const addQuoteBtn = document.querySelector('button[onclick="addNewQuote()"]');
@@ -111,7 +227,10 @@ function initConfirmMode() {
 
     // Lock everything EXCEPT shipping line rate / ex. rate + client rate columns
     const confirmEditableInputs = '.p-vendor, .p-rate, .p-ex';
-    setTimeout(() => {
+    if (_confirmUiSetupTimer) clearTimeout(_confirmUiSetupTimer);
+    _confirmUiSetupTimer = setTimeout(() => {
+        _confirmUiSetupTimer = null;
+        if (isPricingSheetSavedLocked()) return;
         const containers = ['#calculatorSection', '.route-section'];
         containers.forEach(selector => {
             const container = document.querySelector(selector);
@@ -459,6 +578,9 @@ function loadQuote(index) {
     containerList.innerHTML = '';
     quote.container_prices.forEach((cp, idx) => renderContainerSection(cp, idx));
     calculatePricingTotal();
+    if (isPricingSheetSavedLocked()) {
+        requestAnimationFrame(() => applyPricingSheetSavedLock());
+    }
 }
 
 function renderContainerSection(data, index) {
@@ -712,10 +834,29 @@ function syncPostConfirmChromeAfterQuoteSave() {
 }
 
 async function savePricing() {
+    if (isPricingSheetSavedLocked()) {
+        showModal('Locked', 'This quote was saved and locked. Open <strong>Edit Quotes</strong> from the dashboard (or Confirm Quote mode) to change values.', 'info');
+        return;
+    }
     try {
         await savePricingData();
+        if (currentEnquiry && currentEnquiry.id != null) {
+            try {
+                sessionStorage.setItem(`pricing_saved_lock_${currentEnquiry.id}`, '1');
+            } catch (_) { /* ignore */ }
+        }
+        pricingLockedAfterSave = true;
+        if (_confirmUiSetupTimer) {
+            clearTimeout(_confirmUiSetupTimer);
+            _confirmUiSetupTimer = null;
+        }
         syncPostConfirmChromeAfterQuoteSave();
-        showModal('Success', 'Pricing saved successfully!', 'success');
+        applyPricingSheetSavedLock();
+        showModal(
+            'Success',
+            'Pricing saved and locked. Use <strong>Edit Quotes</strong> from the dashboard if you need to change it.',
+            'success'
+        );
     } catch (e) {
         showModal('Error', 'Failed to save pricing: ' + e.message, 'error');
     }
@@ -820,6 +961,8 @@ async function finalizeSelectedQuote(idx) {
             document.getElementById('quoteConfirmationPage').style.display = 'block';
 
             renderConfirmedTable(quote);
+
+            clearPricingSavedLock();
 
             showPostConfirmOptions(quote);
         } catch (e) {
