@@ -97,7 +97,7 @@ function financeDocumentTypeLabel(docType) {
         additionalinvoice: 'Additional Invoice'
     };
     if (byNorm[norm]) return byNorm[norm];
-    if (norm.includes('billoflading')) return 'Bill of Lading';
+     if (norm.includes('billoflading')) return 'Bill of Lading';
     if (!raw) return 'Document';
     return raw.replace(/([A-Z])/g, ' $1').replace(/^./, (s) => s.toUpperCase()).trim();
 }

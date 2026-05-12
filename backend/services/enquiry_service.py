@@ -4,23 +4,25 @@ from backend.models.enquiry import Enquiry
 from backend.utils.logger import logger
 
 
-def get_next_enquiry_number(db: Session, year: int) -> str:
+def get_next_enquiry_number(db: Session, year: int, month: int) -> str:
     """
-    Next EXIM-{year}-### based on the highest existing sequence for that year,
-    not on row count (avoids wrong numbers when rows are deleted or other years exist).
+    Next job number in format LLP/OFE/YY/MM/NNNNN.
+    Sequence resets to 00001 at the start of each month.
     """
-    prefix = f"EXIM-{year}-"
+    yy = str(year)[-2:]
+    mm = str(month).zfill(2)
+    prefix = f"LLP/OFE/{yy}/{mm}/"
     rows = db.query(Enquiry.enquiry_number).filter(Enquiry.enquiry_number.like(f"{prefix}%")).all()
-    pattern = re.compile(rf"^EXIM-{year}-(\d+)$")
+    pat = re.compile(rf"^LLP/OFE/{yy}/{mm}/(\d+)$")
     max_seq = 0
     for (num,) in rows:
         if not num or not isinstance(num, str):
             continue
-        m = pattern.match(num.strip())
+        m = pat.match(num.strip())
         if m:
             max_seq = max(max_seq, int(m.group(1)))
     next_seq = max_seq + 1
-    return f"EXIM-{year}-{str(next_seq).zfill(3)}"
+    return f"{prefix}{str(next_seq).zfill(5)}"
 
 def create_enquiry_logic(db: Session, data: dict):
     new_enquiry = Enquiry(**data)

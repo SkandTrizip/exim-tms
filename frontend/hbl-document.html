@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HBL / MTD Document – ShipFlow TMS</title>
+    <link href="css/styles.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { background: #fff; }
+            .mtd-page { padding: 0; }
+            .mtd-sheet { box-shadow: none; border: none; margin: 0; overflow: visible; }
+            .cargo-table { page-break-inside: auto; }
+            .cargo-table tr { page-break-inside: avoid; page-break-after: auto; }
+            .bottom-section { page-break-inside: avoid; }
+        }
+
+        body { background: #e5e7eb; }
+        .mtd-page { padding: 32px 0 60px; }
+        .mtd-actions { max-width: 900px; margin: 0 auto 16px; display: flex; gap: 10px; justify-content: flex-end; }
+
+        .mtd-sheet {
+            max-width: 900px; margin: 0 auto; background: #fff; border: 2px solid #000;
+            font-family: 'Times New Roman', Times, serif; font-size: 12px; color: #000;
+            line-height: 1.4; position: relative; overflow: hidden;
+        }
+
+        /* Watermark for Seaway */
+        .watermark {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%) rotate(-35deg);
+            font-size: 90px; font-weight: bold; color: rgba(0, 0, 0, 0.06);
+            white-space: nowrap; pointer-events: none; z-index: 0;
+            letter-spacing: 8px; text-transform: uppercase;
+            font-family: 'Times New Roman', Times, serif;
+        }
+        .watermark.hidden { display: none; }
+        .mtd-table, .cargo-table, .bottom-section { position: relative; z-index: 1; }
+
+        /* Table-based layout matching the MTD format */
+        .mtd-table { width: 100%; border-collapse: collapse; }
+        .mtd-table td, .mtd-table th { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
+
+        .mtd-header-row td { border-bottom: 2px solid #000; }
+        .mtd-title { font-size: 14px; font-weight: bold; text-align: center; line-height: 1.3; }
+        .mtd-company { font-weight: bold; font-size: 13px; }
+        .mtd-company-addr { font-size: 10px; line-height: 1.5; }
+
+        .field-label { font-size: 10px; color: #333; display: block; margin-bottom: 2px; }
+        .field-val { font-size: 12px; font-weight: normal; min-height: 14px; white-space: pre-line; }
+        .field-val-bold { font-size: 12px; font-weight: bold; min-height: 14px; white-space: pre-line; }
+
+        .cargo-table { width: 100%; border-collapse: collapse; }
+        .cargo-table td, .cargo-table th { border: 1px solid #000; padding: 6px 8px; font-size: 11px; text-align: left; vertical-align: top; }
+        .cargo-table th { font-weight: bold; font-size: 10px; }
+
+        .bottom-section td { font-size: 11px; }
+        .signature-block { text-align: right; padding-top: 40px; font-weight: bold; }
+
+        /* Edit mode */
+        .edit-mode .editable {
+            outline: 1px dashed #93c5fd;
+            background: #eff6ff;
+            cursor: text;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+        .edit-mode .editable:focus { outline: 2px solid #3b82f6; background: #dbeafe; }
+        .edit-badge { display: none; font-size: 11px; color: #2563eb; font-family: sans-serif; margin-left: 8px; }
+        .edit-mode .edit-badge { display: inline; }
+    </style>
+</head>
+
+<body>
+    <div class="mtd-page">
+        <!-- Action Buttons -->
+        <div class="mtd-actions no-print">
+            <button class="btn btn-secondary" onclick="window.history.back()" style="padding: 8px 16px; font-size: 13px;">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+            <select id="blTypeSelect" onchange="switchBlType(this.value)" style="padding: 8px 14px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; font-weight: 600; cursor: pointer;">
+                <option value="seaway">Seaway Bill of Lading</option>
+                <option value="original">Original</option>
+            </select>
+            <button class="btn btn-secondary" id="editBtn" onclick="toggleEdit()" style="padding: 8px 16px; font-size: 13px;">
+                <i class="fas fa-pen"></i> Edit
+            </button>
+            <button class="btn btn-primary" onclick="window.print()" style="padding: 8px 16px; font-size: 13px;">
+                <i class="fas fa-print"></i> Print
+            </button>
+        </div>
+
+        <!-- MTD Document Sheet -->
+        <div class="mtd-sheet">
+            <div class="watermark" id="watermark">NON-NEGOTIABLE</div>
+            <table class="mtd-table">
+                <!-- Row 1: MTD BL NO + Title -->
+                <tr class="mtd-header-row">
+                    <td colspan="3" style="width: 50%;">
+                        <span class="field-label">MTD BL NO:</span>
+                        <span class="field-val-bold editable" id="mtdBlNo"></span>
+                    </td>
+                    <td colspan="3" style="width: 50%;">
+                        <div class="mtd-title">MULTI-MODAL TRANSPORT DOCUMENT<br><span id="blTypeLabel">SEAWAY BILL OF LADING</span></div>
+                    </td>
+                </tr>
+
+                <!-- Row 2: Consignor + Company -->
+                <tr>
+                    <td colspan="3" rowspan="2">
+                        <span class="field-label">Consignor</span>
+                        <div class="field-val-bold editable" id="consignor" style="min-height: 60px;"></div>
+                    </td>
+                    <td colspan="3">
+                        <div class="mtd-company">LOGIPOD LOGISTICS PRIVATE LIMITED</div>
+                        <div class="mtd-company-addr">
+                            3rd floor, Plot No. 448A, Udyog Vihar Phase 5 Industrial Complex Gurugram<br>
+                            Gurgaon Haryana India - 122016<br>
+                            Tel: -<br>
+                            exim_ops@logipod.in | www.logipod.in
+                        </div>
+                    </td>
+                </tr>
+
+                <!-- Row 3: MTO Registration + Shipment Ref -->
+                <tr>
+                    <td colspan="3">
+                        <div style="font-size: 11px;">
+                            <strong>MTO Registration Number:</strong> MTO/DGS/1202604010000​01/APR/2029<br>
+                            <strong>SHIPMENT REFERENCE NO:</strong> <span id="shipmentRefNo" style="font-weight: bold;"></span>
+                        </div>
+                    </td>
+                </tr>
+
+                <!-- Row 4: Consignee + Delivery Agent -->
+                <tr>
+                    <td colspan="3">
+                        <span class="field-label">Consignee (or To order)</span>
+                        <div class="field-val editable" id="consignee" style="min-height: 60px;"></div>
+                    </td>
+                    <td colspan="3">
+                        <span class="field-label">Delivery Agent</span>
+                        <div class="field-val editable" id="deliveryAgent" style="min-height: 60px;"></div>
+                    </td>
+                </tr>
+
+                <!-- Row 5: Notify Party 1 + Notify Party 2 -->
+                <tr>
+                    <td colspan="3">
+                        <span class="field-label">Notify Party1 address</span>
+                        <div class="field-val editable" id="notifyParty1" style="min-height: 50px;"></div>
+                    </td>
+                    <td colspan="3">
+                        <span class="field-label">Notify Party2 address</span>
+                        <div class="field-val editable" id="notifyParty2" style="min-height: 50px;"></div>
+                    </td>
+                </tr>
+
+                <!-- Row 6: Place of acceptance, Port of Loading, Date of acceptance -->
+                <tr>
+                    <td colspan="2">
+                        <span class="field-label">Place of acceptance</span>
+                        <div class="field-val-bold editable" id="placeAcceptance"></div>
+                    </td>
+                    <td>
+                        <span class="field-label">Port of Loading</span>
+                        <div class="field-val-bold editable" id="portLoading"></div>
+                    </td>
+                    <td colspan="3">
+                        <span class="field-label">Date of acceptance</span>
+                        <div class="field-val editable" id="dateAcceptance"></div>
+                    </td>
+                </tr>
+
+                <!-- Row 7: Port of Discharge, Place of delivery, Route -->
+                <tr>
+                    <td colspan="2">
+                        <span class="field-label">Port of Discharge</span>
+                        <div class="field-val-bold editable" id="portDischarge"></div>
+                    </td>
+                    <td>
+                        <span class="field-label">Place of delivery</span>
+                        <div class="field-val-bold editable" id="placeDelivery"></div>
+                    </td>
+                    <td colspan="3">
+                        <span class="field-label">Route (place of transhipment if any)</span>
+                        <div class="field-val editable" id="routeTranshipment"></div>
+                    </td>
+                </tr>
+
+                <!-- Row 8: Vessel, Voyage No, Modes, Date of delivery -->
+                <tr>
+                    <td>
+                        <span class="field-label">Vessel</span>
+                        <div class="field-val-bold editable" id="vesselName"></div>
+                    </td>
+                    <td>
+                        <span class="field-label">Voyage No.</span>
+                        <div class="field-val-bold editable" id="voyageNo"></div>
+                    </td>
+                    <td colspan="2">
+                        <span class="field-label">Modes means of transport</span>
+                        <div class="field-val editable" id="modesTransport"></div>
+                    </td>
+                    <td colspan="2">
+                        <span class="field-label">Date or period of delivery (as expressly agreed upon by the consignor and MTO)</span>
+                        <div class="field-val editable" id="dateDelivery"></div>
+                    </td>
+                </tr>
+            </table>
+
+            <!-- Cargo Details Table -->
+            <table class="cargo-table">
+                <thead>
+                    <tr>
+                        <th style="width: 12%;">Container No(s)</th>
+                        <th style="width: 12%;">Marks & number</th>
+                        <th style="width: 40%;">Number of packages, Kind of packages, general description of goods</th>
+                        <th style="width: 12%;">Gross Weight</th>
+                        <th style="width: 12%;">Measurement</th>
+                    </tr>
+                </thead>
+                <tbody id="cargoBody">
+                    <tr>
+                        <td class="editable" id="containerNos" style="min-height: 120px;">&nbsp;</td>
+                        <td class="editable" id="marksNumber">&nbsp;</td>
+                        <td class="editable" id="cargoDescription">&nbsp;</td>
+                        <td class="editable" id="cargoWeight">&nbsp;</td>
+                        <td class="editable" id="cargoMeasurement">&nbsp;</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <!-- Bottom Section -->
+            <table class="mtd-table bottom-section">
+                <tr>
+                    <td colspan="6" style="text-align: center; font-size: 11px; font-style: italic;">
+                        Particulars above furnished by consignee/consignor
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3" style="width: 50%;">
+                        <div style="margin-bottom: 8px;">
+                            <span class="field-label">Freight amount</span>
+                            <div style="display: flex; gap: 24px; margin-top: 4px; cursor: pointer; user-select: none;">
+                                <span id="freightPrepaid" onclick="selectFreight('prepaid')" style="font-weight: bold; text-decoration: underline;">Prepaid</span>
+                                <span id="freightCollect" onclick="selectFreight('collect')" style="font-weight: normal;">Collect</span>
+                            </div>
+                        </div>
+                        <div style="margin-top: 12px; font-size: 10px; line-height: 1.4;">
+                            <strong>Freight payable at by consignor / consignee</strong><br>
+                            (to be mentioned only if expressly agreed<br>
+                            by both the consignor / consignee)
+                        </div>
+                    </td>
+                    <td colspan="3" style="font-size: 10px; line-height: 1.5;">
+                        Taken in charge in apparently good condition herein at the place of receipt for
+                        transport & delivery as mentioned above unless otherwise stated. The MTO in
+                        accordance with the provision contained in the MTD undertakes to perform or to
+                        procure the performance of the multimodal transport from the place at which the
+                        goods are taken in charge, to the place designated for delivery & assume
+                        responsibility for such transport.<br><br>
+                        One of the MTD (3) must be surrendered, duly endorsed in exchange for the goods
+                        in witness where of the original MTD all of this force & date have been signed in the
+                        number indicated below one of which being accomplished the other(s) to be void.
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3">
+                        <span class="field-label" id="mtdOriginalCount">Number of Original MTD: 0 / ZERO</span>
+                    </td>
+                    <td colspan="3">
+                        <span class="field-label">Place and Date of issue:</span>
+                        <div class="field-val editable" id="placeAndDateOfIssue"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3">
+                        <div style="margin-bottom: 6px;">
+                            <span class="field-label">Other particulars (if any)</span>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <strong>SOB Date:</strong> <span id="sobDate"></span>
+                        </div>
+                        <div style="margin-top: 8px; font-size: 10px; font-style: italic;">
+                            Weight and measurement of container Not to be included
+                        </div>
+                    </td>
+                    <td colspan="3">
+                        <div class="signature-block">
+                            <div>For <strong>LOGIPOD LOGISTICS PRIVATE LIMITED</strong></div>
+                            <div style="margin-top: 50px; font-style: italic;">(Authorised Signatory)</div>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/hbl-document.js"></script>
+</body>
+
+</html>

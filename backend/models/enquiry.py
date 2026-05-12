@@ -7,7 +7,7 @@ class Enquiry(Base):
     __tablename__ = "enquiries"
 
     id = Column(Integer, primary_key=True, index=True)
-    enquiry_number = Column(String, index=True)
+    enquiry_number = Column(String, unique=True, index=True)
     client_name = Column(String, index=True)
     shipment_type = Column(String)
     client_scope = Column(String)
@@ -38,6 +38,12 @@ class Enquiry(Base):
     customer_clearance_required = Column(String)
     client_target_rate = Column(Float)
     remarks = Column(Text)
+    hbl_required = Column(Boolean, default=False, nullable=False, server_default='false')
+    delivery_agent = Column(Text)
+    vessel = Column(String)
+    voyage_no = Column(String)
+    notify_party_address = Column(Text)
+    notify_party_2_address = Column(Text)
     status = Column(String, default="pending")
     stage = Column(Integer, default=1)
     is_void = Column(Boolean, default=False, nullable=False, server_default='false')

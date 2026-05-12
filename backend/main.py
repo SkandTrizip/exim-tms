@@ -17,9 +17,28 @@ from backend.utils.logger import logger
 import json
 
 from backend.database import engine, Base
+from sqlalchemy import text, inspect
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+# Auto-add new columns to existing tables when they don't exist yet
+_column_migrations = [
+    ("enquiries", "hbl_required", "BOOLEAN DEFAULT false"),
+    ("enquiries", "delivery_agent", "TEXT"),
+    ("enquiries", "vessel", "VARCHAR"),
+    ("enquiries", "voyage_no", "VARCHAR"),
+    ("enquiries", "notify_party_address", "TEXT"),
+    ("enquiries", "notify_party_2_address", "TEXT"),
+]
+with engine.connect() as _conn:
+    _inspector = inspect(engine)
+    for _table, _col, _col_type in _column_migrations:
+        existing = [c["name"] for c in _inspector.get_columns(_table)]
+        if _col not in existing:
+            _conn.execute(text(f'ALTER TABLE {_table} ADD COLUMN {_col} {_col_type}'))
+            logger.info(f"Added column {_table}.{_col}")
+    _conn.commit()
 
 app = FastAPI(
     title="Exim TMS API",
@@ -220,6 +239,8 @@ frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 @app.get("/upload-track", include_in_schema=False)
 @app.get("/finance-details", include_in_schema=False)
 @app.get("/create-invoice", include_in_schema=False)
+@app.get("/generate-hbl", include_in_schema=False)
+@app.get("/hbl-document", include_in_schema=False)
 @app.get("/client-master", include_in_schema=False)
 @app.get("/shipping-line", include_in_schema=False)
 @app.get("/record-payment", include_in_schema=False)

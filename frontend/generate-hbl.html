@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate HBL – ShipFlow TMS</title>
+    <link href="css/styles.css" rel="stylesheet">
+    <link href="css/modal.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .hbl-page { padding: 36px 0 60px; }
+        .hbl-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+        .hbl-header h1 { font-size: 28px; margin: 0; color: var(--navy-800); display: flex; align-items: center; gap: 12px; }
+        .hbl-header p { color: var(--text-secondary); margin-top: 6px; font-size: 14px; }
+        .hbl-count { background: var(--primary); color: #fff; font-size: 13px; font-weight: 700; padding: 4px 12px; border-radius: 20px; }
+
+        .hbl-table-wrap {
+            background: #fff; border-radius: 12px; border: 1px solid var(--border-light);
+            overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        }
+        .hbl-table { width: 100%; border-collapse: collapse; }
+        .hbl-table th {
+            text-align: left; padding: 14px 16px; font-size: 11px; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-tertiary);
+            background: var(--gray-50); border-bottom: 1px solid var(--border-light);
+        }
+        .hbl-table td { padding: 14px 16px; font-size: 13px; color: var(--navy-700); border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+        .hbl-table tr:last-child td { border-bottom: none; }
+        .hbl-table tr:hover { background: #f8fafc; }
+
+        .job-link { font-weight: 700; color: var(--primary); text-decoration: none; }
+        .job-link:hover { text-decoration: underline; }
+        .si-badge { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; background: #ecfdf5; color: #059669; }
+        .detail-block { font-size: 12px; color: var(--text-secondary); line-height: 1.5; white-space: pre-line; max-height: 60px; overflow: hidden; text-overflow: ellipsis; }
+        .empty-state { padding: 60px 24px; text-align: center; color: var(--text-tertiary); }
+        .empty-state i { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
+        .empty-state h3 { margin: 0 0 8px; color: var(--navy-700); }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">SF</div>
+                    <div class="logo-text">ShipFlow</div>
+                </div>
+                <div class="header-actions">
+                    <div class="user-profile"
+                        style="display: flex; align-items: center; gap: 12px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border-light);">
+                        <div class="user-avatar"
+                            style="width: 32px; height: 32px; background: var(--navy-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--navy-700); font-weight: 700; font-size: 14px; border: 1.5px solid var(--navy-600);">
+                            AD</div>
+                        <span id="userNameDisplay"
+                            style="font-size: 14px; font-weight: 600; color: var(--navy-800);">Admin</span>
+                    </div>
+                    <button class="btn btn-secondary" onclick="handleLogout()" title="Logout"
+                        style="padding: 8px 12px; width: 40px; justify-content: center;">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <div class="container hbl-page" style="max-width: 1300px; margin: 0 auto;">
+            <div class="hbl-header">
+                <div>
+                    <h1>
+                        <i class="fas fa-file-contract" style="color: var(--primary);"></i>
+                        Generate HBL
+                        <span class="hbl-count" id="hblCount">0</span>
+                    </h1>
+                    <p>Enquiries with HBL required &amp; SI submitted on shipping portal</p>
+                </div>
+                <button class="btn btn-secondary" onclick="window.location.href='/#dashboard'">
+                    <i class="fas fa-arrow-left"></i> Back
+                </button>
+            </div>
+
+            <div class="hbl-table-wrap">
+                <table class="hbl-table">
+                    <thead>
+                        <tr>
+                            <th>Job No.</th>
+                            <th>Client</th>
+                            <th>Route</th>
+                            <th>Delivery Agent</th>
+                            <th>Notify Party 1</th>
+                            <th>Notify Party 2</th>
+                            <th>Vessel / Voyage</th>
+                            <th>SI Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="hblTableBody">
+                        <tr>
+                            <td colspan="9" class="empty-state">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                <p>Loading...</p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/generate-hbl.js"></script>
+</body>
+
+</html>

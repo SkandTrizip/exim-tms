@@ -3,7 +3,11 @@ let currentEnquiry = null;
 
 document.addEventListener('DOMContentLoaded', async function () {
     // 1. Initial UI Setup
-    await populateInitialDropdowns();
+    try {
+        await populateInitialDropdowns();
+    } catch (e) {
+        console.error('Error populating dropdowns:', e);
+    }
     initializeAutocomplete();
 
     // 2. Check for editing mode (if enquiry_id is provided)
@@ -13,7 +17,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (enquiryId) {
         await fetchEnquiryData(enquiryId);
     } else {
-        generateEnquiryNumber();
+        await generateEnquiryNumber();
     }
 });
 
@@ -118,12 +122,14 @@ async function populateInitialDropdowns() {
 }
 
 /**
- * Generate a new enquiry number: max EXIM-YYYY-### for this year + 1 (server-side).
+ * Generate a new job number: LLP/OFE/YY/MM/NNNNN (server-side, resets monthly).
  */
 async function generateEnquiryNumber() {
-    const year = new Date().getFullYear();
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
     try {
-        const response = await fetch(`${CONFIG.API_URL}/api/enquiry/next-number?year=${year}`);
+        const response = await fetch(`${CONFIG.API_URL}/api/enquiry/next-number?year=${year}&month=${month}`);
         if (response.ok) {
             const data = await response.json();
             if (data.enquiry_number) {
@@ -134,7 +140,9 @@ async function generateEnquiryNumber() {
     } catch (error) {
         console.error('Error generating enquiry number:', error);
     }
-    document.getElementById('enquiryNumber').value = `EXIM-${year}-001`;
+    const yy = String(year).slice(-2);
+    const mm = String(month).padStart(2, '0');
+    document.getElementById('enquiryNumber').value = `LLP/OFE/${yy}/${mm}/00001`;
 }
 
 /**
@@ -198,6 +206,18 @@ function populateEnquiryForm(data) {
     document.getElementById('clearanceRequired').value = data.customer_clearance_required || '';
     document.getElementById('targetRate').value = data.client_target_rate || '';
     document.getElementById('remarks').value = data.remarks || '';
+
+    // HBL toggle + delivery agent
+    const hblCheck = document.getElementById('hblRequired');
+    if (hblCheck) {
+        hblCheck.checked = !!data.hbl_required;
+        toggleDeliveryAgent();
+    }
+    document.getElementById('deliveryAgent').value = data.delivery_agent || '';
+    document.getElementById('vessel').value = data.vessel || '';
+    document.getElementById('voyageNo').value = data.voyage_no || '';
+    document.getElementById('notifyPartyAddress').value = data.notify_party_address || '';
+    document.getElementById('notifyParty2Address').value = data.notify_party_2_address || '';
 
     // Handle Containers
     const containerList = document.getElementById('containerList');
@@ -335,6 +355,12 @@ async function saveEnquiry() {
         customer_clearance_required: document.getElementById('clearanceRequired').value,
         client_target_rate: parseFloat(document.getElementById('targetRate').value) || 0,
         remarks: document.getElementById('remarks').value,
+        hbl_required: document.getElementById('hblRequired').checked,
+        delivery_agent: document.getElementById('hblRequired').checked ? document.getElementById('deliveryAgent').value : null,
+        vessel: document.getElementById('hblRequired').checked ? document.getElementById('vessel').value : null,
+        voyage_no: document.getElementById('hblRequired').checked ? document.getElementById('voyageNo').value : null,
+        notify_party_address: document.getElementById('hblRequired').checked ? document.getElementById('notifyPartyAddress').value : null,
+        notify_party_2_address: document.getElementById('hblRequired').checked ? document.getElementById('notifyParty2Address').value : null,
         status: 'pending',
         stage: 2
     };
@@ -392,6 +418,31 @@ function updateModeVisibility() {
     else if (scope === 'Door to Door') {
         modeOriginGroup.style.display = 'block';
         modeDestGroup.style.display = 'block';
+    }
+}
+
+function toggleDeliveryAgent() {
+    const cb = document.getElementById('hblRequired');
+    const group = document.getElementById('deliveryAgentGroup');
+    const label = document.getElementById('hblLabel');
+    const track = cb.closest('.toggle-switch').querySelector('.toggle-track');
+    const thumb = track.querySelector('.toggle-thumb');
+
+    const hblFields = document.querySelectorAll('.hbl-field');
+    if (cb.checked) {
+        label.textContent = 'Yes';
+        label.style.color = 'var(--primary, #2563eb)';
+        track.style.background = 'var(--primary, #2563eb)';
+        thumb.style.transform = 'translateX(20px)';
+        group.style.display = 'block';
+        hblFields.forEach(el => el.style.display = 'block');
+    } else {
+        label.textContent = 'No';
+        label.style.color = 'var(--text-tertiary)';
+        track.style.background = '#cbd5e1';
+        thumb.style.transform = 'translateX(0)';
+        group.style.display = 'none';
+        hblFields.forEach(el => el.style.display = 'none');
     }
 }
 

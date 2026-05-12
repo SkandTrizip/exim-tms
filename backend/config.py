@@ -5,6 +5,7 @@ UPLOAD_DIR = "/home/azureuser/uploads/"
 
 # Injected into /js/config.js as CONFIG.API_URL. Use '' so the browser calls /api on the same host
 # you opened (localhost, 127.0.0.1, or a public IP). A fixed remote URL breaks local dev (Failed to fetch).
+#API_URL = 'http://localhost:8000'
 API_URL = 'http://20.193.250.226:8000'
 
 AUTH_USERS = [

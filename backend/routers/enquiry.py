@@ -37,12 +37,123 @@ async def list_enquiries(db: Session = Depends(get_db)):
 
 
 @router.get("/next-number")
-async def next_enquiry_number_endpoint(year: Optional[int] = None, db: Session = Depends(get_db)):
-    """Next sale/enquiry number for EXIM-YYYY-### (max sequence + 1 for that year)."""
-    y = year if year is not None else datetime.utcnow().year
-    number = get_next_enquiry_number(db, y)
-    logger.info(f"Next enquiry number for {y}: {number}")
+async def next_enquiry_number_endpoint(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    """Next job number: LLP/OFE/YY/MM/NNNNN (resets each month)."""
+    now = datetime.utcnow()
+    y = year if year is not None else now.year
+    m = month if month is not None else now.month
+    number = get_next_enquiry_number(db, y, m)
+    logger.info(f"Next enquiry number for {y}/{m}: {number}")
     return {"enquiry_number": number}
+
+
+@router.get("/hbl-pending")
+async def get_hbl_pending(db: Session = Depends(get_db)):
+    """Enquiries where HBL is required and SI has been submitted."""
+    from backend.models.enquiry import Enquiry as EnquiryModel
+    from backend.models.shipment_status import ShipmentStatus
+    rows = (
+        db.query(EnquiryModel, ShipmentStatus)
+        .outerjoin(ShipmentStatus, EnquiryModel.id == ShipmentStatus.enquiry_id)
+        .filter(
+            EnquiryModel.hbl_required == True,
+            EnquiryModel.is_void == False,
+            ShipmentStatus.si_submitted != None,
+        )
+        .order_by(EnquiryModel.id.desc())
+        .all()
+    )
+    result = []
+    for enq, status in rows:
+        result.append({
+            "id": enq.id,
+            "enquiry_number": enq.enquiry_number,
+            "client_name": enq.client_name,
+            "delivery_agent": enq.delivery_agent,
+            "notify_party_address": enq.notify_party_address,
+            "notify_party_2_address": enq.notify_party_2_address,
+            "vessel": enq.vessel,
+            "voyage_no": enq.voyage_no,
+            "origin": enq.origin,
+            "destination": enq.destination,
+            "si_submitted": status.si_submitted.isoformat() if status and status.si_submitted else None,
+            "si_number": status.si_number if status else None,
+            "consignee": status.consignee if status else None,
+            "master_number": status.master_number if status else None,
+            "created_at": enq.created_at.isoformat() if enq.created_at else None,
+        })
+    return result
+
+
+@router.get("/hbl-document/{enquiry_id}")
+async def get_hbl_document_data(enquiry_id: int, db: Session = Depends(get_db)):
+    """Full data needed to render an HBL / MTD document."""
+    from backend.models.enquiry import Enquiry as EnquiryModel
+    from backend.models.shipment_status import ShipmentStatus
+    from backend.models.quote import Quote
+    from backend.models.shipping_line import ShippingLine
+
+    enq = db.query(EnquiryModel).filter(EnquiryModel.id == enquiry_id).first()
+    if not enq:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+
+    status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == enquiry_id).first()
+    accepted_quote = (
+        db.query(Quote)
+        .filter(Quote.enquiry_id == enquiry_id, Quote.status == "accepted")
+        .first()
+    )
+    if not accepted_quote:
+        accepted_quote = db.query(Quote).filter(Quote.enquiry_id == enquiry_id).first()
+
+    sl = None
+    if accepted_quote and accepted_quote.shipping_line:
+        sl = db.query(ShippingLine).filter(ShippingLine.shipping_line_name == accepted_quote.shipping_line).first()
+
+    return {
+        "id": enq.id,
+        "enquiry_number": enq.enquiry_number,
+        "client_name": enq.client_name,
+        "origin": enq.origin,
+        "destination": enq.destination,
+        "preferred_origin_port": enq.preferred_origin_port,
+        "preferred_destination_port": enq.preferred_destination_port,
+        "commodity": enq.commodity,
+        "hs_code": enq.hs_code,
+        "container_type": enq.container_type,
+        "container_count": enq.container_count,
+        "weight_per_container": enq.weight_per_container,
+        "weight_measurement": enq.weight_measurement,
+        "delivery_agent": enq.delivery_agent,
+        "notify_party_address": enq.notify_party_address,
+        "notify_party_2_address": enq.notify_party_2_address,
+        "vessel": enq.vessel,
+        "voyage_no": enq.voyage_no,
+        "mode_of_transport_origin": enq.mode_of_transport_origin,
+        "created_at": enq.created_at.isoformat() if enq.created_at else None,
+        "shipping_line": accepted_quote.shipping_line if accepted_quote else None,
+        "shipping_line_address": sl.office_address if sl else None,
+        "shipping_line_location": sl.office_location if sl else None,
+        "shipping_line_contact_person": sl.primary_contact_person if sl else None,
+        "shipping_line_contact_number": sl.primary_contact_number if sl else None,
+        "shipping_line_email": sl.secondary_email if sl else None,
+        "shipping_line_gst": sl.gst_number if sl else None,
+        "place_of_receipt": accepted_quote.place_of_receipt if accepted_quote else None,
+        "port_of_loading": accepted_quote.port_of_loading if accepted_quote else None,
+        "port_of_discharge": accepted_quote.port_of_discharge if accepted_quote else None,
+        "final_place_of_delivery": accepted_quote.final_place_of_delivery if accepted_quote else None,
+        "consignee": status.consignee if status else None,
+        "si_number": status.si_number if status else None,
+        "master_number": status.master_number if status else None,
+        "etd": status.etd.isoformat() if status and status.etd else None,
+        "eta": status.eta.isoformat() if status and status.eta else None,
+        "sob": status.sob.isoformat() if status and status.sob else None,
+        "si_submitted": status.si_submitted.isoformat() if status and status.si_submitted else None,
+    }
 
 
 @router.get("/{enquiry_id}", response_model=Enquiry)
