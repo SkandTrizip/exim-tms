@@ -162,6 +162,25 @@ async def get_enquiry(enquiry_id: int, db: Session = Depends(get_db)):
     if not enquiry:
         raise HTTPException(status_code=404, detail="Enquiry not found")
     return enquiry
+@router.patch("/{enquiry_id}/hbl-fields")
+async def update_hbl_fields(enquiry_id: int, payload: dict, db: Session = Depends(get_db)):
+    """Update only HBL-related fields on a confirmed enquiry."""
+    from backend.models.enquiry import Enquiry as EnquiryModel
+    allowed = {
+        "hbl_required", "delivery_agent", "vessel", "voyage_no",
+        "notify_party_address", "notify_party_2_address",
+    }
+    enq = db.query(EnquiryModel).filter(EnquiryModel.id == enquiry_id).first()
+    if not enq:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    for key, val in payload.items():
+        if key in allowed:
+            setattr(enq, key, val)
+    db.commit()
+    db.refresh(enq)
+    logger.info(f"Updated HBL fields for enquiry {enquiry_id}")
+    return {"status": "ok", "id": enq.id}
+
 @router.patch("/{enquiry_id}/stage", response_model=Enquiry)
 async def update_enquiry_stage(enquiry_id: int, stage: int, db: Session = Depends(get_db)):
     updated = update_enquiry_logic(db, enquiry_id, {"stage": stage})

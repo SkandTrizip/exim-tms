@@ -235,22 +235,32 @@ function populateEnquiryForm(data) {
     if (data.stage >= 3) {
         console.log('🔒 Sale is confirmed (Stage ' + data.stage + '). Locking form.');
 
+        const hblFieldIds = new Set([
+            'hblRequired', 'deliveryAgent', 'vessel', 'voyageNo',
+            'notifyPartyAddress', 'notifyParty2Address'
+        ]);
+
         // 1. Hide the Save Button
         const saveBtn = document.getElementById('saveSaleBtn');
         if (saveBtn) saveBtn.style.display = 'none';
 
-        // 2. Make all form elements read-only/disabled
+        // 2. Show the Update HBL button
+        const updateHblBtn = document.getElementById('updateHblBtn');
+        if (updateHblBtn) updateHblBtn.style.display = 'inline-flex';
+
+        // 3. Make all form elements read-only/disabled EXCEPT HBL fields
         const form = document.getElementById('enquiryForm');
         if (form) {
-            const elements = form.querySelectorAll('input, select, textarea, button:not(.btn-secondary)');
+            const elements = form.querySelectorAll('input, select, textarea, button:not(.btn-secondary):not(#updateHblBtn)');
             elements.forEach(el => {
+                if (hblFieldIds.has(el.id)) return;
                 el.disabled = true;
                 el.style.backgroundColor = 'var(--gray-50)';
                 el.style.cursor = 'not-allowed';
             });
         }
 
-        // 3. Add a notice message at the top of the form
+        // 4. Add a notice message at the top of the form
         const pageHeader = document.querySelector('.page-header');
         if (pageHeader) {
             const notice = document.createElement('div');
@@ -267,7 +277,7 @@ function populateEnquiryForm(data) {
             notice.style.fontWeight = '500';
             notice.innerHTML = `
                 <i class="fas fa-lock"></i>
-                <span>This sale has been confirmed and locked. Basic details cannot be modified. Visit the <strong>Tracking & Documents</strong> section for further updates.</span>
+                <span>This sale has been confirmed and locked. You can still update <strong>HBL details</strong> using the button below.</span>
             `;
             pageHeader.parentNode.insertBefore(notice, pageHeader.nextSibling);
         }
@@ -565,6 +575,38 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(() => func(...args), wait);
     };
+}
+
+async function saveHblFields() {
+    if (!currentEnquiry || !currentEnquiry.id) {
+        showModal('Error', 'No enquiry loaded to update', 'error');
+        return;
+    }
+    const hblRequired = document.getElementById('hblRequired').checked;
+    const payload = {
+        hbl_required: hblRequired,
+        delivery_agent: hblRequired ? document.getElementById('deliveryAgent').value : null,
+        vessel: hblRequired ? document.getElementById('vessel').value : null,
+        voyage_no: hblRequired ? document.getElementById('voyageNo').value : null,
+        notify_party_address: hblRequired ? document.getElementById('notifyPartyAddress').value : null,
+        notify_party_2_address: hblRequired ? document.getElementById('notifyParty2Address').value : null,
+    };
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/enquiry/${currentEnquiry.id}/hbl-fields`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (response.ok) {
+            showModal('Success', 'HBL details updated successfully!', 'success');
+        } else {
+            const error = await response.json();
+            showModal('Error', error.detail || 'Unknown error', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating HBL fields:', error);
+        showModal('Connection Error', 'Failed to connect to server', 'error');
+    }
 }
 
 function goBack() {
