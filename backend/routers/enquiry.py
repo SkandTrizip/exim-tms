@@ -96,6 +96,9 @@ async def get_hbl_document_data(enquiry_id: int, db: Session = Depends(get_db)):
     from backend.models.shipment_status import ShipmentStatus
     from backend.models.quote import Quote
     from backend.models.shipping_line import ShippingLine
+    from backend.models.client_origin import ClientOrigin
+    from backend.models.client_master import ClientMaster
+    from backend.utils.client_utils import strip_branch_suffix, build_consignor_block
 
     enq = db.query(EnquiryModel).filter(EnquiryModel.id == enquiry_id).first()
     if not enq:
@@ -114,8 +117,33 @@ async def get_hbl_document_data(enquiry_id: int, db: Session = Depends(get_db)):
     if accepted_quote and accepted_quote.shipping_line:
         sl = db.query(ShippingLine).filter(ShippingLine.shipping_line_name == accepted_quote.shipping_line).first()
 
-    # Consignor on the HBL = enquiry client name (never the shipping line)
-    consignor = enq.client_name or ""
+    # Consignor = client master / origin details (name, address, phone, email)
+    client_origin = None
+    client_master = None
+    if enq.client_name:
+        base_client_name = strip_branch_suffix(enq.client_name)
+        client_origin = db.query(ClientOrigin).filter(
+            ClientOrigin.unique_client_name == base_client_name
+        ).first()
+        if client_origin:
+            client_master = db.query(ClientMaster).filter(
+                ClientMaster.origin_id == client_origin.id,
+                ClientMaster.client_name == enq.client_name,
+            ).first()
+            if not client_master:
+                client_master = db.query(ClientMaster).filter(
+                    ClientMaster.origin_id == client_origin.id
+                ).first()
+        else:
+            client_master = db.query(ClientMaster).filter(
+                ClientMaster.client_name == enq.client_name
+            ).first()
+            if client_master:
+                client_origin = db.query(ClientOrigin).filter(
+                    ClientOrigin.id == client_master.origin_id
+                ).first()
+
+    consignor = build_consignor_block(enq.client_name or "", client_master, client_origin)
 
     return {
         "id": enq.id,

@@ -8,14 +8,18 @@
     <link href="css/styles.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        #hblPrintArea { background: #fff; }
+        #hblPrintArea {
+            max-width: 900px;
+            margin: 0 auto;
+            background: #fff;
+        }
 
         @page { margin: 10mm; }
         @media print {
             .no-print { display: none !important; }
             body { background: #fff; }
             .mtd-page { padding: 0; }
-            .mtd-sheet { box-shadow: none; border: none; margin: 0; overflow: visible; }
+            .mtd-sheet { box-shadow: none; margin: 0; overflow: visible; }
             .cargo-table { page-break-inside: auto; }
             .cargo-table thead { display: table-header-group; }
             .cargo-table tr { page-break-inside: avoid; page-break-after: auto; }
@@ -28,20 +32,21 @@
         .mtd-actions { max-width: 900px; margin: 0 auto 16px; display: flex; gap: 10px; justify-content: flex-end; }
 
         .mtd-sheet {
-            max-width: 900px; margin: 0 auto; background: #fff; border: 1px solid #000;
+            margin: 0;
+            background: #fff;
+            border: none;
             font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #000;
-            line-height: 1.35; position: relative; overflow: hidden;
+            line-height: 1.35; position: relative; overflow: visible;
         }
 
         /* Document title band — above the bordered grid, not inside a cell */
         .mtd-doc-header {
-            max-width: 900px;
-            margin: 0 auto 6px;
-            display: flex;
-            justify-content: space-between;
-            align-items: flex-start;
-            gap: 20px;
-            padding: 0 2px 4px;
+            margin: 0 0 6px;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: start;
+            gap: 12px;
+            padding: 0;
             font-family: Arial, Helvetica, sans-serif;
             border: none;
             background: transparent;
@@ -53,32 +58,48 @@
             letter-spacing: 0.03em;
             color: #4b5563;
             line-height: 1.4;
+            justify-self: start;
         }
         .mtd-doc-header .mtd-title-wrap {
-            text-align: right;
+            text-align: center;
             font-size: 11px;
             font-weight: bold;
             line-height: 1.35;
             text-transform: uppercase;
             letter-spacing: 0.03em;
             color: #4b5563;
-            flex-shrink: 0;
+            justify-self: center;
         }
 
         /* Watermark for Seaway */
         .watermark {
             position: absolute; top: 50%; left: 50%;
             transform: translate(-50%, -50%) rotate(-35deg);
-            font-size: 90px; font-weight: bold; color: rgba(0, 0, 0, 0.06);
+            font-size: 72px; font-weight: bold; color: rgba(0, 0, 0, 0.06);
             white-space: nowrap; pointer-events: none; z-index: 0;
-            letter-spacing: 8px; text-transform: uppercase;
+            letter-spacing: 4px;
             font-family: Arial, Helvetica, sans-serif;
         }
         .watermark.hidden { display: none; }
         .mtd-table, .cargo-table, .bottom-section { position: relative; z-index: 1; }
 
-        .mtd-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .mtd-table td, .mtd-table th { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
+        .mtd-table, .cargo-table, .bottom-section {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin: 0;
+        }
+        .mtd-table td, .mtd-table th,
+        .cargo-table td, .cargo-table th,
+        .bottom-section td, .bottom-section th {
+            border: 1px solid #000;
+            padding: 6px 8px;
+            vertical-align: top;
+        }
+        /* Single outer frame: no double line between stacked tables */
+        .cargo-table thead tr:first-child th,
+        .cargo-table tbody tr:first-child td { border-top: none; }
+        .bottom-section tr:first-child td { border-top: none; }
 
         .mtd-bl-no-label { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.02em; }
 
@@ -109,8 +130,6 @@
         .field-val { font-size: 12px; font-weight: normal; min-height: 14px; white-space: pre-line; }
         .field-val-bold { font-size: 12px; font-weight: bold; min-height: 14px; white-space: pre-line; }
 
-        .cargo-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-        .cargo-table td, .cargo-table th { border: 1px solid #000; padding: 6px 8px; font-size: 11px; text-align: left; vertical-align: top; }
         .cargo-table th {
             font-weight: bold;
             font-size: 10px;
@@ -131,7 +150,7 @@
         .signature-block .sig-role { margin-top: 48px; font-style: italic; font-weight: normal; text-transform: none; }
 
         .end-of-bl {
-            max-width: 900px; margin: 12px auto 0; text-align: center;
+            margin: 12px 0 0; text-align: center;
             font-weight: bold; font-size: 12px; padding: 10px 0;
             font-family: Arial, Helvetica, sans-serif;
             letter-spacing: 0.06em;
@@ -182,9 +201,10 @@
                 <span class="editable" id="mtdBlNo"></span>
             </div>
             <div class="mtd-title-wrap">MULTI-MODAL TRANSPORT DOCUMENT<br><span id="blTypeLabel">SEAWAY BILL OF LADING</span></div>
+            <div class="mtd-header-spacer" aria-hidden="true"></div>
         </div>
         <div class="mtd-sheet">
-            <div class="watermark" id="watermark">NON-NEGOTIABLE</div>
+            <div class="watermark" id="watermark">Seaway bill of Lading</div>
             <table class="mtd-table">
                 <tr>
                     <td colspan="3" rowspan="2">
@@ -385,7 +405,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" crossorigin="anonymous"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=4"></script>
+    <script src="js/hbl-document.js?v=6"></script>
 </body>
 
 </html>

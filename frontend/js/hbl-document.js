@@ -146,7 +146,7 @@ function fmtDate(iso) {
 function populateDocument(d) {
     document.getElementById('mtdBlNo').textContent = d.enquiry_number || '';
 
-    // Consignor = enquiry client name only (API field `consignor`; never shipping line)
+    // Consignor: full client block from API (name, address, tel, email)
     document.getElementById('consignor').textContent = d.consignor || d.client_name || '';
 
     // Shipment Reference No = Sale Number
@@ -231,6 +231,7 @@ function switchBlType(type) {
     } else {
         label.textContent = 'SEAWAY BILL OF LADING';
         count.textContent = 'Number of Original MTD: 0 / ZERO';
+        watermark.textContent = 'Seaway bill of Lading';
         watermark.classList.remove('hidden');
     }
 }
