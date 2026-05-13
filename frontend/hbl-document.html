@@ -18,7 +18,8 @@
         }
 
         @page {
-            margin: 12mm;
+            size: A4 portrait;
+            margin: 7mm;
         }
         @media print {
             .no-print { display: none !important; }
@@ -26,7 +27,8 @@
                 margin: 0 !important;
                 padding: 0 !important;
                 background: #fff !important;
-                overflow: visible !important;
+                overflow: hidden !important;
+                height: auto !important;
             }
             .mtd-page { padding: 0 !important; margin: 0 !important; }
             body * { visibility: hidden; }
@@ -39,11 +41,40 @@
                 max-width: 100%;
                 margin: 0;
                 padding: 0;
+                font-size: 8.5pt;
+                line-height: 1.22;
+                zoom: 0.9;
             }
             .mtd-sheet { box-shadow: none; margin: 0; overflow: visible; }
-            .cargo-table { page-break-inside: avoid; }
-            .bottom-section { page-break-inside: avoid; }
-            .end-of-bl { page-break-inside: avoid; }
+            .mtd-doc-header { margin-bottom: 3px; }
+            .mtd-doc-header .mtd-bl-no-line,
+            .mtd-doc-header .mtd-title-wrap { font-size: 8.5pt; }
+            .mtd-table td, .mtd-table th,
+            .cargo-table td, .cargo-table th,
+            .bottom-section td, .bottom-section th {
+                padding: 2px 4px;
+            }
+            .field-label { font-size: 8pt; margin-bottom: 1px; }
+            .field-val, .field-val-bold { font-size: 8.5pt; min-height: 0; }
+            #consignor { min-height: 44px !important; }
+            #consignee, #deliveryAgent { min-height: 36px !important; }
+            #notifyParty1, #notifyParty2 { min-height: 28px !important; }
+            .cargo-table th { font-size: 7.5pt; }
+            .cargo-table tbody tr.cargo-data-row td {
+                height: 58px;
+                min-height: 58px;
+                font-size: 8pt;
+            }
+            .cargo-table tfoot td { padding: 2px 4px; }
+            .bottom-section td { font-size: 8pt; }
+            .legal-clause { font-size: 7.5pt; line-height: 1.3; }
+            .signature-block { padding-top: 10px; font-size: 8pt; }
+            .signature-block .sig-role { margin-top: 18px; }
+            .end-of-bl { margin: 4px 0 0; padding: 2px 0; font-size: 8.5pt; }
+            .watermark { display: none !important; }
+            .mtd-company { font-size: 9pt; margin-bottom: 2px; }
+            .mtd-company-addr { font-size: 7.5pt; line-height: 1.3; }
+            .mtd-mto-cell { font-size: 8pt; line-height: 1.3; }
         }
 
         body { background: #e5e7eb; overflow-x: auto; }
@@ -235,9 +266,6 @@
             </select>
             <button class="btn btn-secondary" id="editBtn" onclick="toggleEdit()" style="padding: 8px 16px; font-size: 13px;">
                 <i class="fas fa-pen"></i> Edit
-            </button>
-            <button class="btn btn-secondary" id="downloadPdfBtn" onclick="downloadPdf()" style="padding: 8px 16px; font-size: 13px;">
-                <i class="fas fa-file-pdf"></i> Download PDF
             </button>
             <button class="btn btn-primary" id="printBtn" onclick="printDoc()" style="padding: 8px 16px; font-size: 13px;">
                 <i class="fas fa-print"></i> Print
@@ -463,10 +491,9 @@
         </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" crossorigin="anonymous"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=12"></script>
+    <script src="js/hbl-document.js?v=13"></script>
 </body>
 
 </html>
