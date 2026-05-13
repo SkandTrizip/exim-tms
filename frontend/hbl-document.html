@@ -190,15 +190,19 @@
             justify-items: start;
             text-align: left;
             padding-bottom: 4px;
+            width: fit-content;
+            max-width: 100%;
+            margin: 0 auto;
         }
         .mtd-company-logo {
             grid-column: 1;
-            grid-row: 1;
+            grid-row: 1 / 3;
             height: 32px;
             width: auto;
             display: block;
             object-fit: contain;
             align-self: center;
+            justify-self: center;
         }
         .mtd-company {
             grid-column: 2;
