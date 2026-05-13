@@ -1,3 +1,10 @@
+function printDoc() {
+    const origTitle = document.title;
+    document.title = ' ';
+    window.print();
+    document.title = origTitle;
+}
+
 let isEditing = false;
 
 function toggleEdit() {
@@ -50,19 +57,10 @@ function fmtDate(iso) {
 }
 
 function populateDocument(d) {
-    document.getElementById('mtdBlNo').textContent = '';
+    document.getElementById('mtdBlNo').textContent = d.enquiry_number || '';
 
-    // Consignor = Shipping Line full details
-    const consignorParts = [];
-    if (d.shipping_line) consignorParts.push(d.shipping_line);
-    if (d.shipping_line_address) consignorParts.push(d.shipping_line_address);
-    if (d.shipping_line_location) consignorParts.push(d.shipping_line_location);
-    const contactLine = [];
-    if (d.shipping_line_contact_person) contactLine.push(d.shipping_line_contact_person);
-    if (d.shipping_line_contact_number) contactLine.push('Tel: ' + d.shipping_line_contact_number);
-    if (contactLine.length) consignorParts.push(contactLine.join(', '));
-    if (d.shipping_line_email) consignorParts.push('Email: ' + d.shipping_line_email);
-    document.getElementById('consignor').textContent = consignorParts.join('\n') || d.client_name || '';
+    // Consignor (label on form): populated with enquiry client name
+    document.getElementById('consignor').textContent = d.client_name || '';
 
     // Shipment Reference No = Sale Number
     document.getElementById('shipmentRefNo').textContent = d.enquiry_number || '';
@@ -129,6 +127,10 @@ function populateDocument(d) {
 
     // Place and Date of issue
     document.getElementById('placeAndDateOfIssue').textContent = 'Gurugram, ' + new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+    // END OF BL
+    const blNo = d.enquiry_number || '';
+    document.getElementById('endOfBlNo').textContent = blNo;
 }
 
 function switchBlType(type) {
