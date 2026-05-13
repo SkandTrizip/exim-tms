@@ -192,7 +192,7 @@ async function renderFinanceReceivedView(invoices) {
 
         return `
             <tr class="fr-sum-row">
-                <td><strong>${escapeHtml(inv.enquiry_number || '—')}</strong></td>
+                <td class="job-no-cell">${escapeHtml(inv.enquiry_number || '—')}</td>
                 <td>${escapeHtml(inv.client_name || '—')}</td>
                 <td>${route}</td>
                 <td>${statusHtml}</td>
@@ -653,7 +653,7 @@ function createEnquiryRowWithStatus(e, status = null, showDate = false) {
     const tr = document.createElement('tr');
     if (e.is_void) tr.style.opacity = '0.55';
     tr.innerHTML = `
-        <td><strong>${e.enquiry_number}</strong></td>
+        <td class="job-no-cell">${escapeHtml(e.enquiry_number)}</td>
         <td>${e.client_name}</td>
         <td>${e.origin} → ${e.destination}</td>
         <td>${statusBadge(e, status)}</td>
@@ -709,7 +709,7 @@ async function updateQuotesTable() {
 
         return `
             <tr>
-                <td><strong>${e.enquiry_number}</strong></td>
+                <td class="job-no-cell">${escapeHtml(e.enquiry_number)}</td>
                 <td>${e.client_name}</td>
                 <td>${e.origin} → ${e.destination}</td>
                 <td>${quoteInfo.line}</td>
@@ -776,7 +776,7 @@ async function updateTrackingTable(filterType = null) {
         const s = bulkStatus[e.id] || null;
         return `
             <tr>
-                <td><strong>${e.enquiry_number}</strong></td>
+                <td class="job-no-cell">${escapeHtml(e.enquiry_number)}</td>
                 <td>${e.client_name}</td>
                 <td>${e.origin} → ${e.destination}</td>
                 <td>${statusBadge(e, s)}</td>
@@ -910,7 +910,7 @@ async function updateFinanceTable(subView = null) {
     const rowsHtml = paginatedFinance.map(e => {
         return `
             <tr>
-                <td><strong>${e.enquiry_number}</strong></td>
+                <td class="job-no-cell">${escapeHtml(e.enquiry_number)}</td>
                 <td>${e.client_name}</td>
                 <td>${e.origin} → ${e.destination}</td>
                 <td>
@@ -1100,7 +1100,7 @@ function createEnquiryRow(e, showDate = false) {
     const tr = document.createElement('tr');
     if (e.is_void) tr.style.opacity = '0.55';
     tr.innerHTML = `
-        <td><strong>${e.enquiry_number}</strong></td>
+        <td class="job-no-cell">${escapeHtml(e.enquiry_number)}</td>
         <td>${e.client_name}</td>
         <td>${e.origin} → ${e.destination}</td>
         <td>${statusBadge(e)}</td>

@@ -1,8 +1,95 @@
-function printDoc() {
-    const origTitle = document.title;
-    document.title = ' ';
-    window.print();
-    document.title = origTitle;
+function hblFilename() {
+    const blNo = (document.getElementById('mtdBlNo').textContent || 'HBL').trim();
+    return 'HBL-' + blNo.replace(/[/\\?%*:|"<>]/g, '-') + '.pdf';
+}
+
+function pdfOptions() {
+    return {
+        margin: [6, 6, 6, 6],
+        filename: hblFilename(),
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'legacy'] },
+    };
+}
+
+async function buildHblPdfBlob() {
+    if (typeof html2pdf === 'undefined') {
+        throw new Error('PDF library not loaded');
+    }
+    if (isEditing) toggleEdit();
+    const area = document.getElementById('hblPrintArea');
+    if (!area) throw new Error('Print area not found');
+    return html2pdf().set(pdfOptions()).from(area).outputPdf('blob');
+}
+
+function setPrintBusy(busy) {
+    ['printBtn', 'downloadPdfBtn'].forEach(function (id) {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        btn.disabled = busy;
+    });
+    const printBtn = document.getElementById('printBtn');
+    if (printBtn) {
+        printBtn.innerHTML = busy
+            ? '<i class="fas fa-spinner fa-spin"></i> Preparing…'
+            : '<i class="fas fa-print"></i> Print';
+    }
+}
+
+async function downloadPdf() {
+    setPrintBusy(true);
+    try {
+        const blob = await buildHblPdfBlob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = hblFilename();
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    } catch (err) {
+        console.error('PDF download failed:', err);
+        alert('Could not generate PDF. Please refresh and try again.');
+    } finally {
+        setPrintBusy(false);
+    }
+}
+
+async function printDoc() {
+    setPrintBusy(true);
+    try {
+        const blob = await buildHblPdfBlob();
+        const url = URL.createObjectURL(blob);
+        const iframe = document.createElement('iframe');
+        iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;';
+        iframe.src = url;
+        document.body.appendChild(iframe);
+        iframe.onload = function () {
+            try {
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+            } catch (e) {
+                window.open(url, '_blank');
+            }
+        };
+        setTimeout(function () {
+            URL.revokeObjectURL(url);
+            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+        }, 120000);
+    } catch (err) {
+        console.error('Print failed:', err);
+        alert('Could not prepare print preview. Try Download PDF instead.');
+    } finally {
+        setPrintBusy(false);
+    }
 }
 
 let isEditing = false;
@@ -59,8 +146,8 @@ function fmtDate(iso) {
 function populateDocument(d) {
     document.getElementById('mtdBlNo').textContent = d.enquiry_number || '';
 
-    // Consignor (label on form): populated with enquiry client name
-    document.getElementById('consignor').textContent = d.client_name || '';
+    // Consignor = enquiry client name only (API field `consignor`; never shipping line)
+    document.getElementById('consignor').textContent = d.consignor || d.client_name || '';
 
     // Shipment Reference No = Sale Number
     document.getElementById('shipmentRefNo').textContent = d.enquiry_number || '';

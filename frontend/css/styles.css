@@ -689,6 +689,40 @@ textarea {
     background: var(--gray-50);
 }
 
+/* Job / Sale number — long values e.g. LLP/OFE/YY/MM/NNNNN */
+.job-no,
+.job-no-cell,
+#display_enquiry_number,
+#job_no_val,
+#enquiryNumber,
+a.job-link {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--navy-800);
+    word-break: break-all;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+}
+
+a.job-link {
+    color: var(--primary);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+a.job-link:hover {
+    text-decoration: underline;
+}
+
+#enquiryNumber {
+    font-size: 0.75rem;
+}
+
+.data-table td.job-no-cell {
+    max-width: 11rem;
+    vertical-align: top;
+}
+
 /* ==========================================
    BADGES
    ========================================== */

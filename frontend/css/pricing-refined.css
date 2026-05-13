@@ -103,6 +103,12 @@
     word-break: break-all;
 }
 
+.summary-box .value.job-no {
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
 /* Route Selection Grid */
 .route-info-grid {
     display: grid;

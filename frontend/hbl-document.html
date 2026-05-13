@@ -8,6 +8,8 @@
     <link href="css/styles.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        #hblPrintArea { background: #fff; }
+
         @page { margin: 10mm; }
         @media print {
             .no-print { display: none !important; }
@@ -31,6 +33,38 @@
             line-height: 1.35; position: relative; overflow: hidden;
         }
 
+        /* Document title band — above the bordered grid, not inside a cell */
+        .mtd-doc-header {
+            max-width: 900px;
+            margin: 0 auto 6px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 20px;
+            padding: 0 2px 4px;
+            font-family: Arial, Helvetica, sans-serif;
+            border: none;
+            background: transparent;
+        }
+        .mtd-doc-header .mtd-bl-no-line {
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #4b5563;
+            line-height: 1.4;
+        }
+        .mtd-doc-header .mtd-title-wrap {
+            text-align: right;
+            font-size: 11px;
+            font-weight: bold;
+            line-height: 1.35;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #4b5563;
+            flex-shrink: 0;
+        }
+
         /* Watermark for Seaway */
         .watermark {
             position: absolute; top: 50%; left: 50%;
@@ -46,16 +80,7 @@
         .mtd-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
         .mtd-table td, .mtd-table th { border: 1px solid #000; padding: 6px 8px; vertical-align: top; }
 
-        .mtd-header-row td { border-bottom: 1px solid #000; }
         .mtd-bl-no-label { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.02em; }
-        .mtd-title-wrap {
-            text-align: right;
-            font-size: 11px;
-            font-weight: bold;
-            line-height: 1.35;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-        }
 
         .mtd-company-block { text-align: center; padding-bottom: 4px; }
         .mtd-company {
@@ -141,27 +166,26 @@
             <button class="btn btn-secondary" id="editBtn" onclick="toggleEdit()" style="padding: 8px 16px; font-size: 13px;">
                 <i class="fas fa-pen"></i> Edit
             </button>
-            <button class="btn btn-primary" onclick="printDoc()" style="padding: 8px 16px; font-size: 13px;">
+            <button class="btn btn-secondary" id="downloadPdfBtn" onclick="downloadPdf()" style="padding: 8px 16px; font-size: 13px;">
+                <i class="fas fa-file-pdf"></i> Download PDF
+            </button>
+            <button class="btn btn-primary" id="printBtn" onclick="printDoc()" style="padding: 8px 16px; font-size: 13px;">
                 <i class="fas fa-print"></i> Print
             </button>
         </div>
 
-        <!-- MTD Document Sheet -->
+        <!-- MTD Document Sheet (print/PDF capture area) -->
+        <div id="hblPrintArea">
+        <div class="mtd-doc-header">
+            <div class="mtd-bl-no-line">
+                <span>MTD BL NO:</span>
+                <span class="editable" id="mtdBlNo"></span>
+            </div>
+            <div class="mtd-title-wrap">MULTI-MODAL TRANSPORT DOCUMENT<br><span id="blTypeLabel">SEAWAY BILL OF LADING</span></div>
+        </div>
         <div class="mtd-sheet">
             <div class="watermark" id="watermark">NON-NEGOTIABLE</div>
             <table class="mtd-table">
-                <!-- Row 1: MTD BL NO + Title -->
-                <tr class="mtd-header-row">
-                    <td colspan="3" style="width: 50%;">
-                        <span class="mtd-bl-no-label">MTD BL NO:</span>
-                        <span class="field-val-bold editable" id="mtdBlNo"></span>
-                    </td>
-                    <td colspan="3" style="width: 50%;">
-                        <div class="mtd-title-wrap">MULTI-MODAL TRANSPORT DOCUMENT<br><span id="blTypeLabel">SEAWAY BILL OF LADING</span></div>
-                    </td>
-                </tr>
-
-                <!-- Row 2–3: Consignor (client) | Carrier block + MTO / shipment ref -->
                 <tr>
                     <td colspan="3" rowspan="2">
                         <span class="field-label">Consignor</span>
@@ -355,11 +379,13 @@
         <div class="end-of-bl">
             <span>******************END OF BL : <span id="endOfBlNo"></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;******************</span>
         </div>
+        </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" crossorigin="anonymous"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js"></script>
+    <script src="js/hbl-document.js?v=4"></script>
 </body>
 
 </html>

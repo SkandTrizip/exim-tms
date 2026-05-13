@@ -114,10 +114,14 @@ async def get_hbl_document_data(enquiry_id: int, db: Session = Depends(get_db)):
     if accepted_quote and accepted_quote.shipping_line:
         sl = db.query(ShippingLine).filter(ShippingLine.shipping_line_name == accepted_quote.shipping_line).first()
 
+    # Consignor on the HBL = enquiry client name (never the shipping line)
+    consignor = enq.client_name or ""
+
     return {
         "id": enq.id,
         "enquiry_number": enq.enquiry_number,
         "client_name": enq.client_name,
+        "consignor": consignor,
         "origin": enq.origin,
         "destination": enq.destination,
         "preferred_origin_port": enq.preferred_origin_port,
