@@ -1,5 +1,23 @@
 const HBL_PAGE_TITLE = 'HBL / MTD Document – ShipFlow TMS';
 
+let watermarkEnabled = true;
+
+function applyWatermarkVisibility() {
+    const watermark = document.getElementById('watermark');
+    const blType = document.getElementById('blTypeSelect').value;
+    if (!watermark) return;
+    if (blType !== 'seaway' || !watermarkEnabled) {
+        watermark.classList.add('hidden');
+    } else {
+        watermark.classList.remove('hidden');
+    }
+}
+
+function toggleWatermark(enabled) {
+    watermarkEnabled = enabled;
+    applyWatermarkVisibility();
+}
+
 function printDoc() {
     if (isEditing) toggleEdit();
     document.title = '\u00A0';
@@ -113,15 +131,20 @@ function switchBlType(type) {
     const label = document.getElementById('blTypeLabel');
     const count = document.getElementById('mtdOriginalCount');
     const watermark = document.getElementById('watermark');
+    const toggleWrap = document.getElementById('watermarkToggleWrap');
+    const toggle = document.getElementById('watermarkToggle');
     if (type === 'original') {
         label.textContent = '';
         count.textContent = 'Number of Original MTD: 3 / THREE';
+        if (toggleWrap) toggleWrap.style.display = 'none';
         watermark.classList.add('hidden');
     } else {
         label.textContent = 'SEAWAY BILL OF LADING';
         count.textContent = 'Number of Original MTD: 0 / ZERO';
         watermark.textContent = 'Seaway BL';
-        watermark.classList.remove('hidden');
+        if (toggleWrap) toggleWrap.style.display = 'flex';
+        if (toggle) toggle.checked = watermarkEnabled;
+        applyWatermarkVisibility();
     }
 }
 
