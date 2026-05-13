@@ -5,7 +5,7 @@ function hblFilename() {
 
 function pdfOptions() {
     return {
-        margin: [6, 6, 6, 6],
+        margin: [8, 8, 8, 8],
         filename: hblFilename(),
         image: { type: 'jpeg', quality: 0.98 },
         html2canvas: {
@@ -13,6 +13,8 @@ function pdfOptions() {
             useCORS: true,
             logging: false,
             backgroundColor: '#ffffff',
+            width: 794,
+            windowWidth: 794,
         },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css', 'legacy'] },
@@ -116,6 +118,14 @@ function toggleEdit() {
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
+    // Ctrl+P → clean PDF print (no browser date/title/URL header/footer)
+    document.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
+            e.preventDefault();
+            printDoc();
+        }
+    });
+
     const enquiryId = new URLSearchParams(window.location.search).get('enquiry_id');
     if (!enquiryId) {
         alert('No enquiry ID provided');
