@@ -34,20 +34,23 @@
         .mtd-sheet {
             margin: 0;
             background: #fff;
-            border: 1px solid #000;
+            border: none;
             box-sizing: border-box;
             font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #000;
             line-height: 1.35; position: relative; overflow: visible;
         }
 
-        /* Document title band — above the bordered grid */
+        /* Document title band — MTD BL left, document titles top-right */
         .mtd-doc-header {
             margin: 0 0 6px;
             padding: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
             font-family: Arial, Helvetica, sans-serif;
             border: none;
             background: transparent;
-            text-align: left;
         }
         .mtd-doc-header .mtd-bl-no-line {
             font-size: 11px;
@@ -56,16 +59,19 @@
             letter-spacing: 0.03em;
             color: #4b5563;
             line-height: 1.4;
+            flex: 1 1 auto;
+            text-align: left;
         }
         .mtd-doc-header .mtd-title-wrap {
-            text-align: left;
+            text-align: right;
             font-size: 11px;
             font-weight: bold;
             line-height: 1.35;
             text-transform: uppercase;
             letter-spacing: 0.03em;
             color: #4b5563;
-            margin-top: 4px;
+            flex: 0 0 auto;
+            margin-top: 0;
         }
 
         /* Watermark for Seaway */
@@ -80,11 +86,19 @@
         .watermark.hidden { display: none; }
         .mtd-table, .cargo-table, .bottom-section { position: relative; z-index: 1; }
 
+        .mtd-grid-frame {
+            position: relative;
+            z-index: 1;
+            border: 1px solid #000;
+            box-sizing: border-box;
+        }
+
         .mtd-table, .cargo-table, .bottom-section {
             width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
             margin: 0;
+            border: none;
         }
         .mtd-table td, .mtd-table th,
         .cargo-table td, .cargo-table th,
@@ -93,29 +107,13 @@
             padding: 6px 8px;
             vertical-align: top;
         }
-        /* Keep full outer frame visible in print/PDF (html2pdf) */
-        .mtd-sheet .mtd-table tr > :first-child,
-        .mtd-sheet .cargo-table tr > :first-child,
-        .mtd-sheet .bottom-section tr > :first-child {
-            border-left: 1px solid #000;
-        }
-        .mtd-sheet .mtd-table tr > :last-child,
-        .mtd-sheet .cargo-table tr > :last-child,
-        .mtd-sheet .bottom-section tr > :last-child {
-            border-right: 1px solid #000;
-        }
-        .mtd-sheet .mtd-table tr:first-child > *,
-        .mtd-sheet .cargo-table thead tr:first-child > *,
-        .mtd-sheet .cargo-table tbody tr:first-child > * {
-            border-top: 1px solid #000;
-        }
-        .mtd-sheet .bottom-section tr:last-child > * {
-            border-bottom: 1px solid #000;
-        }
-        /* No double horizontal rule between stacked tables */
+        /* One continuous grid between stacked tables */
         .cargo-table thead tr:first-child th,
-        .cargo-table tbody tr:first-child td { border-top: none; }
-        .bottom-section tr:first-child td { border-top: none; }
+        .cargo-table thead tr:first-child td,
+        .cargo-table tbody tr:first-child td,
+        .bottom-section tr:first-child td {
+            border-top: none;
+        }
 
         .mtd-bl-no-label { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.02em; }
 
@@ -220,6 +218,7 @@
         </div>
         <div class="mtd-sheet">
             <div class="watermark" id="watermark">Seaway bill of Lading</div>
+            <div class="mtd-grid-frame">
             <table class="mtd-table">
                 <tr>
                     <td colspan="3" rowspan="2">
@@ -407,6 +406,7 @@
                     </td>
                 </tr>
             </table>
+            </div>
 
         </div>
 
@@ -420,7 +420,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" crossorigin="anonymous"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=7"></script>
+    <script src="js/hbl-document.js?v=8"></script>
 </body>
 
 </html>
