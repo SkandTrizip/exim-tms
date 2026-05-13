@@ -118,14 +118,6 @@ function toggleEdit() {
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
-    // Ctrl+P → clean PDF print (no browser date/title/URL header/footer)
-    document.addEventListener('keydown', function (e) {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p') {
-            e.preventDefault();
-            printDoc();
-        }
-    });
-
     const enquiryId = new URLSearchParams(window.location.search).get('enquiry_id');
     if (!enquiryId) {
         alert('No enquiry ID provided');
@@ -241,7 +233,7 @@ function switchBlType(type) {
     } else {
         label.textContent = 'SEAWAY BILL OF LADING';
         count.textContent = 'Number of Original MTD: 0 / ZERO';
-        watermark.textContent = 'Seaway bill of Lading';
+        watermark.textContent = 'Seaway BL';
         watermark.classList.remove('hidden');
     }
 }
@@ -261,3 +253,30 @@ function selectFreight(type) {
         prepaid.style.textDecoration = 'none';
     }
 }
+
+/* Ctrl+P / window.print → clean PDF (no browser date, title, or URL header/footer) */
+(function setupCleanPrint() {
+    const ORIG_TITLE = document.title;
+
+    function onPrintShortcut(e) {
+        if ((e.ctrlKey || e.metaKey) && e.key && e.key.toLowerCase() === 'p') {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            printDoc();
+        }
+    }
+
+    window.addEventListener('keydown', onPrintShortcut, true);
+    document.addEventListener('keydown', onPrintShortcut, true);
+
+    window.print = function () {
+        printDoc();
+    };
+
+    window.addEventListener('beforeprint', function () {
+        document.title = '\u00A0';
+    });
+    window.addEventListener('afterprint', function () {
+        document.title = ORIG_TITLE;
+    });
+})();
