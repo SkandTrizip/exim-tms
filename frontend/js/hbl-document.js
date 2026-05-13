@@ -4,17 +4,21 @@ function hblFilename() {
 }
 
 function pdfOptions() {
+    const area = document.getElementById('hblPrintArea');
+    const w = area ? area.offsetWidth : 794;
     return {
-        margin: [8, 8, 8, 8],
+        margin: 0,
         filename: hblFilename(),
-        image: { type: 'jpeg', quality: 0.98 },
+        image: { type: 'jpeg', quality: 0.95 },
         html2canvas: {
             scale: 2,
             useCORS: true,
             logging: false,
             backgroundColor: '#ffffff',
-            width: 794,
-            windowWidth: 794,
+            scrollX: 0,
+            scrollY: 0,
+            width: w,
+            windowWidth: w,
         },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
         pagebreak: { mode: ['css', 'legacy'] },
@@ -28,7 +32,40 @@ async function buildHblPdfBlob() {
     if (isEditing) toggleEdit();
     const area = document.getElementById('hblPrintArea');
     if (!area) throw new Error('Print area not found');
-    return html2pdf().set(pdfOptions()).from(area).outputPdf('blob');
+
+    area.classList.add('pdf-exporting');
+    try {
+        const canvas = await html2pdf()
+            .set(pdfOptions())
+            .from(area)
+            .toCanvas();
+
+        const jsPDF = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : null;
+        if (!jsPDF) {
+            return html2pdf().set(pdfOptions()).from(area).outputPdf('blob');
+        }
+
+        const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const margin = 6;
+        const availW = pageW - margin * 2;
+        const availH = pageH - margin * 2;
+        const scalePx = pdfOptions().html2canvas.scale || 2;
+        const pxToMm = 25.4 / 96 / scalePx;
+        const imgMmW = canvas.width * pxToMm;
+        const imgMmH = canvas.height * pxToMm;
+        const fitScale = Math.min(availW / imgMmW, availH / imgMmH, 1);
+        const drawW = imgMmW * fitScale;
+        const drawH = imgMmH * fitScale;
+        const x = margin + (availW - drawW) / 2;
+        const y = margin;
+
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', x, y, drawW, drawH);
+        return pdf.output('blob');
+    } finally {
+        area.classList.remove('pdf-exporting');
+    }
 }
 
 function setPrintBusy(busy) {
@@ -70,22 +107,17 @@ async function printDoc() {
     try {
         const blob = await buildHblPdfBlob();
         const url = URL.createObjectURL(blob);
-        const iframe = document.createElement('iframe');
-        iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;';
-        iframe.src = url;
-        document.body.appendChild(iframe);
-        iframe.onload = function () {
-            try {
-                iframe.contentWindow.focus();
-                iframe.contentWindow.print();
-            } catch (e) {
-                window.open(url, '_blank');
-            }
-        };
-        setTimeout(function () {
-            URL.revokeObjectURL(url);
-            if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-        }, 120000);
+        const win = window.open(url, '_blank');
+        if (!win) {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = hblFilename();
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            alert('Pop-up was blocked. PDF downloaded — open it and print for full settings.');
+        }
+        setTimeout(function () { URL.revokeObjectURL(url); }, 300000);
     } catch (err) {
         console.error('Print failed:', err);
         alert('Could not prepare print preview. Try Download PDF instead.');
