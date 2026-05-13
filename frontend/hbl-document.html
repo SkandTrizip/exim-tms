@@ -9,38 +9,46 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         #hblPrintArea {
-            width: 210mm;
-            max-width: 210mm;
+            max-width: 900px;
+            width: 100%;
             margin: 0 auto;
             padding: 0;
             background: #fff;
             box-sizing: border-box;
         }
 
-        #hblPrintArea.pdf-exporting .editable {
-            outline: none !important;
-            background: transparent !important;
-        }
-
         @page {
-            size: A4 portrait;
-            margin: 8mm;
+            margin: 12mm;
         }
         @media print {
             .no-print { display: none !important; }
-            html, body { margin: 0; padding: 0; background: #fff; }
-            .mtd-page { padding: 0; }
-            #hblPrintArea { max-width: none; width: 100%; }
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #fff !important;
+                overflow: visible !important;
+            }
+            .mtd-page { padding: 0 !important; margin: 0 !important; }
+            body * { visibility: hidden; }
+            #hblPrintArea, #hblPrintArea * { visibility: visible; }
+            #hblPrintArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                max-width: 100%;
+                margin: 0;
+                padding: 0;
+            }
             .mtd-sheet { box-shadow: none; margin: 0; overflow: visible; }
             .cargo-table { page-break-inside: avoid; }
-            .cargo-table thead { display: table-header-group; }
             .bottom-section { page-break-inside: avoid; }
             .end-of-bl { page-break-inside: avoid; }
         }
 
-        body { background: #e5e7eb; }
+        body { background: #e5e7eb; overflow-x: auto; }
         .mtd-page { padding: 32px 0 60px; }
-        .mtd-actions { max-width: 210mm; margin: 0 auto 16px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+        .mtd-actions { max-width: 900px; margin: 0 auto 16px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 
         .mtd-sheet {
             margin: 0;
@@ -458,7 +466,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js" crossorigin="anonymous"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=11"></script>
+    <script src="js/hbl-document.js?v=12"></script>
 </body>
 
 </html>
