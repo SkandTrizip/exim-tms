@@ -42,7 +42,6 @@ function collectSnapshot() {
         draftMark: !!(draftCb && draftCb.checked),
         watermarkEnabled,
         applySign: applySignEnabled,
-        cargoBoxHeight: getCargoBoxHeightPx(),
         freight: getFreightSelection(),
         fields
     };
@@ -85,9 +84,6 @@ function applySnapshot(s) {
         const signToggle = document.getElementById('applySignToggle');
         if (signToggle) signToggle.checked = s.applySign;
         applySignatureVisibility();
-    }
-    if (typeof s.cargoBoxHeight === 'number') {
-        applyCargoBoxHeight(s.cargoBoxHeight, { skipSplit: true, persist: false });
     }
     if (s.freight) {
         selectFreight(s.freight === 'collect' ? 'collect' : 'prepaid');
@@ -211,11 +207,7 @@ const HBL_CARGO_PREVIEW_MAP = [
 
 let hblCargoSyncLock = false;
 
-const HBL_CARGO_HEIGHT_KEY = 'hbl_cargo_box_height';
-const HBL_CARGO_HEIGHT_MIN = 80;
-const HBL_CARGO_HEIGHT_MAX = 500;
-const HBL_CARGO_HEIGHT_DEFAULT = 180;
-const HBL_CARGO_HEIGHT_STEP = 24;
+const HBL_CARGO_ROW_HEIGHT_PX = 180;
 
 function getCargoPreviewCell(previewId) {
     return document.getElementById(previewId);
@@ -231,56 +223,6 @@ function resolveCargoTextEl(elOrPreviewId) {
     if (typeof elOrPreviewId === 'string') return getCargoPreviewEditor(elOrPreviewId);
     if (!elOrPreviewId) return null;
     return elOrPreviewId.querySelector?.('.cargo-preview-inner') || elOrPreviewId;
-}
-
-function getCargoBoxHeightPx() {
-    const box = document.getElementById('hblCargoPage1Box');
-    if (!box) return HBL_CARGO_HEIGHT_DEFAULT;
-    const raw = getComputedStyle(box).getPropertyValue('--hbl-cargo-row-h').trim();
-    const n = parseInt(raw, 10);
-    return Number.isFinite(n) ? n : HBL_CARGO_HEIGHT_DEFAULT;
-}
-
-function applyCargoBoxHeight(px, options = {}) {
-    const box = document.getElementById('hblCargoPage1Box');
-    if (!box) return;
-    const h = Math.round(Math.max(HBL_CARGO_HEIGHT_MIN, Math.min(HBL_CARGO_HEIGHT_MAX, px)));
-    box.style.setProperty('--hbl-cargo-row-h', `${h}px`);
-    const label = document.getElementById('hblCargoHeightLabel');
-    if (label) label.textContent = `${h}px`;
-    if (options.persist !== false) {
-        try { localStorage.setItem(HBL_CARGO_HEIGHT_KEY, String(h)); } catch (e) { /* ignore */ }
-    }
-    if (!options.skipSplit && !isEditing) splitAllCargoFields();
-}
-
-function adjustCargoBoxHeight(delta) {
-    applyCargoBoxHeight(getCargoBoxHeightPx() + delta);
-}
-
-function initCargoBoxResize() {
-    let saved;
-    try { saved = parseInt(localStorage.getItem(HBL_CARGO_HEIGHT_KEY), 10); } catch (e) { /* ignore */ }
-    applyCargoBoxHeight(Number.isFinite(saved) ? saved : HBL_CARGO_HEIGHT_DEFAULT, { skipSplit: true, persist: false });
-
-    const handle = document.getElementById('hblCargoResizeHandle');
-    if (!handle) return;
-
-    handle.addEventListener('mousedown', (e) => {
-        e.preventDefault();
-        const startY = e.clientY;
-        const startH = getCargoBoxHeightPx();
-        const onMove = (ev) => {
-            applyCargoBoxHeight(startH + (ev.clientY - startY), { skipSplit: true, persist: false });
-        };
-        const onUp = (ev) => {
-            document.removeEventListener('mousemove', onMove);
-            document.removeEventListener('mouseup', onUp);
-            applyCargoBoxHeight(startH + (ev.clientY - startY), { skipSplit: false, persist: true });
-        };
-        document.addEventListener('mousemove', onMove);
-        document.addEventListener('mouseup', onUp);
-    });
 }
 
 function getCargoCellPlainText(elOrPreviewId) {
@@ -369,26 +311,39 @@ function setCargoSplit(page2Id, previewId, fullText) {
     setCargoCellPlainText(editor, head);
     setCargoCellPlainText(page2, tail);
     preview.dataset.shownLen = String(head.length);
-    markPreviewOverflow(preview, fullText, head);
 }
 
-function markPreviewOverflow(preview, fullText, headText) {
-    const overflow = (fullText || '').length > (headText || '').length;
-    preview.classList.toggle('cargo-preview-overflow', overflow);
-    preview.title = overflow ? 'Continued on page 2' : '';
+function cargoFieldHasOverflow(page2Id, previewId) {
+    return getCargoFullText(page2Id, previewId).length > getCargoCellPlainText(previewId).length;
 }
 
-function splitAllCargoFields(options = {}) {
+function updateCargoOverflowState() {
+    const box = document.getElementById('hblCargoPage1Box');
+    const note = document.getElementById('hblCargoContinuedNote');
+    const anyOverflow = HBL_CARGO_PREVIEW_MAP.some(([page2Id, previewId]) =>
+        cargoFieldHasOverflow(page2Id, previewId)
+    );
+    box?.classList.toggle('has-cargo-overflow', anyOverflow);
+    if (note) {
+        note.classList.toggle('hidden', !anyOverflow);
+        note.setAttribute('aria-hidden', anyOverflow ? 'false' : 'true');
+    }
+}
+
+function splitAllCargoFields() {
     if (hblCargoSyncLock) return;
     hblCargoSyncLock = true;
-    const printArea = document.getElementById('hblPrintArea');
-    if (options.usePrintMetrics) printArea?.classList.add('hbl-print-measure');
-    HBL_CARGO_PREVIEW_MAP.forEach(([page2Id, previewId]) => {
-        const full = getCargoFullText(page2Id, previewId);
-        setCargoSplit(page2Id, previewId, full);
-    });
-    if (options.usePrintMetrics && !options.keepMeasure) {
-        printArea?.classList.remove('hbl-print-measure');
+    const runSplit = () => {
+        HBL_CARGO_PREVIEW_MAP.forEach(([page2Id, previewId]) => {
+            const full = getCargoFullText(page2Id, previewId);
+            setCargoSplit(page2Id, previewId, full);
+        });
+    };
+    runSplit();
+    updateCargoOverflowState();
+    if (document.getElementById('hblCargoPage1Box')?.classList.contains('has-cargo-overflow')) {
+        runSplit();
+        updateCargoOverflowState();
     }
     hblCargoSyncLock = false;
 }
@@ -445,7 +400,7 @@ function flushPreviewCargo(previewId) {
     }
 
     preview.dataset.shownLen = String(truncated.length);
-    markPreviewOverflow(preview, rawHead + tail, truncated);
+    updateCargoOverflowState();
     hblCargoSyncLock = false;
 }
 
@@ -479,9 +434,7 @@ function syncPage2Cargo(page2Id) {
     const preview = getCargoPreviewCell(pair[1]);
     const page2 = document.getElementById(page2Id);
     if (!preview || !page2) return;
-    const head = getCargoCellPlainText(pair[1]);
-    const tail = getCargoCellPlainText(page2);
-    markPreviewOverflow(preview, head + tail, head);
+    updateCargoOverflowState();
 }
 
 function bindCargoPreviewSync() {
@@ -503,13 +456,6 @@ function bindCargoPreviewSync() {
                 flushPreviewCargo(previewId);
             });
         }
-    });
-    let resizeTimer;
-    window.addEventListener('resize', () => {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => {
-            if (!isEditing) splitAllCargoFields();
-        }, 120);
     });
 }
 
@@ -547,11 +493,11 @@ function toggleEdit() {
         btn.style.color = '';
         editables.forEach((el) => el.removeAttribute('contenteditable'));
         flushAllPreviewCargo();
+        splitAllCargoFields();
     }
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
-    initCargoBoxResize();
     bindCargoPreviewSync();
     window.addEventListener('beforeprint', prepareCargoForPrint);
     window.addEventListener('afterprint', function () {
@@ -633,6 +579,7 @@ function populateDocument(d) {
     setCargoSplit('cargoMeasurement', 'cargoMeasurementPreview', containerInfo.join(' ') || '');
     setCargoSplit('containerNos', 'containerNosPreview', '');
     setCargoSplit('marksNumber', 'marksNumberPreview', '');
+    splitAllCargoFields();
 
     document.getElementById('sobDate').textContent = fmtDate(d.sob);
     document.getElementById('placeAndDateOfIssue').textContent = 'Gurugram, ' + new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });

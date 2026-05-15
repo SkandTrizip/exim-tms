@@ -45,9 +45,6 @@
                 line-height: 1.22;
                 zoom: 0.9;
             }
-            #hblPrintArea.hbl-print-wysiwyg {
-                zoom: 1 !important;
-            }
             .mtd-sheet { box-shadow: none; margin: 0; overflow: visible; }
             .mtd-doc-header { margin-bottom: 3px; }
             .mtd-doc-header .mtd-bl-no-line,
@@ -91,6 +88,14 @@
             #hblCargoPage1Box {
                 page-break-inside: avoid;
                 break-inside: avoid;
+                --hbl-cargo-row-h: 180px;
+                --hbl-cargo-note-h: 22px;
+            }
+            #hblCargoPage1Box.has-cargo-overflow {
+                --hbl-cargo-row-h: calc(180px - var(--hbl-cargo-note-h)) !important;
+            }
+            #hblCargoPage1Box.has-cargo-overflow .cargo-continued-note {
+                display: block !important;
             }
             #hblCargoPage1Box .cargo-table-preview tbody tr.cargo-data-row > td {
                 height: var(--hbl-cargo-row-h, 180px) !important;
@@ -364,7 +369,11 @@
         }
         #hblCargoPage1Box {
             --hbl-cargo-row-h: 180px;
+            --hbl-cargo-note-h: 22px;
             position: relative;
+        }
+        #hblCargoPage1Box.has-cargo-overflow {
+            --hbl-cargo-row-h: calc(180px - var(--hbl-cargo-note-h));
         }
         #hblCargoPage1Box .cargo-table tbody tr.cargo-data-row td {
             height: var(--hbl-cargo-row-h);
@@ -373,6 +382,26 @@
             overflow: hidden;
             padding: 0;
             vertical-align: top;
+        }
+        #hblCargoPage1Box .cargo-continued-note {
+            display: none;
+            height: var(--hbl-cargo-note-h);
+            line-height: var(--hbl-cargo-note-h);
+            text-align: center;
+            font-size: 11px;
+            font-weight: bold;
+            border-top: 1px solid #000;
+            background: #fff;
+            box-sizing: border-box;
+        }
+        #hblCargoPage1Box.has-cargo-overflow .cargo-continued-note {
+            display: block;
+        }
+        #hblCargoPage1Box .cargo-continued-note.hidden {
+            display: none !important;
+        }
+        #hblCargoPage1Box.has-cargo-overflow .cargo-continued-note:not(.hidden) {
+            display: block !important;
         }
         #hblPage2 .cargo-table tbody tr.cargo-data-row td {
             height: auto;
@@ -392,7 +421,7 @@
             display: block;
             width: 100%;
             height: 100%;
-            min-height: var(--hbl-cargo-row-h);
+            min-height: 0;
             box-sizing: border-box;
             font-size: 11px;
             white-space: pre-line;
@@ -405,51 +434,6 @@
         .edit-mode #hblCargoPage1Box .cargo-preview-inner {
             overflow-x: hidden;
             overflow-y: auto;
-        }
-        #hblCargoPage1Box .cargo-preview-cell.cargo-preview-overflow .cargo-preview-inner {
-            box-shadow: inset 0 -6px 8px -6px rgba(0, 0, 0, 0.12);
-        }
-        .hbl-cargo-box-tools {
-            display: flex;
-            align-items: center;
-            justify-content: flex-end;
-            gap: 6px;
-            margin: 4px 0 6px;
-            font-size: 12px;
-            color: #64748b;
-        }
-        .hbl-cargo-box-tools button {
-            width: 28px;
-            height: 28px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            background: #fff;
-            cursor: pointer;
-            font-size: 16px;
-            line-height: 1;
-            color: #334155;
-        }
-        .hbl-cargo-box-tools button:hover { background: #f1f5f9; }
-        .hbl-cargo-resize-handle {
-            height: 10px;
-            margin-top: 2px;
-            border-radius: 0 0 6px 6px;
-            background: linear-gradient(180deg, #e2e8f0, #cbd5e1);
-            cursor: ns-resize;
-            touch-action: none;
-        }
-        .hbl-cargo-resize-handle::after {
-            content: '';
-            display: block;
-            width: 36px;
-            height: 4px;
-            margin: 3px auto;
-            border-radius: 2px;
-            background: #94a3b8;
-        }
-        @media print {
-            .hbl-cargo-box-tools,
-            .hbl-cargo-resize-handle { display: none !important; }
         }
         .cargo-table thead th {
             border: 1px solid #000;
@@ -584,7 +568,6 @@
 
         <!-- MTD Document Sheet (print/PDF capture area) -->
         <div id="hblPrintArea">
-        <p class="hbl-page-label no-print">Page 1 — Header, parties &amp; signature</p>
         <div id="hblPage1" class="hbl-page-sheet">
         <div class="mtd-doc-header">
             <div class="mtd-bl-no-line">
@@ -700,12 +683,6 @@
             </table>
 
             <div id="hblCargoPage1Box" class="hbl-cargo-page1-box">
-            <div class="hbl-cargo-box-tools no-print">
-                <span>Cargo box height</span>
-                <button type="button" onclick="adjustCargoBoxHeight(-24)" title="Decrease height" aria-label="Decrease cargo box height">−</button>
-                <span id="hblCargoHeightLabel">180px</span>
-                <button type="button" onclick="adjustCargoBoxHeight(24)" title="Increase height" aria-label="Increase cargo box height">+</button>
-            </div>
             <table class="cargo-table cargo-table-preview">
                 <colgroup>
                     <col style="width: 12%;">
@@ -733,7 +710,7 @@
                     </tr>
                 </tbody>
             </table>
-            <div class="hbl-cargo-resize-handle no-print" id="hblCargoResizeHandle" title="Drag to resize cargo box"></div>
+            <div id="hblCargoContinuedNote" class="cargo-continued-note hidden" aria-hidden="true">Details Contd. on Attached Sheet.</div>
             </div>
 
             <!-- Bottom Section -->
@@ -802,7 +779,6 @@
 
         </div>
 
-        <p class="hbl-page-label hbl-page-2-label no-print">Page 2 — Cargo overflow (continued)</p>
         <div id="hblPage2" class="hbl-page-sheet hbl-page-2">
         <div class="mtd-sheet">
             <div class="watermark hbl-page2-watermark" id="watermarkPage2">SEAWAY BL</div>
