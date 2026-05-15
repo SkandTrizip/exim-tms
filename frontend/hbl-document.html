@@ -70,13 +70,22 @@
                 overflow: hidden;
                 font-size: 8pt;
             }
-            .hbl-cargo-continuation {
+            #hblCargoPageBlock,
+            #hblBottomSection {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+            #hblBottomSection {
+                page-break-before: avoid;
+                break-before: avoid;
+            }
+            .hbl-cargo-continuations .hbl-cargo-continuation:first-child {
                 page-break-before: always;
                 break-before: page;
             }
-            .hbl-primary-page.hbl-has-continuations {
-                page-break-after: always;
-                break-after: page;
+            .hbl-cargo-continuations .hbl-cargo-continuation {
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
             .hbl-cargo-continuation .cargo-table thead {
                 display: table-header-group;
@@ -646,6 +655,8 @@
             </div>
             </div>
 
+            <div id="hblCargoContinuations" class="hbl-cargo-continuations" aria-hidden="true"></div>
+
         </div>
 
         <div id="hblEndOfBlBlock">
@@ -654,14 +665,11 @@
         </div>
         </div>
         </div>
-
-        <div id="hblCargoContinuations" class="hbl-cargo-continuations" aria-hidden="true"></div>
-        </div>
     </div>
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=21"></script>
+    <script src="js/hbl-document.js?v=22"></script>
 </body>
 
 </html>

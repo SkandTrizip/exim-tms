@@ -292,20 +292,10 @@ function buildContinuationCargoTable(chunksByField, pageIndex, includeParticular
     return table;
 }
 
-function cloneWatermarkForContinuation() {
-    const src = document.getElementById('watermark');
-    if (!src) return null;
-    const w = src.cloneNode(true);
-    w.removeAttribute('id');
-    if (src.classList.contains('hidden')) w.classList.add('hidden');
-    return w;
-}
-
 function prepareHblPrintPagination() {
     cleanupHblPrintPagination();
 
     const printArea = document.getElementById('hblPrintArea');
-    const primaryPage = document.getElementById('hblPrimaryPage');
     const endBlock = document.getElementById('hblEndOfBlBlock');
     const contHost = document.getElementById('hblCargoContinuations');
     const cargoFoot = document.getElementById('cargoTableFoot');
@@ -335,7 +325,6 @@ function prepareHblPrintPagination() {
     });
 
     printArea.classList.add('hbl-print-paginated');
-    primaryPage?.classList.add('hbl-has-continuations');
     endBlock?.classList.add('hbl-detached-tail');
     cargoFoot?.classList.add('hbl-hide-on-print-split');
 
@@ -344,16 +333,10 @@ function prepareHblPrintPagination() {
         const page = document.createElement('div');
         page.className = 'hbl-cargo-continuation';
 
-        const sheet = document.createElement('div');
-        sheet.className = 'mtd-sheet';
-        const wm = cloneWatermarkForContinuation();
-        if (wm) sheet.appendChild(wm);
-
         const frame = document.createElement('div');
         frame.className = 'mtd-grid-frame';
         frame.appendChild(buildContinuationCargoTable(chunksByField, p, isLast));
-        sheet.appendChild(frame);
-        page.appendChild(sheet);
+        page.appendChild(frame);
 
         if (isLast && endBlock) page.appendChild(endBlock);
 
@@ -366,7 +349,6 @@ function prepareHblPrintPagination() {
 function cleanupHblPrintPagination() {
     const printArea = document.getElementById('hblPrintArea');
     const contHost = document.getElementById('hblCargoContinuations');
-    const primaryPage = document.getElementById('hblPrimaryPage');
     const endBlock = document.getElementById('hblEndOfBlBlock');
     const cargoFoot = document.getElementById('cargoTableFoot');
 
@@ -388,7 +370,6 @@ function cleanupHblPrintPagination() {
         contHost.setAttribute('aria-hidden', 'true');
     }
     printArea?.classList.remove('hbl-print-paginated', 'hbl-measure-print');
-    primaryPage?.classList.remove('hbl-has-continuations');
     endBlock?.classList.remove('hbl-detached-tail');
     cargoFoot?.classList.remove('hbl-hide-on-print-split');
 }
