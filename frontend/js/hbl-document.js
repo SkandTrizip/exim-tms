@@ -547,7 +547,6 @@ function toggleEdit() {
         btn.style.color = '';
         editables.forEach((el) => el.removeAttribute('contenteditable'));
         flushAllPreviewCargo();
-        splitAllCargoFields();
     }
 }
 
