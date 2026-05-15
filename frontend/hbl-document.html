@@ -49,6 +49,9 @@
             .mtd-doc-header { margin-bottom: 3px; }
             .mtd-doc-header .mtd-bl-no-line,
             .mtd-doc-header .mtd-title-wrap { font-size: 8.5pt; }
+            .mtd-doc-header .mtd-bl-no-line .mtd-draft-inline:not(.hidden) {
+                font-weight: 900;
+            }
             .mtd-table td, .mtd-table th,
             .cargo-table td, .cargo-table th,
             .bottom-section td, .bottom-section th {
@@ -124,6 +127,13 @@
             line-height: 1.4;
             flex: 1 1 auto;
             text-align: left;
+        }
+        .mtd-doc-header .mtd-bl-no-line .mtd-draft-inline {
+            font-weight: 900;
+            margin-right: 0.35em;
+        }
+        .mtd-doc-header .mtd-bl-no-line .mtd-draft-inline.hidden {
+            display: none;
         }
         .mtd-doc-header .mtd-title-wrap {
             text-align: right;
@@ -319,32 +329,6 @@
         .edit-badge { display: none; font-size: 11px; color: #2563eb; font-family: sans-serif; margin-left: 8px; }
         .edit-mode .edit-badge { display: inline; }
 
-        .draft-banner {
-            text-align: center;
-            font-weight: 800;
-            font-size: 22px;
-            letter-spacing: 0.35em;
-            color: #b45309;
-            background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
-            border: 2px solid #ea580c;
-            padding: 10px 12px;
-            margin: 0 0 10px;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-        .draft-banner.hidden { display: none; }
-        @media print {
-            .draft-banner.hidden { display: none !important; }
-            .draft-banner:not(.hidden) {
-                display: block !important;
-                visibility: visible !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-                font-size: 18px;
-                padding: 8px 10px;
-                margin-bottom: 6px;
-            }
-        }
-
         .hbl-saved-notice {
             max-width: 900px;
             margin: 0 auto 12px;
@@ -398,24 +382,16 @@
             <button class="btn btn-secondary" id="saveLocalBtn" onclick="saveDocumentLocally()" style="padding: 8px 16px; font-size: 13px;" title="Save all fields in this browser so you can restore later">
                 <i class="fas fa-save"></i> Save
             </button>
-            <button class="btn btn-primary" id="savePdfBtn" onclick="saveAsPdf()" style="padding: 8px 16px; font-size: 13px;" title="Opens print dialog — choose Save as PDF or Microsoft Print to PDF">
-                <i class="fas fa-file-pdf"></i> Save as PDF
-            </button>
-            <button class="btn btn-secondary" onclick="openSavedPdfFile()" style="padding: 8px 16px; font-size: 13px;" title="Open a PDF file from your computer">
-                <i class="fas fa-folder-open"></i> Open PDF
-            </button>
             <button class="btn btn-primary" id="printBtn" onclick="printDoc()" style="padding: 8px 16px; font-size: 13px;">
                 <i class="fas fa-print"></i> Print
             </button>
         </div>
-        <input type="file" id="hblPdfFileInput" class="no-print" accept="application/pdf,.pdf" style="display:none" tabindex="-1">
 
         <!-- MTD Document Sheet (print/PDF capture area) -->
         <div id="hblPrintArea">
-        <div id="draftBanner" class="draft-banner hidden" aria-hidden="true">DRAFT</div>
         <div class="mtd-doc-header">
             <div class="mtd-bl-no-line">
-                <span>MTD BL NO:</span>
+                <span id="mtdDraftPrefix" class="mtd-draft-inline hidden" aria-hidden="true">Draft</span><span>MTD BL NO:</span>
                 <span class="editable" id="mtdBlNo"></span>
             </div>
             <div class="mtd-title-wrap">MULTI-MODAL TRANSPORT DOCUMENT<br><span id="blTypeLabel">SEAWAY BILL OF LADING</span></div>
@@ -633,7 +609,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=15"></script>
+    <script src="js/hbl-document.js?v=16"></script>
 </body>
 
 </html>

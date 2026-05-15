@@ -133,35 +133,6 @@ function discardSavedDraft() {
     updateSavedDraftNotice();
 }
 
-function openSavedPdfFile() {
-    const inp = document.getElementById('hblPdfFileInput');
-    if (!inp) return;
-    inp.onchange = function onHblPdfPicked(ev) {
-        const f = ev.target.files && ev.target.files[0];
-        inp.onchange = null;
-        inp.value = '';
-        if (!f) return;
-        const url = URL.createObjectURL(f);
-        window.open(url, '_blank', 'noopener,noreferrer');
-        setTimeout(() => URL.revokeObjectURL(url), 600000);
-    };
-    inp.click();
-}
-
-function pdfSuggestedTitle() {
-    const raw = (document.getElementById('mtdBlNo')?.textContent || 'HBL').trim() || 'HBL';
-    const safe = raw.replace(/[^\w.\-]+/g, '_').slice(0, 48);
-    const type = document.getElementById('blTypeSelect').value;
-    const typePart = type === 'seaway' ? 'Seaway' : type === 'draft' ? 'Draft' : 'Original';
-    return `MTD-HBL-${safe}-${typePart}`;
-}
-
-function saveAsPdf() {
-    if (isEditing) toggleEdit();
-    document.title = pdfSuggestedTitle();
-    window.print();
-}
-
 function applyWatermarkVisibility() {
     const watermark = document.getElementById('watermark');
     const blType = document.getElementById('blTypeSelect').value;
@@ -295,7 +266,7 @@ function switchBlType(type) {
     const watermark = document.getElementById('watermark');
     const toggleWrap = document.getElementById('watermarkToggleWrap');
     const toggle = document.getElementById('watermarkToggle');
-    const draftBanner = document.getElementById('draftBanner');
+    const draftPrefix = document.getElementById('mtdDraftPrefix');
 
     if (type === 'seaway') {
         label.textContent = 'SEAWAY BILL OF LADING';
@@ -311,10 +282,10 @@ function switchBlType(type) {
         watermark.classList.add('hidden');
     }
 
-    if (draftBanner) {
+    if (draftPrefix) {
         const showDraft = type === 'draft';
-        draftBanner.classList.toggle('hidden', !showDraft);
-        draftBanner.setAttribute('aria-hidden', showDraft ? 'false' : 'true');
+        draftPrefix.classList.toggle('hidden', !showDraft);
+        draftPrefix.setAttribute('aria-hidden', showDraft ? 'false' : 'true');
     }
 }
 
