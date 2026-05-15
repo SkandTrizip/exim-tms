@@ -81,9 +81,12 @@
             .mtd-grid-frame {
                 display: block !important;
             }
-            .hbl-page-2 {
+            .hbl-page-2:not(.hidden) {
                 page-break-before: always;
                 break-before: page;
+            }
+            #hblPage2.hidden {
+                display: none !important;
             }
             #hblCargoPage1Box {
                 page-break-inside: avoid;
@@ -106,7 +109,6 @@
                 padding: 0 !important;
                 font-size: 11px !important;
                 line-height: 1.35 !important;
-                white-space: pre-line !important;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
             }
@@ -119,14 +121,12 @@
                 overflow: hidden !important;
                 font-size: 11px !important;
                 line-height: 1.35 !important;
-                white-space: pre-line !important;
                 box-sizing: border-box !important;
                 padding: 2px 4px !important;
             }
             #hblPage2 .cargo-table tbody tr.cargo-data-row > td {
                 font-size: 11px !important;
                 line-height: 1.35 !important;
-                white-space: pre-line !important;
             }
             .cargo-table tfoot td { padding: 2px 4px; font-size: 8pt; font-style: normal; }
             .bottom-section td { font-size: 8pt; }
@@ -354,6 +354,9 @@
             margin-top: 8px;
             padding-top: 8px;
             border-top: 2px dashed #cbd5e1;
+        }
+        #hblPage2.hidden {
+            display: none !important;
         }
         .hbl-page-label {
             font-size: 12px;
@@ -777,12 +780,19 @@
                 </tr>
             </table>
             </div>
+            <div id="hblEndOfBlAnchorPage1">
+                <div id="hblEndOfBlBlock">
+                <div class="end-of-bl">
+                    <span>******************END OF BL : <span id="endOfBlNo"></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;******************</span>
+                </div>
+                </div>
+            </div>
             </div>
 
 
         </div>
 
-        <div id="hblPage2" class="hbl-page-sheet hbl-page-2">
+        <div id="hblPage2" class="hbl-page-sheet hbl-page-2 hidden" aria-hidden="true">
         <div class="mtd-sheet">
             <div class="watermark hbl-page2-watermark" id="watermarkPage2">SEAWAY BL</div>
             <div class="mtd-grid-frame">
@@ -825,18 +835,14 @@
             </div>
         </div>
 
-        <div id="hblEndOfBlBlock">
-        <div class="end-of-bl">
-            <span>******************END OF BL : <span id="endOfBlNo"></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;******************</span>
-        </div>
-        </div>
+        <div id="hblEndOfBlAnchorPage2"></div>
         </div>
     </div>
     </div>
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=36"></script>
+    <script src="js/hbl-document.js?v=37"></script>
 </body>
 
 </html>

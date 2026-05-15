@@ -225,40 +225,27 @@ function resolveCargoTextEl(elOrPreviewId) {
     return elOrPreviewId.querySelector?.('.cargo-preview-inner') || elOrPreviewId;
 }
 
-function extractCargoTextWithNewlines(el) {
-    if (!el) return '';
-    const blocks = el.querySelectorAll(':scope > div, :scope > p');
-    if (blocks.length > 0) {
-        return Array.from(blocks)
-            .map((b) => (b.innerText || b.textContent || '').replace(/\u00a0/g, ' '))
-            .join('\n');
-    }
-    return (el.innerText || el.textContent || '').replace(/\u00a0/g, ' ').replace(/\r\n/g, '\n');
-}
-
-function trimCargoCellEdges(text) {
-    return (text || '').replace(/^[ \t]+/, '').replace(/[ \t]+$/, '');
+function normalizeCargoText(text) {
+    return (text || '').replace(/\u00a0/g, ' ').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
 function getCargoCellPlainText(elOrPreviewId) {
     const el = resolveCargoTextEl(elOrPreviewId);
     if (!el) return '';
-    return trimCargoCellEdges(extractCargoTextWithNewlines(el));
+    return normalizeCargoText(el.innerText || el.textContent || '').trim();
 }
 
 function getCargoCellRawText(elOrPreviewId) {
     const el = resolveCargoTextEl(elOrPreviewId);
     if (!el) return '';
-    return extractCargoTextWithNewlines(el);
+    return normalizeCargoText(el.innerText || el.textContent || '');
 }
 
 function setCargoCellPlainText(el, text) {
     if (!el) return;
-    const normalized = (text || '').replace(/\r\n/g, '\n');
-    const next = normalized.length && normalized.replace(/[\u00a0 \t\n\r]/g, '').length
-        ? normalized
-        : '\u00a0';
-    if ((el.textContent || '').replace(/\r\n/g, '\n') === next) return;
+    const normalized = normalizeCargoText(text);
+    const next = normalized.length ? normalized : '\u00a0';
+    if (el.textContent === next) return;
     el.textContent = next;
 }
 
@@ -275,9 +262,7 @@ function measureCargoCellInnerBox(cellEl) {
     };
 }
 
-function truncateTextToFitCell(text, previewCellEl) {
-    if (!text || !previewCellEl) return '';
-    const { width, height, style } = measureCargoCellInnerBox(previewCellEl);
+function createCargoMeasureEl(width, style) {
     const measure = document.createElement('div');
     measure.style.cssText = [
         'position:fixed', 'left:-9999px', 'top:0', 'visibility:hidden',
@@ -287,36 +272,84 @@ function truncateTextToFitCell(text, previewCellEl) {
         `font-weight:${style.fontWeight}`, `padding:0`
     ].join(';');
     document.body.appendChild(measure);
+    return measure;
+}
 
+function measureCargoTextHeight(text, measure) {
+    measure.textContent = text.length ? text : ' ';
+    return measure.scrollHeight;
+}
+
+/** Word-wrap split for one line that exceeds the box height. */
+function truncateLineToFitHeight(line, measure, maxHeight) {
+    if (!line) return '';
     let fit = '';
-    const paragraphs = text.split('\n');
-    for (let p = 0; p < paragraphs.length; p++) {
-        const para = paragraphs[p];
-        const parts = para.length ? para.split(/(\s+)/) : [''];
-        for (const part of parts) {
-            if (!part) continue;
-            const trial = fit + part;
-            measure.textContent = trial;
-            if (measure.scrollHeight > height && fit.trim()) break;
-            fit = trial;
-        }
-        if (measure.scrollHeight > height && fit.trim()) break;
-        if (p < paragraphs.length - 1) {
-            const withNl = fit + '\n';
-            measure.textContent = withNl;
-            if (measure.scrollHeight > height && fit.trim()) break;
-            fit = withNl;
-        }
+    const parts = line.split(/(\s+)/);
+    for (const part of parts) {
+        if (!part) continue;
+        const trial = fit + part;
+        measure.textContent = trial;
+        if (measure.scrollHeight > maxHeight && fit.trim()) break;
+        fit = trial;
+    }
+    return fit;
+}
+
+/**
+ * Split cargo for page 1 / page 2 at whole-line boundaries when possible.
+ * Multi-line input keeps one line per row; only a single over-tall line is word-split.
+ */
+function splitCargoTextForPreview(text, previewCellEl) {
+    const normalized = normalizeCargoText(text);
+    if (!normalized || !previewCellEl) {
+        return { head: '', tail: '', splitAtLineBoundary: true };
     }
 
+    const { width, height, style } = measureCargoCellInnerBox(previewCellEl);
+    const measure = createCargoMeasureEl(width, style);
+    const lines = normalized.split('\n');
+
+    let fitLineCount = 0;
+    for (let i = 1; i <= lines.length; i++) {
+        const trialHead = lines.slice(0, i).join('\n');
+        if (measureCargoTextHeight(trialHead, measure) > height) break;
+        fitLineCount = i;
+    }
+
+    if (fitLineCount > 0) {
+        const head = lines.slice(0, fitLineCount).join('\n');
+        const tail = lines.slice(fitLineCount).join('\n');
+        document.body.removeChild(measure);
+        return { head, tail, splitAtLineBoundary: true };
+    }
+
+    const firstLine = lines[0] ?? '';
+    const head = truncateLineToFitHeight(firstLine, measure, height);
+    const firstRemainder = firstLine.slice(head.length);
+    const tailParts = [];
+    if (firstRemainder) tailParts.push(firstRemainder);
+    if (lines.length > 1) tailParts.push(lines.slice(1).join('\n'));
+    const tail = tailParts.join('\n');
     document.body.removeChild(measure);
-    return fit.replace(/\n+$/, '');
+    return { head, tail, splitAtLineBoundary: false };
+}
+
+function joinCargoHeadTail(head, tail, splitAtLineBoundary) {
+    const h = normalizeCargoText(head);
+    const t = normalizeCargoText(tail);
+    if (!h) return t;
+    if (!t) return h;
+    if (!splitAtLineBoundary) return h + t;
+    if (h.endsWith('\n') || t.startsWith('\n')) return h + t;
+    return `${h}\n${t}`;
 }
 
 function getCargoFullText(page2Id, previewId) {
+    const preview = getCargoPreviewCell(previewId);
     const head = getCargoCellRawText(previewId);
     const tail = getCargoCellRawText(document.getElementById(page2Id));
-    return head + tail;
+    const atLine = preview?.dataset.cargoSplitAtLine !== '0';
+    return joinCargoHeadTail(head, tail, atLine);
 }
 
 function setCargoSplit(page2Id, previewId, fullText) {
@@ -324,24 +357,39 @@ function setCargoSplit(page2Id, previewId, fullText) {
     const editor = getCargoPreviewEditor(previewId);
     const page2 = document.getElementById(page2Id);
     if (!preview || !editor || !page2) return;
-    const head = truncateTextToFitCell(fullText || '', preview);
-    const tail = fullText.length > head.length ? fullText.slice(head.length) : '';
+    const { head, tail, splitAtLineBoundary } = splitCargoTextForPreview(fullText || '', preview);
     setCargoCellPlainText(editor, head);
     setCargoCellPlainText(page2, tail);
     preview.dataset.shownLen = String(head.length);
+    preview.dataset.cargoSplitAtLine = splitAtLineBoundary ? '1' : '0';
 }
 
-function cargoFieldHasOverflow(page2Id, previewId) {
-    return getCargoFullText(page2Id, previewId).length > getCargoCellPlainText(previewId).length;
+function cargoFieldHasOverflow(page2Id) {
+    const page2 = document.getElementById(page2Id);
+    return getCargoCellPlainText(page2).length > 0;
+}
+
+function hasAnyCargoOverflow() {
+    return HBL_CARGO_PREVIEW_MAP.some(([page2Id]) => cargoFieldHasOverflow(page2Id));
+}
+
+function placeEndOfBlBlock(anyOverflow) {
+    const endBlock = document.getElementById('hblEndOfBlBlock');
+    const anchor = document.getElementById(anyOverflow ? 'hblEndOfBlAnchorPage2' : 'hblEndOfBlAnchorPage1');
+    if (endBlock && anchor && endBlock.parentElement !== anchor) {
+        anchor.appendChild(endBlock);
+    }
 }
 
 function updateCargoOverflowState() {
     const box = document.getElementById('hblCargoPage1Box');
     const note = document.getElementById('hblCargoContinuedNote');
-    const anyOverflow = HBL_CARGO_PREVIEW_MAP.some(([page2Id, previewId]) =>
-        cargoFieldHasOverflow(page2Id, previewId)
-    );
+    const page2 = document.getElementById('hblPage2');
+    const anyOverflow = hasAnyCargoOverflow();
     box?.classList.toggle('has-cargo-overflow', anyOverflow);
+    page2?.classList.toggle('hidden', !anyOverflow);
+    page2?.setAttribute('aria-hidden', anyOverflow ? 'false' : 'true');
+    placeEndOfBlBlock(anyOverflow);
     if (note) {
         note.classList.toggle('hidden', !anyOverflow);
         note.setAttribute('aria-hidden', anyOverflow ? 'false' : 'true');
@@ -392,9 +440,10 @@ function splitCargoFromStoredFull() {
     HBL_CARGO_PREVIEW_MAP.forEach(([page2Id, previewId]) => {
         const page2 = document.getElementById(page2Id);
         if (!page2) return;
-        const full = getCargoCellPlainText(page2);
+        const full = getCargoCellRawText(page2);
         setCargoSplit(page2Id, previewId, full);
     });
+    updateCargoOverflowState();
     hblCargoSyncLock = false;
 }
 
@@ -408,16 +457,17 @@ function flushPreviewCargo(previewId) {
 
     hblCargoSyncLock = true;
     const rawHead = getCargoCellRawText(editor);
-    let tail = getCargoCellPlainText(page2);
-    const truncated = truncateTextToFitCell(rawHead, preview);
+    let tail = getCargoCellRawText(page2);
+    const full = joinCargoHeadTail(rawHead, tail, preview.dataset.cargoSplitAtLine !== '0');
+    const { head, tail: newTail, splitAtLineBoundary } = splitCargoTextForPreview(full, preview);
 
-    if (truncated.length < rawHead.length) {
-        tail = rawHead.slice(truncated.length) + tail;
-        setCargoCellPlainText(editor, truncated);
-        setCargoCellPlainText(page2, tail);
+    if (head !== rawHead || newTail !== tail) {
+        setCargoCellPlainText(editor, head);
+        setCargoCellPlainText(page2, newTail);
     }
 
-    preview.dataset.shownLen = String(truncated.length);
+    preview.dataset.shownLen = String(head.length);
+    preview.dataset.cargoSplitAtLine = splitAtLineBoundary ? '1' : '0';
     updateCargoOverflowState();
     hblCargoSyncLock = false;
 }
