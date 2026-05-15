@@ -70,18 +70,22 @@
                 overflow: hidden;
                 font-size: 8pt;
             }
-            .hbl-cargo-page-block {
+            .hbl-cargo-continuation {
                 page-break-before: always;
                 break-before: page;
             }
-            .hbl-cargo-page-block .cargo-table thead {
+            .hbl-primary-page.hbl-has-continuations {
+                page-break-after: always;
+                break-after: page;
+            }
+            .hbl-cargo-continuation .cargo-table thead {
                 display: table-header-group;
             }
-            .hbl-cargo-page-block .cargo-table tbody tr.cargo-data-row td {
-                height: auto;
+            .hbl-cargo-continuation .cargo-table tbody tr.cargo-data-row td {
+                height: 58px;
                 min-height: 58px;
-                max-height: none;
-                overflow: visible;
+                max-height: 58px;
+                overflow: hidden;
             }
             .cargo-table tfoot td { padding: 2px 4px; font-size: 8pt; font-style: normal; }
             .bottom-section td { font-size: 8pt; }
@@ -291,13 +295,16 @@
             white-space: pre-line;
             box-sizing: border-box;
         }
-        .hbl-cargo-page-block .end-of-bl {
-            margin-top: 0;
+        .hbl-cargo-continuations { display: none; }
+        .hbl-print-paginated .hbl-cargo-continuations { display: block; }
+        .hbl-print-paginated #hblEndOfBlBlock.hbl-detached-tail,
+        .hbl-print-paginated #cargoTable tfoot.hbl-hide-on-print-split {
+            display: none !important;
         }
-        @media print {
-            .mtd-grid-frame > .mtd-table { order: 1; }
-            .mtd-grid-frame > #hblBottomSection { order: 2; }
-            .mtd-grid-frame > .hbl-cargo-page-block { order: 3; }
+        #hblPrintArea.hbl-measure-print .cargo-table tbody tr.cargo-data-row td {
+            height: 58px;
+            min-height: 58px;
+            max-height: 58px;
         }
         .cargo-table thead th {
             border: 1px solid #000;
@@ -566,7 +573,7 @@
                         <td class="editable" id="cargoMeasurement">&nbsp;</td>
                     </tr>
                 </tbody>
-                <tfoot>
+                <tfoot id="cargoTableFoot">
                     <tr>
                         <td colspan="5" class="particulars-note">
                             Particulars above furnished by consignee/consignor
@@ -575,12 +582,6 @@
                 </tfoot>
             </table>
             </section>
-
-            <div id="hblEndOfBlBlock">
-            <div class="end-of-bl">
-                <span>******************END OF BL : <span id="endOfBlNo"></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;******************</span>
-            </div>
-            </div>
             </div>
 
             <!-- Bottom Section -->
@@ -646,13 +647,21 @@
             </div>
 
         </div>
+
+        <div id="hblEndOfBlBlock">
+        <div class="end-of-bl">
+            <span>******************END OF BL : <span id="endOfBlNo"></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;******************</span>
         </div>
+        </div>
+        </div>
+
+        <div id="hblCargoContinuations" class="hbl-cargo-continuations" aria-hidden="true"></div>
         </div>
     </div>
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=19"></script>
+    <script src="js/hbl-document.js?v=21"></script>
 </body>
 
 </html>

@@ -177,8 +177,225 @@ function toggleWatermark(enabled) {
     applyWatermarkVisibility();
 }
 
+const HBL_CARGO_FIELD_IDS = [
+    'containerNos', 'marksNumber', 'cargoDescription', 'cargoWeight', 'cargoMeasurement'
+];
+
+let hblPaginationBackup = null;
+
+function getCargoCellPlainText(el) {
+    if (!el) return '';
+    return (el.innerText || el.textContent || '').replace(/\u00a0/g, ' ').trim();
+}
+
+function setCargoCellPlainText(el, text) {
+    if (!el) return;
+    el.textContent = text && text.trim() ? text : '\u00a0';
+}
+
+function getCargoContentHeightPx() {
+    const printArea = document.getElementById('hblPrintArea');
+    const sample = document.querySelector('#cargoTable .cargo-data-row td');
+    if (!sample) return 58;
+    printArea?.classList.add('hbl-measure-print');
+    const h = sample.clientHeight;
+    printArea?.classList.remove('hbl-measure-print');
+    return h > 0 ? h : 58;
+}
+
+function splitTextIntoChunks(text, maxWidth, maxHeight, style) {
+    if (!text) return [''];
+    const measure = document.createElement('div');
+    measure.style.cssText = [
+        'position:fixed', 'left:-9999px', 'top:0', 'visibility:hidden',
+        'white-space:pre-line', 'overflow-wrap:break-word', 'word-wrap:break-word',
+        `width:${maxWidth}px`, `font-size:${style.fontSize}`,
+        `font-family:${style.fontFamily}`, `line-height:${style.lineHeight}`,
+        `font-weight:${style.fontWeight}`, `padding:${style.padding}`
+    ].join(';');
+    document.body.appendChild(measure);
+
+    const chunks = [];
+    let current = '';
+    const paragraphs = text.split('\n');
+
+    const pushChunk = () => {
+        const trimmed = current.replace(/\n+$/, '');
+        if (trimmed || chunks.length === 0) chunks.push(trimmed);
+        current = '';
+    };
+
+    for (let p = 0; p < paragraphs.length; p++) {
+        const para = paragraphs[p];
+        const parts = para.length ? para.split(/(\s+)/) : [''];
+        for (const part of parts) {
+            if (!part) continue;
+            const trial = current + part;
+            measure.textContent = trial;
+            if (measure.scrollHeight > maxHeight && current.trim()) {
+                pushChunk();
+                current = part.replace(/^\s+/, '') || part;
+            } else {
+                current = trial;
+            }
+        }
+        if (p < paragraphs.length - 1) current += '\n';
+    }
+    if (current.trim() || chunks.length === 0) pushChunk();
+
+    document.body.removeChild(measure);
+    return chunks.length ? chunks : [''];
+}
+
+function splitCargoFieldIntoChunks(fieldId, maxContentHeight) {
+    const el = document.getElementById(fieldId);
+    if (!el) return [''];
+    const text = getCargoCellPlainText(el);
+    if (!text) return [''];
+    const cs = window.getComputedStyle(el);
+    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    const innerWidth = Math.max(20, el.clientWidth - padX);
+    const innerHeight = Math.max(12, maxContentHeight - padY);
+    return splitTextIntoChunks(text, innerWidth, innerHeight, {
+        fontSize: cs.fontSize,
+        fontFamily: cs.fontFamily,
+        lineHeight: cs.lineHeight,
+        fontWeight: cs.fontWeight,
+        padding: `${cs.paddingTop} ${cs.paddingRight} ${cs.paddingBottom} ${cs.paddingLeft}`
+    });
+}
+
+function buildContinuationCargoTable(chunksByField, pageIndex, includeParticulars) {
+    const table = document.createElement('table');
+    table.className = 'cargo-table';
+    table.innerHTML = `
+        <colgroup>
+            <col style="width: 12%;"><col style="width: 12%;"><col style="width: 44%;">
+            <col style="width: 16%;"><col style="width: 16%;">
+        </colgroup>
+        <thead><tr>
+            <th>Container No(s)</th><th>Marks &amp; Number</th>
+            <th>Number of packages, Kind of packages, General description of goods</th>
+            <th>Gross Weight</th><th>Measurement</th>
+        </tr></thead>
+        <tbody><tr class="cargo-data-row"></tr></tbody>
+        ${includeParticulars ? `<tfoot><tr><td colspan="5" class="particulars-note">Particulars above furnished by consignee/consignor</td></tr></tfoot>` : ''}`;
+    const row = table.querySelector('tr.cargo-data-row');
+    HBL_CARGO_FIELD_IDS.forEach((id) => {
+        const td = document.createElement('td');
+        const arr = chunksByField[id] || [''];
+        const val = arr[pageIndex] || '';
+        td.textContent = val.trim() ? val : '\u00a0';
+        row.appendChild(td);
+    });
+    return table;
+}
+
+function cloneWatermarkForContinuation() {
+    const src = document.getElementById('watermark');
+    if (!src) return null;
+    const w = src.cloneNode(true);
+    w.removeAttribute('id');
+    if (src.classList.contains('hidden')) w.classList.add('hidden');
+    return w;
+}
+
+function prepareHblPrintPagination() {
+    cleanupHblPrintPagination();
+
+    const printArea = document.getElementById('hblPrintArea');
+    const primaryPage = document.getElementById('hblPrimaryPage');
+    const endBlock = document.getElementById('hblEndOfBlBlock');
+    const contHost = document.getElementById('hblCargoContinuations');
+    const cargoFoot = document.getElementById('cargoTableFoot');
+    if (!printArea || !contHost) return;
+
+    const maxContentHeight = getCargoContentHeightPx();
+    const chunksByField = {};
+    HBL_CARGO_FIELD_IDS.forEach((id) => {
+        chunksByField[id] = splitCargoFieldIntoChunks(id, maxContentHeight);
+    });
+    const pageCount = Math.max(1, ...HBL_CARGO_FIELD_IDS.map((id) => chunksByField[id].length));
+
+    if (pageCount <= 1) return;
+
+    hblPaginationBackup = {
+        cellTexts: {},
+        endParent: endBlock?.parentNode,
+        endNext: endBlock?.nextSibling
+    };
+    HBL_CARGO_FIELD_IDS.forEach((id) => {
+        const el = document.getElementById(id);
+        hblPaginationBackup.cellTexts[id] = el ? el.innerHTML : '';
+    });
+
+    HBL_CARGO_FIELD_IDS.forEach((id) => {
+        setCargoCellPlainText(document.getElementById(id), chunksByField[id][0] || '');
+    });
+
+    printArea.classList.add('hbl-print-paginated');
+    primaryPage?.classList.add('hbl-has-continuations');
+    endBlock?.classList.add('hbl-detached-tail');
+    cargoFoot?.classList.add('hbl-hide-on-print-split');
+
+    for (let p = 1; p < pageCount; p++) {
+        const isLast = p === pageCount - 1;
+        const page = document.createElement('div');
+        page.className = 'hbl-cargo-continuation';
+
+        const sheet = document.createElement('div');
+        sheet.className = 'mtd-sheet';
+        const wm = cloneWatermarkForContinuation();
+        if (wm) sheet.appendChild(wm);
+
+        const frame = document.createElement('div');
+        frame.className = 'mtd-grid-frame';
+        frame.appendChild(buildContinuationCargoTable(chunksByField, p, isLast));
+        sheet.appendChild(frame);
+        page.appendChild(sheet);
+
+        if (isLast && endBlock) page.appendChild(endBlock);
+
+        contHost.appendChild(page);
+    }
+
+    contHost.setAttribute('aria-hidden', 'false');
+}
+
+function cleanupHblPrintPagination() {
+    const printArea = document.getElementById('hblPrintArea');
+    const contHost = document.getElementById('hblCargoContinuations');
+    const primaryPage = document.getElementById('hblPrimaryPage');
+    const endBlock = document.getElementById('hblEndOfBlBlock');
+    const cargoFoot = document.getElementById('cargoTableFoot');
+
+    if (hblPaginationBackup) {
+        HBL_CARGO_FIELD_IDS.forEach((id) => {
+            const el = document.getElementById(id);
+            if (el && hblPaginationBackup.cellTexts[id] !== undefined) {
+                el.innerHTML = hblPaginationBackup.cellTexts[id];
+            }
+        });
+        if (endBlock && hblPaginationBackup.endParent) {
+            hblPaginationBackup.endParent.insertBefore(endBlock, hblPaginationBackup.endNext);
+        }
+        hblPaginationBackup = null;
+    }
+
+    if (contHost) {
+        contHost.innerHTML = '';
+        contHost.setAttribute('aria-hidden', 'true');
+    }
+    printArea?.classList.remove('hbl-print-paginated', 'hbl-measure-print');
+    primaryPage?.classList.remove('hbl-has-continuations');
+    endBlock?.classList.remove('hbl-detached-tail');
+    cargoFoot?.classList.remove('hbl-hide-on-print-split');
+}
+
 function printDoc() {
     if (isEditing) toggleEdit();
+    prepareHblPrintPagination();
     document.title = '\u00A0';
     window.print();
 }
@@ -207,7 +424,9 @@ function toggleEdit() {
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
+    window.addEventListener('beforeprint', prepareHblPrintPagination);
     window.addEventListener('afterprint', function () {
+        cleanupHblPrintPagination();
         document.title = HBL_PAGE_TITLE;
     });
 
