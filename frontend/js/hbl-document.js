@@ -212,9 +212,53 @@ function getCargoCellPlainText(el) {
     return (el.innerText || el.textContent || '').replace(/\u00a0/g, ' ').trim();
 }
 
+function getCargoCellRawText(el) {
+    if (!el) return '';
+    return (el.innerText || el.textContent || '').replace(/\u00a0/g, ' ');
+}
+
 function setCargoCellPlainText(el, text) {
     if (!el) return;
-    el.textContent = text && text.trim() ? text : '\u00a0';
+    const next = text && text.trim() ? text : '\u00a0';
+    if (el.textContent === next || getCargoCellRawText(el) === text) return;
+    el.textContent = next;
+}
+
+function saveCaretOffset(el) {
+    const sel = window.getSelection();
+    if (!sel || sel.rangeCount === 0 || !el.contains(sel.anchorNode)) return null;
+    const range = sel.getRangeAt(0);
+    const pre = range.cloneRange();
+    pre.selectNodeContents(el);
+    pre.setEnd(range.endContainer, range.endOffset);
+    return pre.toString().length;
+}
+
+function restoreCaretOffset(el, offset) {
+    if (offset == null || offset < 0) return;
+    const sel = window.getSelection();
+    if (!sel) return;
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
+    let remaining = offset;
+    let node = walker.nextNode();
+    while (node) {
+        const len = node.textContent.length;
+        if (remaining <= len) {
+            const range = document.createRange();
+            range.setStart(node, remaining);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            return;
+        }
+        remaining -= len;
+        node = walker.nextNode();
+    }
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
 }
 
 function measureCargoCellInnerBox(el) {
@@ -334,17 +378,20 @@ function syncPreviewCargo(previewId) {
     const printArea = document.getElementById('hblPrintArea');
     printArea?.classList.add('hbl-measure-preview');
 
-    let head = getCargoCellPlainText(preview);
+    const rawHead = getCargoCellRawText(preview);
     let tail = getCargoCellPlainText(page2);
-    const truncated = truncateTextToFitCell(head, preview);
-    if (truncated.length < head.length) {
-        tail = head.slice(truncated.length) + tail;
-        head = truncated;
+    const truncated = truncateTextToFitCell(rawHead, preview);
+
+    if (truncated.length < rawHead.length) {
+        const caret = saveCaretOffset(preview);
+        tail = rawHead.slice(truncated.length) + tail;
+        setCargoCellPlainText(preview, truncated);
+        setCargoCellPlainText(page2, tail);
+        restoreCaretOffset(preview, Math.min(caret ?? truncated.length, truncated.length));
     }
-    setCargoCellPlainText(preview, head);
-    setCargoCellPlainText(page2, tail);
-    preview.dataset.shownLen = String(head.length);
-    markPreviewOverflow(preview, head + tail, head);
+
+    preview.dataset.shownLen = String(truncated.length);
+    markPreviewOverflow(preview, rawHead + tail, truncated);
 
     printArea?.classList.remove('hbl-measure-preview');
     hblCargoSyncLock = false;
