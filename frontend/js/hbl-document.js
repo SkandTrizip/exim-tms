@@ -393,11 +393,24 @@ function splitAllCargoFields(options = {}) {
     hblCargoSyncLock = false;
 }
 
+/** Print exactly what is on screen — do not re-split or change cargo text before PDF. */
 function prepareCargoForPrint() {
-    const printArea = document.getElementById('hblPrintArea');
-    printArea?.classList.add('hbl-print-measure');
-    flushAllPreviewCargo();
-    splitAllCargoFields({ usePrintMetrics: true, keepMeasure: true });
+    document.getElementById('hblPrintArea')?.classList.add('hbl-print-wysiwyg');
+}
+
+function finishEditingWithoutResplit() {
+    if (!isEditing) return;
+    isEditing = false;
+    const sheets = document.querySelectorAll('#hblPrintArea .mtd-sheet');
+    const btn = document.getElementById('editBtn');
+    const editables = document.querySelectorAll('#hblPrintArea .editable');
+    sheets.forEach((sheet) => sheet.classList.remove('edit-mode'));
+    if (btn) {
+        btn.innerHTML = '<i class="fas fa-pen"></i> Edit';
+        btn.style.background = '';
+        btn.style.color = '';
+    }
+    editables.forEach((el) => el.removeAttribute('contenteditable'));
 }
 
 function splitCargoFromStoredFull() {
@@ -501,7 +514,7 @@ function bindCargoPreviewSync() {
 }
 
 function printDoc() {
-    if (isEditing) toggleEdit();
+    finishEditingWithoutResplit();
     prepareCargoForPrint();
     document.title = '\u00A0';
     window.print();
@@ -543,7 +556,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     bindCargoPreviewSync();
     window.addEventListener('beforeprint', prepareCargoForPrint);
     window.addEventListener('afterprint', function () {
-        document.getElementById('hblPrintArea')?.classList.remove('hbl-print-measure');
+        const printArea = document.getElementById('hblPrintArea');
+        printArea?.classList.remove('hbl-print-measure', 'hbl-print-wysiwyg');
         document.title = HBL_PAGE_TITLE;
     });
 

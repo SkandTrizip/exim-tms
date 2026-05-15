@@ -95,8 +95,9 @@
                 max-height: var(--hbl-cargo-row-h, 180px) !important;
                 overflow: hidden !important;
                 vertical-align: top !important;
-                padding: 2px 4px !important;
-                font-size: 8pt;
+                padding: 0 !important;
+                font-size: 11px !important;
+                line-height: 1.35 !important;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
             }
@@ -107,9 +108,14 @@
                 min-height: 0 !important;
                 max-height: 100% !important;
                 overflow: hidden !important;
-                font-size: 8pt !important;
-                line-height: 1.22 !important;
+                font-size: 11px !important;
+                line-height: 1.35 !important;
                 box-sizing: border-box !important;
+                padding: 2px 4px !important;
+            }
+            #hblPage2 .cargo-table tbody tr.cargo-data-row > td {
+                font-size: 11px !important;
+                line-height: 1.35 !important;
             }
             .cargo-table tfoot td { padding: 2px 4px; font-size: 8pt; font-style: normal; }
             .bottom-section td { font-size: 8pt; }
@@ -848,7 +854,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=32"></script>
+    <script src="js/hbl-document.js?v=33"></script>
 </body>
 
 </html>
