@@ -318,11 +318,66 @@
         .edit-mode .editable:focus { outline: 2px solid #3b82f6; background: #dbeafe; }
         .edit-badge { display: none; font-size: 11px; color: #2563eb; font-family: sans-serif; margin-left: 8px; }
         .edit-mode .edit-badge { display: inline; }
+
+        .draft-banner {
+            text-align: center;
+            font-weight: 800;
+            font-size: 22px;
+            letter-spacing: 0.35em;
+            color: #b45309;
+            background: linear-gradient(180deg, #fff7ed 0%, #ffedd5 100%);
+            border: 2px solid #ea580c;
+            padding: 10px 12px;
+            margin: 0 0 10px;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        .draft-banner.hidden { display: none; }
+        @media print {
+            .draft-banner.hidden { display: none !important; }
+            .draft-banner:not(.hidden) {
+                display: block !important;
+                visibility: visible !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+                font-size: 18px;
+                padding: 8px 10px;
+                margin-bottom: 6px;
+            }
+        }
+
+        .hbl-saved-notice {
+            max-width: 900px;
+            margin: 0 auto 12px;
+            padding: 12px 14px;
+            background: #fefce8;
+            border: 1px solid #eab308;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #713f12;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .hbl-saved-notice.visible { display: flex; }
+        .hbl-saved-notice .hbl-saved-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     </style>
 </head>
 
 <body>
     <div class="mtd-page">
+        <div id="savedDraftNotice" class="hbl-saved-notice no-print" role="status">
+            <span id="savedDraftNoticeText"></span>
+            <div class="hbl-saved-actions">
+                <button type="button" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="restoreSavedDraft()">
+                    <i class="fas fa-undo"></i> Restore saved
+                </button>
+                <button type="button" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="discardSavedDraft()">
+                    Discard
+                </button>
+            </div>
+        </div>
         <!-- Action Buttons -->
         <div class="mtd-actions no-print">
             <button class="btn btn-secondary" onclick="window.history.back()" style="padding: 8px 16px; font-size: 13px;">
@@ -331,6 +386,7 @@
             <select id="blTypeSelect" onchange="switchBlType(this.value)" style="padding: 8px 14px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; font-weight: 600; cursor: pointer;">
                 <option value="seaway">Seaway Bill of Lading</option>
                 <option value="original">Original</option>
+                <option value="draft">Draft (same as Original)</option>
             </select>
             <label id="watermarkToggleWrap" class="no-print" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;">
                 <input type="checkbox" id="watermarkToggle" checked onchange="toggleWatermark(this.checked)">
@@ -339,13 +395,24 @@
             <button class="btn btn-secondary" id="editBtn" onclick="toggleEdit()" style="padding: 8px 16px; font-size: 13px;">
                 <i class="fas fa-pen"></i> Edit
             </button>
+            <button class="btn btn-secondary" id="saveLocalBtn" onclick="saveDocumentLocally()" style="padding: 8px 16px; font-size: 13px;" title="Save all fields in this browser so you can restore later">
+                <i class="fas fa-save"></i> Save
+            </button>
+            <button class="btn btn-primary" id="savePdfBtn" onclick="saveAsPdf()" style="padding: 8px 16px; font-size: 13px;" title="Opens print dialog — choose Save as PDF or Microsoft Print to PDF">
+                <i class="fas fa-file-pdf"></i> Save as PDF
+            </button>
+            <button class="btn btn-secondary" onclick="openSavedPdfFile()" style="padding: 8px 16px; font-size: 13px;" title="Open a PDF file from your computer">
+                <i class="fas fa-folder-open"></i> Open PDF
+            </button>
             <button class="btn btn-primary" id="printBtn" onclick="printDoc()" style="padding: 8px 16px; font-size: 13px;">
                 <i class="fas fa-print"></i> Print
             </button>
         </div>
+        <input type="file" id="hblPdfFileInput" class="no-print" accept="application/pdf,.pdf" style="display:none" tabindex="-1">
 
         <!-- MTD Document Sheet (print/PDF capture area) -->
         <div id="hblPrintArea">
+        <div id="draftBanner" class="draft-banner hidden" aria-hidden="true">DRAFT</div>
         <div class="mtd-doc-header">
             <div class="mtd-bl-no-line">
                 <span>MTD BL NO:</span>
@@ -566,7 +633,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=14"></script>
+    <script src="js/hbl-document.js?v=15"></script>
 </body>
 
 </html>
