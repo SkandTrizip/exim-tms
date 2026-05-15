@@ -63,7 +63,7 @@
             #consignee, #deliveryAgent { min-height: 36px !important; }
             #notifyParty1, #notifyParty2 { min-height: 28px !important; }
             .cargo-table th { font-size: 7.5pt; }
-            .cargo-table:not(.cargo-table-preview) tbody tr.cargo-data-row td {
+            .cargo-table tbody tr.cargo-data-row td {
                 height: 58px;
                 min-height: 58px;
                 max-height: 58px;
@@ -77,31 +77,14 @@
                 page-break-before: always;
                 break-before: page;
             }
-            #hblPage1 .mtd-grid-frame {
-                display: flex;
-                flex-direction: column;
-                min-height: 265mm;
-            }
             #hblCargoPage1Box {
-                flex: 0 0 53%;
-                min-height: 53%;
-                max-height: 53%;
                 page-break-inside: avoid;
                 break-inside: avoid;
-                display: flex;
-                flex-direction: column;
-            }
-            #hblCargoPage1Box .cargo-table {
-                flex: 1;
-                height: 100%;
-            }
-            #hblCargoPage1Box .cargo-table tbody tr.cargo-data-row {
-                height: 100%;
             }
             #hblCargoPage1Box .cargo-table-preview .cargo-preview-cell {
-                height: 100% !important;
-                min-height: 140mm !important;
-                max-height: 140mm !important;
+                height: 58px;
+                min-height: 58px;
+                max-height: 58px;
                 overflow: hidden;
             }
             #hblPage2 .cargo-table tbody tr.cargo-data-row td {
@@ -336,29 +319,10 @@
             .hbl-page-label { display: none !important; }
             .hbl-page-2 { border-top: none; margin-top: 0; padding-top: 0; }
         }
-        #hblPage1 .mtd-grid-frame {
-            display: flex;
-            flex-direction: column;
-            min-height: min(1050px, calc(100vh - 180px));
-        }
-        #hblCargoPage1Box {
-            flex: 0 0 53%;
-            min-height: 53%;
-            display: flex;
-            flex-direction: column;
-        }
-        #hblCargoPage1Box .cargo-table {
-            flex: 1;
-            height: 100%;
-        }
-        #hblCargoPage1Box .cargo-table tbody tr.cargo-data-row {
-            height: 100%;
-        }
-        #hblCargoPage1Box .cargo-table tbody tr.cargo-data-row td,
-        #hblCargoPage1Box .cargo-table-preview .cargo-preview-cell {
-            height: 100%;
-            min-height: 280px;
-            max-height: none;
+        #hblCargoPage1Box .cargo-table tbody tr.cargo-data-row td {
+            height: 120px;
+            min-height: 120px;
+            max-height: 120px;
             overflow: hidden;
         }
         #hblPage2 .cargo-table tbody tr.cargo-data-row td {
@@ -725,7 +689,7 @@
 
         </div>
 
-        <p class="hbl-page-label hbl-page-2-label no-print">Page 2 — Additional cargo lines (continued from page 1)</p>
+        <p class="hbl-page-label hbl-page-2-label no-print">Page 2 — Cargo overflow (continued)</p>
         <div id="hblPage2" class="hbl-page-sheet hbl-page-2">
         <div class="mtd-sheet">
             <div class="watermark hbl-page2-watermark" id="watermarkPage2">SEAWAY BL</div>
