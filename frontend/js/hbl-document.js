@@ -1,6 +1,7 @@
 const HBL_PAGE_TITLE = 'HBL / MTD Document – ShipFlow TMS';
 
 let watermarkEnabled = true;
+let applySignEnabled = false;
 let currentEnquiryId = null;
 
 const HBL_SNAPSHOT_FIELD_IDS = [
@@ -35,6 +36,7 @@ function collectSnapshot() {
         blType: document.getElementById('blTypeSelect').value,
         draftMark: !!(draftCb && draftCb.checked),
         watermarkEnabled,
+        applySign: applySignEnabled,
         freight: getFreightSelection(),
         fields
     };
@@ -72,6 +74,12 @@ function applySnapshot(s) {
         if (t) t.checked = s.watermarkEnabled;
         applyWatermarkVisibility();
     }
+    if (typeof s.applySign === 'boolean') {
+        applySignEnabled = s.applySign;
+        const signToggle = document.getElementById('applySignToggle');
+        if (signToggle) signToggle.checked = s.applySign;
+        applySignatureVisibility();
+    }
     if (s.freight) {
         selectFreight(s.freight === 'collect' ? 'collect' : 'prepaid');
     }
@@ -96,7 +104,9 @@ function updateSavedDraftNotice() {
     try {
         const s = JSON.parse(raw);
         const when = s.savedAt ? new Date(s.savedAt).toLocaleString() : '';
-        text.textContent = `Local copy saved${when ? ` (${when})` : ''} for this enquiry.`;
+        text.textContent = when
+            ? `Previously saved copy from ${when}.`
+            : 'Previously saved copy available for this enquiry.';
         wrap.classList.add('visible');
     } catch (e) {
         wrap.classList.remove('visible');
@@ -123,7 +133,7 @@ function saveDocumentLocally() {
     }
 }
 
-function restoreSavedDraft() {
+function openPreviouslySaved() {
     if (!currentEnquiryId) return;
     let raw;
     try {
@@ -139,14 +149,6 @@ function restoreSavedDraft() {
     } catch (e) {
         alert('Could not read saved data.');
     }
-}
-
-function discardSavedDraft() {
-    if (!currentEnquiryId) return;
-    try {
-        localStorage.removeItem(hblStorageKey());
-    } catch (e) { /* ignore */ }
-    updateSavedDraftNotice();
 }
 
 function applyDraftPrefixVisibility() {
@@ -175,6 +177,19 @@ function applyWatermarkVisibility() {
 function toggleWatermark(enabled) {
     watermarkEnabled = enabled;
     applyWatermarkVisibility();
+}
+
+function applySignatureVisibility() {
+    const img = document.getElementById('hblAuthSignature');
+    const block = document.getElementById('signatureBlock');
+    if (!img) return;
+    img.classList.toggle('hidden', !applySignEnabled);
+    if (block) block.classList.toggle('with-signature', applySignEnabled);
+}
+
+function toggleApplySign(enabled) {
+    applySignEnabled = enabled;
+    applySignatureVisibility();
 }
 
 const HBL_CARGO_PREVIEW_MAP = [

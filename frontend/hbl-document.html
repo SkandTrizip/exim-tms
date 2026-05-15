@@ -102,6 +102,15 @@
                 min-height: 70px;
             }
             .signature-block .sig-role { margin-top: 14px; }
+            .signature-block.with-signature .sig-role { margin-top: 4px; }
+            .hbl-auth-signature:not(.hidden) {
+                display: block !important;
+                max-width: 130px;
+                max-height: 44px;
+                margin: 2px auto 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
             .end-of-bl { margin: 4px 0 0; padding: 2px 0; font-size: 8.5pt; }
             .watermark:not(.hidden) {
                 display: block !important;
@@ -376,6 +385,17 @@
         }
         .signature-block .sig-for { text-transform: uppercase; letter-spacing: 0.02em; }
         .signature-block .sig-role { margin-top: 48px; font-style: italic; font-weight: normal; text-transform: none; }
+        .signature-block.with-signature .sig-role { margin-top: 6px; }
+        .hbl-auth-signature {
+            display: block;
+            max-width: 160px;
+            max-height: 56px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            margin: 4px auto 0;
+        }
+        .hbl-auth-signature.hidden { display: none; }
 
         .end-of-bl {
             margin: 12px 0 0; text-align: center;
@@ -413,7 +433,6 @@
             gap: 10px;
         }
         .hbl-saved-notice.visible { display: flex; }
-        .hbl-saved-notice .hbl-saved-actions { display: flex; gap: 8px; flex-wrap: wrap; }
     </style>
 </head>
 
@@ -421,14 +440,9 @@
     <div class="mtd-page">
         <div id="savedDraftNotice" class="hbl-saved-notice no-print" role="status">
             <span id="savedDraftNoticeText"></span>
-            <div class="hbl-saved-actions">
-                <button type="button" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="restoreSavedDraft()">
-                    <i class="fas fa-undo"></i> Restore saved
-                </button>
-                <button type="button" class="btn btn-secondary" style="padding: 6px 12px; font-size: 12px;" onclick="discardSavedDraft()">
-                    Discard
-                </button>
-            </div>
+            <button type="button" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openPreviouslySaved()">
+                <i class="fas fa-folder-open"></i> Open previously saved
+            </button>
         </div>
         <!-- Action Buttons -->
         <div class="mtd-actions no-print">
@@ -446,6 +460,10 @@
             <label id="watermarkToggleWrap" class="no-print" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;">
                 <input type="checkbox" id="watermarkToggle" checked onchange="toggleWatermark(this.checked)">
                 Watermark
+            </label>
+            <label class="no-print" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="applySignToggle" onchange="toggleApplySign(this.checked)">
+                Apply sign
             </label>
             <button class="btn btn-secondary" id="editBtn" onclick="toggleEdit()" style="padding: 8px 16px; font-size: 13px;">
                 <i class="fas fa-pen"></i> Edit
@@ -657,8 +675,9 @@
                         </div>
                     </td>
                     <td colspan="3" class="signature-cell">
-                        <div class="signature-block">
+                        <div class="signature-block" id="signatureBlock">
                             <div class="sig-for">For LOGIPOD LOGISTICS PRIVATE LIMITED</div>
+                            <img id="hblAuthSignature" class="hbl-auth-signature hidden" src="sign_satkar.png" alt="Authorised signature">
                             <div class="sig-role">(Authorised Signatory)</div>
                         </div>
                     </td>
@@ -725,7 +744,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=26"></script>
+    <script src="js/hbl-document.js?v=27"></script>
 </body>
 
 </html>
