@@ -73,37 +73,25 @@
             .mtd-grid-frame {
                 display: block !important;
             }
-            #hblCargoPageBlock {
-                page-break-inside: avoid;
-                break-inside: avoid;
-            }
-            #hblBottomSection {
-                page-break-before: auto !important;
-                break-before: auto !important;
-                page-break-inside: auto !important;
-                break-inside: auto !important;
-            }
-            .hbl-cargo-continuations {
-                height: 0;
-                overflow: visible;
-                margin: 0;
-                padding: 0;
-            }
-            .hbl-print-paginated .hbl-cargo-continuations {
-                height: auto;
-            }
-            .hbl-cargo-continuations .hbl-cargo-continuation:first-child {
+            .hbl-page-2 {
                 page-break-before: always;
                 break-before: page;
             }
-            .hbl-cargo-continuation .cargo-table thead {
-                display: table-header-group;
+            #hblCargoPage1Box {
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
-            .hbl-cargo-continuation .cargo-table tbody tr.cargo-data-row td {
+            #hblCargoPage1Box .cargo-table-preview .cargo-preview-cell {
                 height: 58px;
                 min-height: 58px;
                 max-height: 58px;
                 overflow: hidden;
+            }
+            #hblPage2 .cargo-table tbody tr.cargo-data-row td {
+                height: auto;
+                min-height: 58px;
+                max-height: none;
+                overflow: visible;
             }
             .cargo-table tfoot td { padding: 2px 4px; font-size: 8pt; font-style: normal; }
             .bottom-section td { font-size: 8pt; }
@@ -297,27 +285,56 @@
             text-align: left;
             vertical-align: top;
         }
-        .cargo-table tbody tr.cargo-data-row td {
+        .hbl-page-sheet {
+            max-width: 900px;
+            margin: 0 auto 28px;
+            background: #fff;
+        }
+        .hbl-page-2 {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 2px dashed #cbd5e1;
+        }
+        .hbl-page-label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 0 auto 8px;
+            max-width: 900px;
+            padding: 0 4px;
+        }
+        .hbl-page-label.hbl-page-2-label { color: #2563eb; }
+        @media print {
+            .hbl-page-label { display: none !important; }
+            .hbl-page-2 { border-top: none; margin-top: 0; padding-top: 0; }
+        }
+        #hblCargoPage1Box .cargo-table tbody tr.cargo-data-row td {
             height: 120px;
             min-height: 120px;
             max-height: 120px;
             overflow: hidden;
+        }
+        #hblPage2 .cargo-table tbody tr.cargo-data-row td {
+            height: auto;
+            min-height: 120px;
+            max-height: none;
+            overflow: visible;
             vertical-align: top;
             font-size: 11px;
             border: 1px solid #000;
             white-space: pre-line;
             box-sizing: border-box;
         }
-        .hbl-cargo-continuations { display: none; }
-        .hbl-print-paginated .hbl-cargo-continuations { display: block; }
-        .hbl-print-paginated #hblEndOfBlBlock.hbl-detached-tail,
-        .hbl-print-paginated #cargoTable tfoot.hbl-hide-on-print-split {
-            display: none !important;
+        #hblCargoPage1Box .cargo-table-preview .cargo-preview-cell {
+            font-size: 11px;
+            white-space: pre-line;
+            vertical-align: top;
+            overflow: hidden;
         }
-        #hblPrintArea.hbl-measure-print .cargo-table tbody tr.cargo-data-row td {
-            height: 58px;
-            min-height: 58px;
-            max-height: 58px;
+        #hblCargoPage1Box .cargo-preview-cell.cargo-preview-overflow {
+            box-shadow: inset 0 -6px 8px -6px rgba(0, 0, 0, 0.12);
         }
         .cargo-table thead th {
             border: 1px solid #000;
@@ -443,7 +460,8 @@
 
         <!-- MTD Document Sheet (print/PDF capture area) -->
         <div id="hblPrintArea">
-        <div id="hblPrimaryPage" class="hbl-primary-page">
+        <p class="hbl-page-label no-print">Page 1 — Header, parties &amp; signature</p>
+        <div id="hblPage1" class="hbl-page-sheet">
         <div class="mtd-doc-header">
             <div class="mtd-bl-no-line">
                 <span id="mtdDraftPrefix" class="mtd-draft-inline hidden" aria-hidden="true">Draft</span><span>MTD BL NO:</span>
@@ -557,10 +575,8 @@
                 </tr>
             </table>
 
-            <div id="hblCargoPageBlock" class="hbl-cargo-page-block">
-            <!-- Cargo Details Table -->
-            <section id="cargoSection">
-            <table class="cargo-table" id="cargoTable">
+            <div id="hblCargoPage1Box" class="hbl-cargo-page1-box">
+            <table class="cargo-table cargo-table-preview">
                 <colgroup>
                     <col style="width: 12%;">
                     <col style="width: 12%;">
@@ -577,24 +593,16 @@
                         <th>Measurement</th>
                     </tr>
                 </thead>
-                <tbody id="cargoBody">
+                <tbody>
                     <tr class="cargo-data-row">
-                        <td class="editable" id="containerNos">&nbsp;</td>
-                        <td class="editable" id="marksNumber">&nbsp;</td>
-                        <td class="editable" id="cargoDescription">&nbsp;</td>
-                        <td class="editable" id="cargoWeight">&nbsp;</td>
-                        <td class="editable" id="cargoMeasurement">&nbsp;</td>
+                        <td class="editable cargo-preview-cell" id="containerNosPreview" data-cargo-source="containerNos">&nbsp;</td>
+                        <td class="editable cargo-preview-cell" id="marksNumberPreview" data-cargo-source="marksNumber">&nbsp;</td>
+                        <td class="editable cargo-preview-cell" id="cargoDescriptionPreview" data-cargo-source="cargoDescription">&nbsp;</td>
+                        <td class="editable cargo-preview-cell" id="cargoWeightPreview" data-cargo-source="cargoWeight">&nbsp;</td>
+                        <td class="editable cargo-preview-cell" id="cargoMeasurementPreview" data-cargo-source="cargoMeasurement">&nbsp;</td>
                     </tr>
                 </tbody>
-                <tfoot id="cargoTableFoot">
-                    <tr>
-                        <td colspan="5" class="particulars-note">
-                            Particulars above furnished by consignee/consignor
-                        </td>
-                    </tr>
-                </tfoot>
             </table>
-            </section>
             </div>
 
             <!-- Bottom Section -->
@@ -659,8 +667,51 @@
             </div>
             </div>
 
-            <div id="hblCargoContinuations" class="hbl-cargo-continuations" aria-hidden="true"></div>
 
+        </div>
+
+        <p class="hbl-page-label hbl-page-2-label no-print">Page 2 — Cargo details (edit here)</p>
+        <div id="hblPage2" class="hbl-page-sheet hbl-page-2">
+        <div class="mtd-sheet">
+            <div class="watermark hbl-page2-watermark" id="watermarkPage2">SEAWAY BL</div>
+            <div class="mtd-grid-frame">
+            <section id="cargoSection">
+            <table class="cargo-table" id="cargoTable">
+                <colgroup>
+                    <col style="width: 12%;">
+                    <col style="width: 12%;">
+                    <col style="width: 44%;">
+                    <col style="width: 16%;">
+                    <col style="width: 16%;">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Container No(s)</th>
+                        <th>Marks &amp; Number</th>
+                        <th>Number of packages, Kind of packages, General description of goods</th>
+                        <th>Gross Weight</th>
+                        <th>Measurement</th>
+                    </tr>
+                </thead>
+                <tbody id="cargoBody">
+                    <tr class="cargo-data-row">
+                        <td class="editable" id="containerNos">&nbsp;</td>
+                        <td class="editable" id="marksNumber">&nbsp;</td>
+                        <td class="editable" id="cargoDescription">&nbsp;</td>
+                        <td class="editable" id="cargoWeight">&nbsp;</td>
+                        <td class="editable" id="cargoMeasurement">&nbsp;</td>
+                    </tr>
+                </tbody>
+                <tfoot id="cargoTableFoot">
+                    <tr>
+                        <td colspan="5" class="particulars-note">
+                            Particulars above furnished by consignee/consignor
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+            </section>
+            </div>
         </div>
 
         <div id="hblEndOfBlBlock">
@@ -670,10 +721,11 @@
         </div>
         </div>
     </div>
+    </div>
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=24"></script>
+    <script src="js/hbl-document.js?v=26"></script>
 </body>
 
 </html>

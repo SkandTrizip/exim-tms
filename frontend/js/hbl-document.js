@@ -75,6 +75,7 @@ function applySnapshot(s) {
     if (s.freight) {
         selectFreight(s.freight === 'collect' ? 'collect' : 'prepaid');
     }
+    syncCargoPreview();
 }
 
 function updateSavedDraftNotice() {
@@ -162,14 +163,13 @@ function toggleDraftMark() {
 }
 
 function applyWatermarkVisibility() {
-    const watermark = document.getElementById('watermark');
     const blType = document.getElementById('blTypeSelect').value;
-    if (!watermark) return;
-    if (blType !== 'seaway' || !watermarkEnabled) {
-        watermark.classList.add('hidden');
-    } else {
-        watermark.classList.remove('hidden');
-    }
+    const show = blType === 'seaway' && watermarkEnabled;
+    ['watermark', 'watermarkPage2'].forEach((id) => {
+        const wm = document.getElementById(id);
+        if (!wm) return;
+        wm.classList.toggle('hidden', !show);
+    });
 }
 
 function toggleWatermark(enabled) {
@@ -177,11 +177,15 @@ function toggleWatermark(enabled) {
     applyWatermarkVisibility();
 }
 
-const HBL_CARGO_FIELD_IDS = [
-    'containerNos', 'marksNumber', 'cargoDescription', 'cargoWeight', 'cargoMeasurement'
+const HBL_CARGO_PREVIEW_MAP = [
+    ['containerNos', 'containerNosPreview'],
+    ['marksNumber', 'marksNumberPreview'],
+    ['cargoDescription', 'cargoDescriptionPreview'],
+    ['cargoWeight', 'cargoWeightPreview'],
+    ['cargoMeasurement', 'cargoMeasurementPreview']
 ];
 
-let hblPaginationBackup = null;
+let hblCargoSyncLock = false;
 
 function getCargoCellPlainText(el) {
     if (!el) return '';
@@ -193,190 +197,128 @@ function setCargoCellPlainText(el, text) {
     el.textContent = text && text.trim() ? text : '\u00a0';
 }
 
-function getCargoContentHeightPx() {
-    const printArea = document.getElementById('hblPrintArea');
-    const sample = document.querySelector('#cargoTable .cargo-data-row td');
-    if (!sample) return 58;
-    printArea?.classList.add('hbl-measure-print');
-    const h = sample.clientHeight;
-    printArea?.classList.remove('hbl-measure-print');
-    return h > 0 ? h : 58;
+function measureCargoCellInnerBox(el) {
+    if (!el) return { width: 80, height: 58 };
+    const cs = window.getComputedStyle(el);
+    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+    const borderY = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+    return {
+        width: Math.max(20, el.clientWidth - padX),
+        height: Math.max(12, el.clientHeight - padY - borderY),
+        style: cs
+    };
 }
 
-function splitTextIntoChunks(text, maxWidth, maxHeight, style) {
-    if (!text) return [''];
+function truncateTextToFitCell(text, cellEl) {
+    if (!text || !cellEl) return '';
+    const { width, height, style } = measureCargoCellInnerBox(cellEl);
     const measure = document.createElement('div');
     measure.style.cssText = [
         'position:fixed', 'left:-9999px', 'top:0', 'visibility:hidden',
         'white-space:pre-line', 'overflow-wrap:break-word', 'word-wrap:break-word',
-        `width:${maxWidth}px`, `font-size:${style.fontSize}`,
+        `width:${width}px`, `font-size:${style.fontSize}`,
         `font-family:${style.fontFamily}`, `line-height:${style.lineHeight}`,
-        `font-weight:${style.fontWeight}`, `padding:${style.padding}`
+        `font-weight:${style.fontWeight}`, `padding:${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`
     ].join(';');
     document.body.appendChild(measure);
 
-    const chunks = [];
-    let current = '';
+    let fit = '';
     const paragraphs = text.split('\n');
-
-    const pushChunk = () => {
-        const trimmed = current.replace(/\n+$/, '');
-        if (trimmed || chunks.length === 0) chunks.push(trimmed);
-        current = '';
-    };
-
     for (let p = 0; p < paragraphs.length; p++) {
         const para = paragraphs[p];
         const parts = para.length ? para.split(/(\s+)/) : [''];
         for (const part of parts) {
             if (!part) continue;
-            const trial = current + part;
+            const trial = fit + part;
             measure.textContent = trial;
-            if (measure.scrollHeight > maxHeight && current.trim()) {
-                pushChunk();
-                current = part.replace(/^\s+/, '') || part;
-            } else {
-                current = trial;
-            }
+            if (measure.scrollHeight > height && fit.trim()) break;
+            fit = trial;
         }
-        if (p < paragraphs.length - 1) current += '\n';
+        if (measure.scrollHeight > height && fit.trim()) break;
+        if (p < paragraphs.length - 1) {
+            const withNl = fit + '\n';
+            measure.textContent = withNl;
+            if (measure.scrollHeight > height && fit.trim()) break;
+            fit = withNl;
+        }
     }
-    if (current.trim() || chunks.length === 0) pushChunk();
 
     document.body.removeChild(measure);
-    return chunks.length ? chunks : [''];
+    return fit.replace(/\n+$/, '');
 }
 
-function splitCargoFieldIntoChunks(fieldId, maxContentHeight) {
-    const el = document.getElementById(fieldId);
-    if (!el) return [''];
-    const text = getCargoCellPlainText(el);
-    if (!text) return [''];
-    const cs = window.getComputedStyle(el);
-    const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
-    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
-    const innerWidth = Math.max(20, el.clientWidth - padX);
-    const innerHeight = Math.max(12, maxContentHeight - padY);
-    return splitTextIntoChunks(text, innerWidth, innerHeight, {
-        fontSize: cs.fontSize,
-        fontFamily: cs.fontFamily,
-        lineHeight: cs.lineHeight,
-        fontWeight: cs.fontWeight,
-        padding: `${cs.paddingTop} ${cs.paddingRight} ${cs.paddingBottom} ${cs.paddingLeft}`
-    });
+function markPreviewOverflow(preview, fullText, shownText) {
+    const overflow = fullText.length > shownText.length;
+    preview.classList.toggle('cargo-preview-overflow', overflow);
+    preview.title = overflow ? 'More cargo on page 2' : '';
 }
 
-function buildContinuationCargoTable(chunksByField, pageIndex, includeParticulars) {
-    const table = document.createElement('table');
-    table.className = 'cargo-table';
-    table.innerHTML = `
-        <colgroup>
-            <col style="width: 12%;"><col style="width: 12%;"><col style="width: 44%;">
-            <col style="width: 16%;"><col style="width: 16%;">
-        </colgroup>
-        <thead><tr>
-            <th>Container No(s)</th><th>Marks &amp; Number</th>
-            <th>Number of packages, Kind of packages, General description of goods</th>
-            <th>Gross Weight</th><th>Measurement</th>
-        </tr></thead>
-        <tbody><tr class="cargo-data-row"></tr></tbody>
-        ${includeParticulars ? `<tfoot><tr><td colspan="5" class="particulars-note">Particulars above furnished by consignee/consignor</td></tr></tfoot>` : ''}`;
-    const row = table.querySelector('tr.cargo-data-row');
-    HBL_CARGO_FIELD_IDS.forEach((id) => {
-        const td = document.createElement('td');
-        const arr = chunksByField[id] || [''];
-        const val = arr[pageIndex] || '';
-        td.textContent = val.trim() ? val : '\u00a0';
-        row.appendChild(td);
-    });
-    return table;
-}
-
-function prepareHblPrintPagination() {
-    cleanupHblPrintPagination();
-
+function syncCargoPreview() {
+    if (hblCargoSyncLock) return;
+    hblCargoSyncLock = true;
     const printArea = document.getElementById('hblPrintArea');
-    const endBlock = document.getElementById('hblEndOfBlBlock');
-    const contHost = document.getElementById('hblCargoContinuations');
-    const cargoFoot = document.getElementById('cargoTableFoot');
-    if (!printArea || !contHost) return;
-
-    const maxContentHeight = getCargoContentHeightPx();
-    const chunksByField = {};
-    HBL_CARGO_FIELD_IDS.forEach((id) => {
-        chunksByField[id] = splitCargoFieldIntoChunks(id, maxContentHeight);
+    printArea?.classList.add('hbl-measure-preview');
+    HBL_CARGO_PREVIEW_MAP.forEach(([srcId, previewId]) => {
+        const src = document.getElementById(srcId);
+        const preview = document.getElementById(previewId);
+        if (!preview || !src) return;
+        const full = getCargoCellPlainText(src);
+        const truncated = truncateTextToFitCell(full, preview);
+        setCargoCellPlainText(preview, truncated);
+        preview.dataset.shownLen = String(truncated.length);
+        markPreviewOverflow(preview, full, truncated);
     });
-    const pageCount = Math.max(1, ...HBL_CARGO_FIELD_IDS.map((id) => chunksByField[id].length));
-
-    if (pageCount <= 1) return;
-
-    hblPaginationBackup = {
-        cellTexts: {},
-        endParent: endBlock?.parentNode,
-        endNext: endBlock?.nextSibling
-    };
-    HBL_CARGO_FIELD_IDS.forEach((id) => {
-        const el = document.getElementById(id);
-        hblPaginationBackup.cellTexts[id] = el ? el.innerHTML : '';
-    });
-
-    HBL_CARGO_FIELD_IDS.forEach((id) => {
-        setCargoCellPlainText(document.getElementById(id), chunksByField[id][0] || '');
-    });
-
-    printArea.classList.add('hbl-print-paginated');
-    endBlock?.classList.add('hbl-detached-tail');
-    cargoFoot?.classList.add('hbl-hide-on-print-split');
-
-    for (let p = 1; p < pageCount; p++) {
-        const isLast = p === pageCount - 1;
-        const page = document.createElement('div');
-        page.className = 'hbl-cargo-continuation';
-
-        const frame = document.createElement('div');
-        frame.className = 'mtd-grid-frame';
-        frame.appendChild(buildContinuationCargoTable(chunksByField, p, isLast));
-        page.appendChild(frame);
-
-        if (isLast && endBlock) page.appendChild(endBlock);
-
-        contHost.appendChild(page);
-    }
-
-    contHost.setAttribute('aria-hidden', 'false');
+    printArea?.classList.remove('hbl-measure-preview');
+    hblCargoSyncLock = false;
 }
 
-function cleanupHblPrintPagination() {
-    const printArea = document.getElementById('hblPrintArea');
-    const contHost = document.getElementById('hblCargoContinuations');
-    const endBlock = document.getElementById('hblEndOfBlBlock');
-    const cargoFoot = document.getElementById('cargoTableFoot');
+function syncPreviewToCargo(previewId) {
+    if (hblCargoSyncLock) return;
+    const preview = document.getElementById(previewId);
+    const srcId = preview?.dataset.cargoSource;
+    const src = srcId ? document.getElementById(srcId) : null;
+    if (!preview || !src) return;
 
-    if (hblPaginationBackup) {
-        HBL_CARGO_FIELD_IDS.forEach((id) => {
-            const el = document.getElementById(id);
-            if (el && hblPaginationBackup.cellTexts[id] !== undefined) {
-                el.innerHTML = hblPaginationBackup.cellTexts[id];
-            }
-        });
-        if (endBlock && hblPaginationBackup.endParent) {
-            hblPaginationBackup.endParent.insertBefore(endBlock, hblPaginationBackup.endNext);
+    hblCargoSyncLock = true;
+    const edited = getCargoCellPlainText(preview);
+    const full = getCargoCellPlainText(src);
+    const shownLen = parseInt(preview.dataset.shownLen || '0', 10);
+    const safeShownLen = Number.isFinite(shownLen) && shownLen >= 0 ? shownLen : 0;
+    const tail = full.length > safeShownLen ? full.slice(safeShownLen) : '';
+    const merged = edited + tail;
+    setCargoCellPlainText(src, merged);
+
+    const truncated = truncateTextToFitCell(merged, preview);
+    setCargoCellPlainText(preview, truncated);
+    preview.dataset.shownLen = String(truncated.length);
+    markPreviewOverflow(preview, merged, truncated);
+    hblCargoSyncLock = false;
+}
+
+function bindCargoPreviewSync() {
+    HBL_CARGO_PREVIEW_MAP.forEach(([srcId, previewId]) => {
+        const src = document.getElementById(srcId);
+        if (src && !src.dataset.previewBound) {
+            src.dataset.previewBound = '1';
+            src.addEventListener('input', syncCargoPreview);
         }
-        hblPaginationBackup = null;
-    }
-
-    if (contHost) {
-        contHost.innerHTML = '';
-        contHost.setAttribute('aria-hidden', 'true');
-    }
-    printArea?.classList.remove('hbl-print-paginated', 'hbl-measure-print');
-    endBlock?.classList.remove('hbl-detached-tail');
-    cargoFoot?.classList.remove('hbl-hide-on-print-split');
+        const preview = document.getElementById(previewId);
+        if (preview && !preview.dataset.previewBound) {
+            preview.dataset.previewBound = '1';
+            preview.addEventListener('input', () => syncPreviewToCargo(previewId));
+        }
+    });
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(syncCargoPreview, 120);
+    });
 }
 
 function printDoc() {
     if (isEditing) toggleEdit();
-    prepareHblPrintPagination();
+    syncCargoPreview();
     document.title = '\u00A0';
     window.print();
 }
@@ -385,29 +327,30 @@ let isEditing = false;
 
 function toggleEdit() {
     isEditing = !isEditing;
-    const sheet = document.querySelector('.mtd-sheet');
+    const sheets = document.querySelectorAll('#hblPrintArea .mtd-sheet');
     const btn = document.getElementById('editBtn');
-    const editables = document.querySelectorAll('.editable');
+    const editables = document.querySelectorAll('#hblPrintArea .editable');
 
     if (isEditing) {
-        sheet.classList.add('edit-mode');
+        sheets.forEach((sheet) => sheet.classList.add('edit-mode'));
         btn.innerHTML = '<i class="fas fa-check"></i> Done Editing';
         btn.style.background = '#2563eb';
         btn.style.color = '#fff';
-        editables.forEach(el => el.setAttribute('contenteditable', 'true'));
+        editables.forEach((el) => el.setAttribute('contenteditable', 'true'));
     } else {
-        sheet.classList.remove('edit-mode');
+        sheets.forEach((sheet) => sheet.classList.remove('edit-mode'));
         btn.innerHTML = '<i class="fas fa-pen"></i> Edit';
         btn.style.background = '';
         btn.style.color = '';
-        editables.forEach(el => el.removeAttribute('contenteditable'));
+        editables.forEach((el) => el.removeAttribute('contenteditable'));
+        syncCargoPreview();
     }
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
-    window.addEventListener('beforeprint', prepareHblPrintPagination);
+    bindCargoPreviewSync();
+    window.addEventListener('beforeprint', syncCargoPreview);
     window.addEventListener('afterprint', function () {
-        cleanupHblPrintPagination();
         document.title = HBL_PAGE_TITLE;
     });
 
@@ -486,19 +429,22 @@ function populateDocument(d) {
     document.getElementById('sobDate').textContent = fmtDate(d.sob);
     document.getElementById('placeAndDateOfIssue').textContent = 'Gurugram, ' + new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     document.getElementById('endOfBlNo').textContent = d.enquiry_number || '';
+    syncCargoPreview();
 }
 
 function switchBlType(type) {
     const label = document.getElementById('blTypeLabel');
     const count = document.getElementById('mtdOriginalCount');
-    const watermark = document.getElementById('watermark');
     const toggleWrap = document.getElementById('watermarkToggleWrap');
     const toggle = document.getElementById('watermarkToggle');
 
     if (type === 'seaway') {
         label.textContent = 'SEAWAY BILL OF LADING';
         count.textContent = 'Number of Original MTD: 0 / ZERO';
-        watermark.textContent = 'Seaway BL';
+        ['watermark', 'watermarkPage2'].forEach((id) => {
+            const wm = document.getElementById(id);
+            if (wm) wm.textContent = 'Seaway BL';
+        });
         if (toggleWrap) toggleWrap.style.display = 'flex';
         if (toggle) toggle.checked = watermarkEnabled;
         applyWatermarkVisibility();
@@ -506,7 +452,10 @@ function switchBlType(type) {
         label.textContent = '';
         count.textContent = 'Number of Original MTD: 3 / THREE';
         if (toggleWrap) toggleWrap.style.display = 'none';
-        watermark.classList.add('hidden');
+        ['watermark', 'watermarkPage2'].forEach((id) => {
+            const wm = document.getElementById(id);
+            if (wm) wm.classList.add('hidden');
+        });
     }
 
     applyDraftPrefixVisibility();
