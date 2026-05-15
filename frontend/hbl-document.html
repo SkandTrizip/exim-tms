@@ -66,7 +66,22 @@
             .cargo-table tbody tr.cargo-data-row td {
                 height: 58px;
                 min-height: 58px;
+                max-height: 58px;
+                overflow: hidden;
                 font-size: 8pt;
+            }
+            .hbl-cargo-continuation {
+                page-break-before: always;
+                break-before: page;
+            }
+            .hbl-primary-page.hbl-has-continuations {
+                page-break-after: always;
+                break-after: page;
+            }
+            .hbl-cargo-continuation .cargo-table tbody tr.cargo-data-row td {
+                height: 58px;
+                min-height: 58px;
+                max-height: 58px;
             }
             .cargo-table tfoot td { padding: 2px 4px; font-size: 8pt; font-style: normal; }
             .bottom-section td { font-size: 8pt; }
@@ -263,10 +278,36 @@
         .cargo-table tbody tr.cargo-data-row td {
             height: 120px;
             min-height: 120px;
+            max-height: 120px;
+            overflow: hidden;
             vertical-align: top;
             font-size: 11px;
             border: 1px solid #000;
             white-space: pre-line;
+            box-sizing: border-box;
+        }
+        .hbl-cargo-continuations { display: none; }
+        .hbl-print-paginated .hbl-cargo-continuations { display: block; }
+        .hbl-cargo-continuation {
+            margin-top: 0;
+        }
+        .hbl-cargo-continuation .mtd-sheet {
+            margin-top: 0;
+        }
+        .hbl-cargo-continuation .mtd-doc-header {
+            display: none;
+        }
+        .hbl-print-paginated #hblBottomSection.hbl-detached-tail,
+        .hbl-print-paginated #hblEndOfBlBlock.hbl-detached-tail {
+            display: none;
+        }
+        #hblPrintArea.hbl-measure-print .cargo-table tbody tr.cargo-data-row td {
+            height: 58px;
+            min-height: 58px;
+            max-height: 58px;
+        }
+        .hbl-print-paginated #cargoTable tfoot {
+            display: none;
         }
         .cargo-table thead th {
             border: 1px solid #000;
@@ -392,6 +433,7 @@
 
         <!-- MTD Document Sheet (print/PDF capture area) -->
         <div id="hblPrintArea">
+        <div id="hblPrimaryPage" class="hbl-primary-page">
         <div class="mtd-doc-header">
             <div class="mtd-bl-no-line">
                 <span id="mtdDraftPrefix" class="mtd-draft-inline hidden" aria-hidden="true">Draft</span><span>MTD BL NO:</span>
@@ -506,7 +548,8 @@
             </table>
 
             <!-- Cargo Details Table -->
-            <table class="cargo-table">
+            <section id="cargoSection">
+            <table class="cargo-table" id="cargoTable">
                 <colgroup>
                     <col style="width: 12%;">
                     <col style="width: 12%;">
@@ -540,8 +583,10 @@
                     </tr>
                 </tfoot>
             </table>
+            </section>
 
             <!-- Bottom Section -->
+            <div id="hblBottomSection">
             <table class="mtd-table bottom-section">
                 <tr>
                     <td colspan="3" style="width: 50%; vertical-align: top;">
@@ -600,19 +645,25 @@
                 </tr>
             </table>
             </div>
+            </div>
 
         </div>
+        </div>
+
+        <div id="hblCargoContinuations" class="hbl-cargo-continuations" aria-hidden="true"></div>
 
         <!-- END OF BL (outside the bordered sheet) -->
+        <div id="hblEndOfBlBlock">
         <div class="end-of-bl">
             <span>******************END OF BL : <span id="endOfBlNo"></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;******************</span>
+        </div>
         </div>
         </div>
     </div>
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=17"></script>
+    <script src="js/hbl-document.js?v=18"></script>
 </body>
 
 </html>
