@@ -370,8 +370,11 @@
             <select id="blTypeSelect" onchange="switchBlType(this.value)" style="padding: 8px 14px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; font-weight: 600; cursor: pointer;">
                 <option value="seaway">Seaway Bill of Lading</option>
                 <option value="original">Original</option>
-                <option value="draft">Draft (same as Original)</option>
             </select>
+            <label class="no-print" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="draftMarkToggle" onchange="toggleDraftMark(this.checked)">
+                Draft
+            </label>
             <label id="watermarkToggleWrap" class="no-print" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;">
                 <input type="checkbox" id="watermarkToggle" checked onchange="toggleWatermark(this.checked)">
                 Watermark
@@ -609,7 +612,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=16"></script>
+    <script src="js/hbl-document.js?v=17"></script>
 </body>
 
 </html>

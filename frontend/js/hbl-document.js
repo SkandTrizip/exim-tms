@@ -27,11 +27,13 @@ function collectSnapshot() {
         const el = document.getElementById(id);
         fields[id] = el ? el.innerHTML : '';
     }
+    const draftCb = document.getElementById('draftMarkToggle');
     return {
         version: 1,
         savedAt: new Date().toISOString(),
         enquiryId: currentEnquiryId,
         blType: document.getElementById('blTypeSelect').value,
+        draftMark: !!(draftCb && draftCb.checked),
         watermarkEnabled,
         freight: getFreightSelection(),
         fields
@@ -47,10 +49,23 @@ function applySnapshot(s) {
         }
     }
     const sel = document.getElementById('blTypeSelect');
+    const draftCb = document.getElementById('draftMarkToggle');
     if (sel && s.blType) {
-        sel.value = s.blType;
-        switchBlType(s.blType);
+        let bl = s.blType;
+        if (bl === 'draft') {
+            bl = 'original';
+            if (draftCb) draftCb.checked = true;
+        } else if (typeof s.draftMark === 'boolean' && draftCb) {
+            draftCb.checked = s.draftMark;
+        } else if (draftCb) {
+            draftCb.checked = false;
+        }
+        sel.value = bl;
+        switchBlType(bl);
+    } else if (typeof s.draftMark === 'boolean' && draftCb) {
+        draftCb.checked = s.draftMark;
     }
+    applyDraftPrefixVisibility();
     if (typeof s.watermarkEnabled === 'boolean') {
         watermarkEnabled = s.watermarkEnabled;
         const t = document.getElementById('watermarkToggle');
@@ -131,6 +146,19 @@ function discardSavedDraft() {
         localStorage.removeItem(hblStorageKey());
     } catch (e) { /* ignore */ }
     updateSavedDraftNotice();
+}
+
+function applyDraftPrefixVisibility() {
+    const draftPrefix = document.getElementById('mtdDraftPrefix');
+    const cb = document.getElementById('draftMarkToggle');
+    if (!draftPrefix) return;
+    const show = !!(cb && cb.checked);
+    draftPrefix.classList.toggle('hidden', !show);
+    draftPrefix.setAttribute('aria-hidden', show ? 'false' : 'true');
+}
+
+function toggleDraftMark() {
+    applyDraftPrefixVisibility();
 }
 
 function applyWatermarkVisibility() {
@@ -266,7 +294,6 @@ function switchBlType(type) {
     const watermark = document.getElementById('watermark');
     const toggleWrap = document.getElementById('watermarkToggleWrap');
     const toggle = document.getElementById('watermarkToggle');
-    const draftPrefix = document.getElementById('mtdDraftPrefix');
 
     if (type === 'seaway') {
         label.textContent = 'SEAWAY BILL OF LADING';
@@ -282,11 +309,7 @@ function switchBlType(type) {
         watermark.classList.add('hidden');
     }
 
-    if (draftPrefix) {
-        const showDraft = type === 'draft';
-        draftPrefix.classList.toggle('hidden', !showDraft);
-        draftPrefix.setAttribute('aria-hidden', showDraft ? 'false' : 'true');
-    }
+    applyDraftPrefixVisibility();
 }
 
 function selectFreight(type) {
