@@ -42,6 +42,7 @@ function collectSnapshot() {
         draftMark: !!(draftCb && draftCb.checked),
         watermarkEnabled,
         applySign: applySignEnabled,
+        cargoBoxHeight: getCargoBoxHeightPx(),
         freight: getFreightSelection(),
         fields
     };
@@ -84,6 +85,9 @@ function applySnapshot(s) {
         const signToggle = document.getElementById('applySignToggle');
         if (signToggle) signToggle.checked = s.applySign;
         applySignatureVisibility();
+    }
+    if (typeof s.cargoBoxHeight === 'number') {
+        applyCargoBoxHeight(s.cargoBoxHeight, { skipSplit: true, persist: false });
     }
     if (s.freight) {
         selectFreight(s.freight === 'collect' ? 'collect' : 'prepaid');
@@ -207,12 +211,86 @@ const HBL_CARGO_PREVIEW_MAP = [
 
 let hblCargoSyncLock = false;
 
-function getCargoCellPlainText(el) {
+const HBL_CARGO_HEIGHT_KEY = 'hbl_cargo_box_height';
+const HBL_CARGO_HEIGHT_MIN = 80;
+const HBL_CARGO_HEIGHT_MAX = 500;
+const HBL_CARGO_HEIGHT_DEFAULT = 180;
+const HBL_CARGO_HEIGHT_STEP = 24;
+
+function getCargoPreviewCell(previewId) {
+    return document.getElementById(previewId);
+}
+
+function getCargoPreviewEditor(previewId) {
+    const cell = getCargoPreviewCell(previewId);
+    if (!cell) return null;
+    return cell.querySelector('.cargo-preview-inner') || cell;
+}
+
+function resolveCargoTextEl(elOrPreviewId) {
+    if (typeof elOrPreviewId === 'string') return getCargoPreviewEditor(elOrPreviewId);
+    if (!elOrPreviewId) return null;
+    return elOrPreviewId.querySelector?.('.cargo-preview-inner') || elOrPreviewId;
+}
+
+function getCargoBoxHeightPx() {
+    const box = document.getElementById('hblCargoPage1Box');
+    if (!box) return HBL_CARGO_HEIGHT_DEFAULT;
+    const raw = getComputedStyle(box).getPropertyValue('--hbl-cargo-row-h').trim();
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : HBL_CARGO_HEIGHT_DEFAULT;
+}
+
+function applyCargoBoxHeight(px, options = {}) {
+    const box = document.getElementById('hblCargoPage1Box');
+    if (!box) return;
+    const h = Math.round(Math.max(HBL_CARGO_HEIGHT_MIN, Math.min(HBL_CARGO_HEIGHT_MAX, px)));
+    box.style.setProperty('--hbl-cargo-row-h', `${h}px`);
+    const label = document.getElementById('hblCargoHeightLabel');
+    if (label) label.textContent = `${h}px`;
+    if (options.persist !== false) {
+        try { localStorage.setItem(HBL_CARGO_HEIGHT_KEY, String(h)); } catch (e) { /* ignore */ }
+    }
+    if (!options.skipSplit && !isEditing) splitAllCargoFields();
+}
+
+function adjustCargoBoxHeight(delta) {
+    applyCargoBoxHeight(getCargoBoxHeightPx() + delta);
+}
+
+function initCargoBoxResize() {
+    let saved;
+    try { saved = parseInt(localStorage.getItem(HBL_CARGO_HEIGHT_KEY), 10); } catch (e) { /* ignore */ }
+    applyCargoBoxHeight(Number.isFinite(saved) ? saved : HBL_CARGO_HEIGHT_DEFAULT, { skipSplit: true, persist: false });
+
+    const handle = document.getElementById('hblCargoResizeHandle');
+    if (!handle) return;
+
+    handle.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        const startY = e.clientY;
+        const startH = getCargoBoxHeightPx();
+        const onMove = (ev) => {
+            applyCargoBoxHeight(startH + (ev.clientY - startY), { skipSplit: true, persist: false });
+        };
+        const onUp = (ev) => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+            applyCargoBoxHeight(startH + (ev.clientY - startY), { skipSplit: false, persist: true });
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    });
+}
+
+function getCargoCellPlainText(elOrPreviewId) {
+    const el = resolveCargoTextEl(elOrPreviewId);
     if (!el) return '';
     return (el.innerText || el.textContent || '').replace(/\u00a0/g, ' ').trim();
 }
 
-function getCargoCellRawText(el) {
+function getCargoCellRawText(elOrPreviewId) {
+    const el = resolveCargoTextEl(elOrPreviewId);
     if (!el) return '';
     return (el.innerText || el.textContent || '').replace(/\u00a0/g, ' ');
 }
@@ -220,70 +298,33 @@ function getCargoCellRawText(el) {
 function setCargoCellPlainText(el, text) {
     if (!el) return;
     const next = text && text.trim() ? text : '\u00a0';
-    if (el.textContent === next || getCargoCellRawText(el) === text) return;
+    if (el.textContent === next) return;
     el.textContent = next;
 }
 
-function saveCaretOffset(el) {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0 || !el.contains(sel.anchorNode)) return null;
-    const range = sel.getRangeAt(0);
-    const pre = range.cloneRange();
-    pre.selectNodeContents(el);
-    pre.setEnd(range.endContainer, range.endOffset);
-    return pre.toString().length;
-}
-
-function restoreCaretOffset(el, offset) {
-    if (offset == null || offset < 0) return;
-    const sel = window.getSelection();
-    if (!sel) return;
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
-    let remaining = offset;
-    let node = walker.nextNode();
-    while (node) {
-        const len = node.textContent.length;
-        if (remaining <= len) {
-            const range = document.createRange();
-            range.setStart(node, remaining);
-            range.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(range);
-            return;
-        }
-        remaining -= len;
-        node = walker.nextNode();
-    }
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    range.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(range);
-}
-
-function measureCargoCellInnerBox(el) {
-    if (!el) return { width: 80, height: 58 };
-    const cs = window.getComputedStyle(el);
+function measureCargoCellInnerBox(cellEl) {
+    if (!cellEl) return { width: 80, height: 58 };
+    const cs = window.getComputedStyle(cellEl);
     const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     const borderY = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
     return {
-        width: Math.max(20, el.clientWidth - padX),
-        height: Math.max(12, el.clientHeight - padY - borderY),
+        width: Math.max(20, cellEl.clientWidth - padX),
+        height: Math.max(12, cellEl.clientHeight - padY - borderY),
         style: cs
     };
 }
 
-function truncateTextToFitCell(text, cellEl) {
-    if (!text || !cellEl) return '';
-    const { width, height, style } = measureCargoCellInnerBox(cellEl);
+function truncateTextToFitCell(text, previewCellEl) {
+    if (!text || !previewCellEl) return '';
+    const { width, height, style } = measureCargoCellInnerBox(previewCellEl);
     const measure = document.createElement('div');
     measure.style.cssText = [
         'position:fixed', 'left:-9999px', 'top:0', 'visibility:hidden',
         'white-space:pre-line', 'overflow-wrap:break-word', 'word-wrap:break-word',
         `width:${width}px`, `font-size:${style.fontSize}`,
         `font-family:${style.fontFamily}`, `line-height:${style.lineHeight}`,
-        `font-weight:${style.fontWeight}`, `padding:${style.paddingTop} ${style.paddingRight} ${style.paddingBottom} ${style.paddingLeft}`
+        `font-weight:${style.fontWeight}`, `padding:0`
     ].join(';');
     document.body.appendChild(measure);
 
@@ -313,20 +354,19 @@ function truncateTextToFitCell(text, cellEl) {
 }
 
 function getCargoFullText(page2Id, previewId) {
-    const preview = document.getElementById(previewId);
-    const page2 = document.getElementById(page2Id);
-    const head = getCargoCellPlainText(preview);
-    const tail = getCargoCellPlainText(page2);
+    const head = getCargoCellPlainText(previewId);
+    const tail = getCargoCellPlainText(document.getElementById(page2Id));
     return head + tail;
 }
 
 function setCargoSplit(page2Id, previewId, fullText) {
-    const preview = document.getElementById(previewId);
+    const preview = getCargoPreviewCell(previewId);
+    const editor = getCargoPreviewEditor(previewId);
     const page2 = document.getElementById(page2Id);
-    if (!preview || !page2) return;
+    if (!preview || !editor || !page2) return;
     const head = truncateTextToFitCell(fullText || '', preview);
     const tail = fullText.length > head.length ? fullText.slice(head.length) : '';
-    setCargoCellPlainText(preview, head);
+    setCargoCellPlainText(editor, head);
     setCargoCellPlainText(page2, tail);
     preview.dataset.shownLen = String(head.length);
     markPreviewOverflow(preview, fullText, head);
@@ -341,70 +381,80 @@ function markPreviewOverflow(preview, fullText, headText) {
 function splitAllCargoFields() {
     if (hblCargoSyncLock) return;
     hblCargoSyncLock = true;
-    const printArea = document.getElementById('hblPrintArea');
-    printArea?.classList.add('hbl-measure-preview');
     HBL_CARGO_PREVIEW_MAP.forEach(([page2Id, previewId]) => {
         const full = getCargoFullText(page2Id, previewId);
         setCargoSplit(page2Id, previewId, full);
     });
-    printArea?.classList.remove('hbl-measure-preview');
     hblCargoSyncLock = false;
 }
 
-/** After restore: page-2 fields hold the full saved text — split without adding preview head again. */
 function splitCargoFromStoredFull() {
     if (hblCargoSyncLock) return;
     hblCargoSyncLock = true;
-    const printArea = document.getElementById('hblPrintArea');
-    printArea?.classList.add('hbl-measure-preview');
     HBL_CARGO_PREVIEW_MAP.forEach(([page2Id, previewId]) => {
         const page2 = document.getElementById(page2Id);
         if (!page2) return;
         const full = getCargoCellPlainText(page2);
         setCargoSplit(page2Id, previewId, full);
     });
-    printArea?.classList.remove('hbl-measure-preview');
     hblCargoSyncLock = false;
 }
 
-function syncPreviewCargo(previewId) {
+function flushPreviewCargo(previewId) {
     if (hblCargoSyncLock) return;
-    const preview = document.getElementById(previewId);
+    const preview = getCargoPreviewCell(previewId);
+    const editor = getCargoPreviewEditor(previewId);
     const page2Id = preview?.dataset.cargoSource;
     const page2 = page2Id ? document.getElementById(page2Id) : null;
-    if (!preview || !page2) return;
+    if (!preview || !editor || !page2) return;
 
     hblCargoSyncLock = true;
-    const printArea = document.getElementById('hblPrintArea');
-    printArea?.classList.add('hbl-measure-preview');
-
-    const rawHead = getCargoCellRawText(preview);
+    const rawHead = getCargoCellRawText(editor);
     let tail = getCargoCellPlainText(page2);
     const truncated = truncateTextToFitCell(rawHead, preview);
 
     if (truncated.length < rawHead.length) {
-        const caret = saveCaretOffset(preview);
         tail = rawHead.slice(truncated.length) + tail;
-        setCargoCellPlainText(preview, truncated);
+        setCargoCellPlainText(editor, truncated);
         setCargoCellPlainText(page2, tail);
-        restoreCaretOffset(preview, Math.min(caret ?? truncated.length, truncated.length));
     }
 
     preview.dataset.shownLen = String(truncated.length);
     markPreviewOverflow(preview, rawHead + tail, truncated);
-
-    printArea?.classList.remove('hbl-measure-preview');
     hblCargoSyncLock = false;
+}
+
+function flushAllPreviewCargo() {
+    HBL_CARGO_PREVIEW_MAP.forEach(([, previewId]) => flushPreviewCargo(previewId));
+}
+
+function prepareCargoEditorForTyping(editor) {
+    if (!editor) return;
+    const t = editor.textContent || '';
+    if (t === '\u00a0' || t.trim() === '') {
+        editor.textContent = '';
+    }
+}
+
+function placeCaretAtEnd(el) {
+    if (!el) return;
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    const sel = window.getSelection();
+    if (!sel) return;
+    sel.removeAllRanges();
+    sel.addRange(range);
 }
 
 function syncPage2Cargo(page2Id) {
     if (hblCargoSyncLock) return;
     const pair = HBL_CARGO_PREVIEW_MAP.find(([id]) => id === page2Id);
     if (!pair) return;
-    const preview = document.getElementById(pair[1]);
+    const preview = getCargoPreviewCell(pair[1]);
     const page2 = document.getElementById(page2Id);
     if (!preview || !page2) return;
-    const head = getCargoCellPlainText(preview);
+    const head = getCargoCellPlainText(pair[1]);
     const tail = getCargoCellPlainText(page2);
     markPreviewOverflow(preview, head + tail, head);
 }
@@ -416,16 +466,25 @@ function bindCargoPreviewSync() {
             page2.dataset.previewBound = '1';
             page2.addEventListener('input', () => syncPage2Cargo(page2Id));
         }
-        const preview = document.getElementById(previewId);
-        if (preview && !preview.dataset.previewBound) {
-            preview.dataset.previewBound = '1';
-            preview.addEventListener('input', () => syncPreviewCargo(previewId));
+        const cell = getCargoPreviewCell(previewId);
+        const editor = getCargoPreviewEditor(previewId);
+        if (editor && !editor.dataset.previewBound) {
+            editor.dataset.previewBound = '1';
+            editor.addEventListener('focus', () => {
+                prepareCargoEditorForTyping(editor);
+            });
+            editor.addEventListener('focusout', (e) => {
+                if (e.relatedTarget && cell?.contains(e.relatedTarget)) return;
+                flushPreviewCargo(previewId);
+            });
         }
     });
     let resizeTimer;
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(splitAllCargoFields, 120);
+        resizeTimer = setTimeout(() => {
+            if (!isEditing) splitAllCargoFields();
+        }, 120);
     });
 }
 
@@ -449,20 +508,31 @@ function toggleEdit() {
         btn.innerHTML = '<i class="fas fa-check"></i> Done Editing';
         btn.style.background = '#2563eb';
         btn.style.color = '#fff';
-        editables.forEach((el) => el.setAttribute('contenteditable', 'true'));
+        editables.forEach((el) => {
+            el.setAttribute('contenteditable', 'true');
+            if (el.classList.contains('cargo-preview-inner')) {
+                el.setAttribute('dir', 'ltr');
+                prepareCargoEditorForTyping(el);
+            }
+        });
     } else {
         sheets.forEach((sheet) => sheet.classList.remove('edit-mode'));
         btn.innerHTML = '<i class="fas fa-pen"></i> Edit';
         btn.style.background = '';
         btn.style.color = '';
         editables.forEach((el) => el.removeAttribute('contenteditable'));
+        flushAllPreviewCargo();
         splitAllCargoFields();
     }
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
+    initCargoBoxResize();
     bindCargoPreviewSync();
-    window.addEventListener('beforeprint', splitAllCargoFields);
+    window.addEventListener('beforeprint', () => {
+        flushAllPreviewCargo();
+        splitAllCargoFields();
+    });
     window.addEventListener('afterprint', function () {
         document.title = HBL_PAGE_TITLE;
     });

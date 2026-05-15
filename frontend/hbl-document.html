@@ -82,9 +82,9 @@
                 break-inside: avoid;
             }
             #hblCargoPage1Box .cargo-table-preview .cargo-preview-cell {
-                height: 87px;
-                min-height: 87px;
-                max-height: 87px;
+                height: calc(var(--hbl-cargo-row-h, 180px) * 0.48);
+                min-height: calc(var(--hbl-cargo-row-h, 180px) * 0.48);
+                max-height: calc(var(--hbl-cargo-row-h, 180px) * 0.48);
                 overflow: hidden;
             }
             #hblPage2 .cargo-table tbody tr.cargo-data-row td {
@@ -319,11 +319,17 @@
             .hbl-page-label { display: none !important; }
             .hbl-page-2 { border-top: none; margin-top: 0; padding-top: 0; }
         }
+        #hblCargoPage1Box {
+            --hbl-cargo-row-h: 180px;
+            position: relative;
+        }
         #hblCargoPage1Box .cargo-table tbody tr.cargo-data-row td {
-            height: 180px;
-            min-height: 180px;
-            max-height: 180px;
+            height: var(--hbl-cargo-row-h);
+            min-height: var(--hbl-cargo-row-h);
+            max-height: var(--hbl-cargo-row-h);
             overflow: hidden;
+            padding: 0;
+            vertical-align: top;
         }
         #hblPage2 .cargo-table tbody tr.cargo-data-row td {
             height: auto;
@@ -336,19 +342,71 @@
             white-space: pre-line;
             box-sizing: border-box;
         }
-        #hblCargoPage1Box .cargo-table-preview .cargo-preview-cell {
+        #hblCargoPage1Box .cargo-preview-cell {
+            position: relative;
+        }
+        #hblCargoPage1Box .cargo-preview-inner {
+            display: block;
+            width: 100%;
+            height: 100%;
+            min-height: var(--hbl-cargo-row-h);
+            box-sizing: border-box;
             font-size: 11px;
             white-space: pre-line;
-            vertical-align: top;
             overflow: hidden;
             outline: none;
-            caret-color: auto;
+            direction: ltr;
+            unicode-bidi: isolate;
+            text-align: left;
         }
-        #hblCargoPage1Box .cargo-preview-cell[contenteditable="true"] {
-            cursor: text;
+        .edit-mode #hblCargoPage1Box .cargo-preview-inner {
+            overflow-x: hidden;
+            overflow-y: auto;
         }
-        #hblCargoPage1Box .cargo-preview-cell.cargo-preview-overflow {
+        #hblCargoPage1Box .cargo-preview-cell.cargo-preview-overflow .cargo-preview-inner {
             box-shadow: inset 0 -6px 8px -6px rgba(0, 0, 0, 0.12);
+        }
+        .hbl-cargo-box-tools {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 6px;
+            margin: 4px 0 6px;
+            font-size: 12px;
+            color: #64748b;
+        }
+        .hbl-cargo-box-tools button {
+            width: 28px;
+            height: 28px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            color: #334155;
+        }
+        .hbl-cargo-box-tools button:hover { background: #f1f5f9; }
+        .hbl-cargo-resize-handle {
+            height: 10px;
+            margin-top: 2px;
+            border-radius: 0 0 6px 6px;
+            background: linear-gradient(180deg, #e2e8f0, #cbd5e1);
+            cursor: ns-resize;
+            touch-action: none;
+        }
+        .hbl-cargo-resize-handle::after {
+            content: '';
+            display: block;
+            width: 36px;
+            height: 4px;
+            margin: 3px auto;
+            border-radius: 2px;
+            background: #94a3b8;
+        }
+        @media print {
+            .hbl-cargo-box-tools,
+            .hbl-cargo-resize-handle { display: none !important; }
         }
         .cargo-table thead th {
             border: 1px solid #000;
@@ -599,6 +657,12 @@
             </table>
 
             <div id="hblCargoPage1Box" class="hbl-cargo-page1-box">
+            <div class="hbl-cargo-box-tools no-print">
+                <span>Cargo box height</span>
+                <button type="button" onclick="adjustCargoBoxHeight(-24)" title="Decrease height" aria-label="Decrease cargo box height">−</button>
+                <span id="hblCargoHeightLabel">180px</span>
+                <button type="button" onclick="adjustCargoBoxHeight(24)" title="Increase height" aria-label="Increase cargo box height">+</button>
+            </div>
             <table class="cargo-table cargo-table-preview">
                 <colgroup>
                     <col style="width: 12%;">
@@ -618,14 +682,15 @@
                 </thead>
                 <tbody>
                     <tr class="cargo-data-row">
-                        <td class="editable cargo-preview-cell" id="containerNosPreview" data-cargo-source="containerNos">&nbsp;</td>
-                        <td class="editable cargo-preview-cell" id="marksNumberPreview" data-cargo-source="marksNumber">&nbsp;</td>
-                        <td class="editable cargo-preview-cell" id="cargoDescriptionPreview" data-cargo-source="cargoDescription">&nbsp;</td>
-                        <td class="editable cargo-preview-cell" id="cargoWeightPreview" data-cargo-source="cargoWeight">&nbsp;</td>
-                        <td class="editable cargo-preview-cell" id="cargoMeasurementPreview" data-cargo-source="cargoMeasurement">&nbsp;</td>
+                        <td class="cargo-preview-cell" id="containerNosPreview" data-cargo-source="containerNos"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
+                        <td class="cargo-preview-cell" id="marksNumberPreview" data-cargo-source="marksNumber"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
+                        <td class="cargo-preview-cell" id="cargoDescriptionPreview" data-cargo-source="cargoDescription"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
+                        <td class="cargo-preview-cell" id="cargoWeightPreview" data-cargo-source="cargoWeight"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
+                        <td class="cargo-preview-cell" id="cargoMeasurementPreview" data-cargo-source="cargoMeasurement"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
                     </tr>
                 </tbody>
             </table>
+            <div class="hbl-cargo-resize-handle no-print" id="hblCargoResizeHandle" title="Drag to resize cargo box"></div>
             </div>
 
             <!-- Bottom Section -->
@@ -749,7 +814,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=29"></script>
+    <script src="js/hbl-document.js?v=31"></script>
 </body>
 
 </html>
