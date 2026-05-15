@@ -22,11 +22,16 @@ function getFreightSelection() {
     return prepaid.style.fontWeight === 'bold' ? 'prepaid' : 'collect';
 }
 
+const HBL_CARGO_SOURCE_IDS = new Set([
+    'containerNos', 'marksNumber', 'cargoDescription', 'cargoWeight', 'cargoMeasurement'
+]);
+
 function collectSnapshot() {
     const fields = {};
     for (const id of HBL_SNAPSHOT_FIELD_IDS) {
         const el = document.getElementById(id);
-        fields[id] = el ? el.innerHTML : '';
+        if (!el) continue;
+        fields[id] = HBL_CARGO_SOURCE_IDS.has(id) ? getCargoFullText(id) : el.innerHTML;
     }
     const draftCb = document.getElementById('draftMarkToggle');
     return {
@@ -47,7 +52,12 @@ function applySnapshot(s) {
     for (const id of HBL_SNAPSHOT_FIELD_IDS) {
         if (s.fields[id] !== undefined) {
             const el = document.getElementById(id);
-            if (el) el.innerHTML = s.fields[id];
+            if (!el) continue;
+            if (HBL_CARGO_SOURCE_IDS.has(id)) {
+                el.textContent = s.fields[id];
+            } else {
+                el.innerHTML = s.fields[id];
+            }
         }
     }
     const sel = document.getElementById('blTypeSelect');
@@ -83,7 +93,7 @@ function applySnapshot(s) {
     if (s.freight) {
         selectFreight(s.freight === 'collect' ? 'collect' : 'prepaid');
     }
-    syncCargoPreview();
+    resplitAllCargoFields();
 }
 
 function updateSavedDraftNotice() {
@@ -263,52 +273,104 @@ function truncateTextToFitCell(text, cellEl) {
     return fit.replace(/\n+$/, '');
 }
 
-function markPreviewOverflow(preview, fullText, shownText) {
-    const overflow = fullText.length > shownText.length;
-    preview.classList.toggle('cargo-preview-overflow', overflow);
-    preview.title = overflow ? 'More cargo on page 2' : '';
+function mergeCargoParts(head, overflow) {
+    const h = (head || '').replace(/\u00a0/g, ' ').replace(/\n+$/, '');
+    const o = (overflow || '').replace(/\u00a0/g, ' ').trim();
+    if (!h) return o;
+    if (!o) return h;
+    return `${h}\n${o}`;
 }
 
-function syncCargoPreview() {
+function splitCargoHeadOverflow(fullText, previewEl) {
+    const text = (fullText || '').replace(/\u00a0/g, ' ').trim();
+    if (!text) return { head: '', overflow: '' };
+    const lines = text.split('\n');
+    let maxFit = 0;
+    for (let i = 1; i <= lines.length; i++) {
+        const head = lines.slice(0, i).join('\n');
+        if (truncateTextToFitCell(head, previewEl) === head) {
+            maxFit = i;
+        } else {
+            break;
+        }
+    }
+    return {
+        head: lines.slice(0, maxFit).join('\n'),
+        overflow: lines.slice(maxFit).join('\n')
+    };
+}
+
+function getCargoFullText(srcId) {
+    const pair = HBL_CARGO_PREVIEW_MAP.find(([sid]) => sid === srcId);
+    if (!pair) {
+        const el = document.getElementById(srcId);
+        return el ? getCargoCellPlainText(el) : '';
+    }
+    const preview = document.getElementById(pair[1]);
+    const src = document.getElementById(srcId);
+    return mergeCargoParts(
+        preview ? getCargoCellPlainText(preview) : '',
+        src ? getCargoCellPlainText(src) : ''
+    );
+}
+
+function markPreviewOverflow(preview, overflowText) {
+    const hasOverflow = !!(overflowText && overflowText.trim());
+    preview.classList.toggle('cargo-preview-overflow', hasOverflow);
+    preview.title = hasOverflow ? 'Additional lines continue on page 2' : '';
+}
+
+function resplitCargoPair(srcId, previewId) {
+    const src = document.getElementById(srcId);
+    const preview = document.getElementById(previewId);
+    if (!src || !preview) return;
+
+    const head = getCargoCellPlainText(preview);
+    const overflowPart = getCargoCellPlainText(src);
+    const full = mergeCargoParts(head, overflowPart);
+    const { head: newHead, overflow: newOverflow } = splitCargoHeadOverflow(full, preview);
+
+    setCargoCellPlainText(preview, newHead);
+    setCargoCellPlainText(src, newOverflow);
+    markPreviewOverflow(preview, newOverflow);
+}
+
+function resplitAllCargoFields() {
     if (hblCargoSyncLock) return;
     hblCargoSyncLock = true;
     const printArea = document.getElementById('hblPrintArea');
     printArea?.classList.add('hbl-measure-preview');
-    HBL_CARGO_PREVIEW_MAP.forEach(([srcId, previewId]) => {
-        const src = document.getElementById(srcId);
-        const preview = document.getElementById(previewId);
-        if (!preview || !src) return;
-        const full = getCargoCellPlainText(src);
-        const truncated = truncateTextToFitCell(full, preview);
-        setCargoCellPlainText(preview, truncated);
-        preview.dataset.shownLen = String(truncated.length);
-        markPreviewOverflow(preview, full, truncated);
-    });
+    HBL_CARGO_PREVIEW_MAP.forEach(([srcId, previewId]) => resplitCargoPair(srcId, previewId));
     printArea?.classList.remove('hbl-measure-preview');
     hblCargoSyncLock = false;
 }
 
+function syncCargoPreview() {
+    resplitAllCargoFields();
+}
+
 function syncPreviewToCargo(previewId) {
-    if (hblCargoSyncLock) return;
-    const preview = document.getElementById(previewId);
-    const srcId = preview?.dataset.cargoSource;
-    const src = srcId ? document.getElementById(srcId) : null;
-    if (!preview || !src) return;
-
+    const pair = HBL_CARGO_PREVIEW_MAP.find(([, pid]) => pid === previewId);
+    if (!pair || hblCargoSyncLock) return;
     hblCargoSyncLock = true;
-    const edited = getCargoCellPlainText(preview);
-    const full = getCargoCellPlainText(src);
-    const shownLen = parseInt(preview.dataset.shownLen || '0', 10);
-    const safeShownLen = Number.isFinite(shownLen) && shownLen >= 0 ? shownLen : 0;
-    const tail = full.length > safeShownLen ? full.slice(safeShownLen) : '';
-    const merged = edited + tail;
-    setCargoCellPlainText(src, merged);
-
-    const truncated = truncateTextToFitCell(merged, preview);
-    setCargoCellPlainText(preview, truncated);
-    preview.dataset.shownLen = String(truncated.length);
-    markPreviewOverflow(preview, merged, truncated);
+    const printArea = document.getElementById('hblPrintArea');
+    printArea?.classList.add('hbl-measure-preview');
+    resplitCargoPair(pair[0], pair[1]);
+    printArea?.classList.remove('hbl-measure-preview');
     hblCargoSyncLock = false;
+}
+
+function mergeAllCargoForPrint() {
+    HBL_CARGO_PREVIEW_MAP.forEach(([srcId, previewId]) => {
+        const src = document.getElementById(srcId);
+        const preview = document.getElementById(previewId);
+        if (!src || !preview) return;
+        const full = mergeCargoParts(
+            getCargoCellPlainText(preview),
+            getCargoCellPlainText(src)
+        );
+        setCargoCellPlainText(src, full);
+    });
 }
 
 function bindCargoPreviewSync() {
@@ -327,13 +389,14 @@ function bindCargoPreviewSync() {
     let resizeTimer;
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(syncCargoPreview, 120);
+        resizeTimer = setTimeout(resplitAllCargoFields, 120);
     });
 }
 
 function printDoc() {
     if (isEditing) toggleEdit();
-    syncCargoPreview();
+    resplitAllCargoFields();
+    mergeAllCargoForPrint();
     document.title = '\u00A0';
     window.print();
 }
@@ -358,14 +421,18 @@ function toggleEdit() {
         btn.style.background = '';
         btn.style.color = '';
         editables.forEach((el) => el.removeAttribute('contenteditable'));
-        syncCargoPreview();
+        resplitAllCargoFields();
     }
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
     bindCargoPreviewSync();
-    window.addEventListener('beforeprint', syncCargoPreview);
+    window.addEventListener('beforeprint', () => {
+        resplitAllCargoFields();
+        mergeAllCargoForPrint();
+    });
     window.addEventListener('afterprint', function () {
+        resplitAllCargoFields();
         document.title = HBL_PAGE_TITLE;
     });
 
@@ -444,7 +511,7 @@ function populateDocument(d) {
     document.getElementById('sobDate').textContent = fmtDate(d.sob);
     document.getElementById('placeAndDateOfIssue').textContent = 'Gurugram, ' + new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     document.getElementById('endOfBlNo').textContent = d.enquiry_number || '';
-    syncCargoPreview();
+    resplitAllCargoFields();
 }
 
 function switchBlType(type) {
