@@ -207,7 +207,7 @@ const HBL_CARGO_PREVIEW_MAP = [
 
 let hblCargoSyncLock = false;
 
-const HBL_CARGO_ROW_HEIGHT_PX = 180;
+const HBL_CARGO_ROW_HEIGHT_PX = 190;
 
 function getCargoPreviewCell(previewId) {
     return document.getElementById(previewId);
@@ -225,22 +225,40 @@ function resolveCargoTextEl(elOrPreviewId) {
     return elOrPreviewId.querySelector?.('.cargo-preview-inner') || elOrPreviewId;
 }
 
+function extractCargoTextWithNewlines(el) {
+    if (!el) return '';
+    const blocks = el.querySelectorAll(':scope > div, :scope > p');
+    if (blocks.length > 0) {
+        return Array.from(blocks)
+            .map((b) => (b.innerText || b.textContent || '').replace(/\u00a0/g, ' '))
+            .join('\n');
+    }
+    return (el.innerText || el.textContent || '').replace(/\u00a0/g, ' ').replace(/\r\n/g, '\n');
+}
+
+function trimCargoCellEdges(text) {
+    return (text || '').replace(/^[ \t]+/, '').replace(/[ \t]+$/, '');
+}
+
 function getCargoCellPlainText(elOrPreviewId) {
     const el = resolveCargoTextEl(elOrPreviewId);
     if (!el) return '';
-    return (el.innerText || el.textContent || '').replace(/\u00a0/g, ' ').trim();
+    return trimCargoCellEdges(extractCargoTextWithNewlines(el));
 }
 
 function getCargoCellRawText(elOrPreviewId) {
     const el = resolveCargoTextEl(elOrPreviewId);
     if (!el) return '';
-    return (el.innerText || el.textContent || '').replace(/\u00a0/g, ' ');
+    return extractCargoTextWithNewlines(el);
 }
 
 function setCargoCellPlainText(el, text) {
     if (!el) return;
-    const next = text && text.trim() ? text : '\u00a0';
-    if (el.textContent === next) return;
+    const normalized = (text || '').replace(/\r\n/g, '\n');
+    const next = normalized.length && normalized.replace(/[\u00a0 \t\n\r]/g, '').length
+        ? normalized
+        : '\u00a0';
+    if ((el.textContent || '').replace(/\r\n/g, '\n') === next) return;
     el.textContent = next;
 }
 
@@ -296,8 +314,8 @@ function truncateTextToFitCell(text, previewCellEl) {
 }
 
 function getCargoFullText(page2Id, previewId) {
-    const head = getCargoCellPlainText(previewId);
-    const tail = getCargoCellPlainText(document.getElementById(page2Id));
+    const head = getCargoCellRawText(previewId);
+    const tail = getCargoCellRawText(document.getElementById(page2Id));
     return head + tail;
 }
 

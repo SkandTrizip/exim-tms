@@ -88,24 +88,25 @@
             #hblCargoPage1Box {
                 page-break-inside: avoid;
                 break-inside: avoid;
-                --hbl-cargo-row-h: 180px;
+                --hbl-cargo-row-h: 190px;
                 --hbl-cargo-note-h: 22px;
             }
             #hblCargoPage1Box.has-cargo-overflow {
-                --hbl-cargo-row-h: calc(180px - var(--hbl-cargo-note-h)) !important;
+                --hbl-cargo-row-h: calc(190px - var(--hbl-cargo-note-h)) !important;
             }
             #hblCargoPage1Box.has-cargo-overflow .cargo-continued-note {
                 display: block !important;
             }
             #hblCargoPage1Box .cargo-table-preview tbody tr.cargo-data-row > td {
-                height: var(--hbl-cargo-row-h, 180px) !important;
-                min-height: var(--hbl-cargo-row-h, 180px) !important;
-                max-height: var(--hbl-cargo-row-h, 180px) !important;
+                height: var(--hbl-cargo-row-h, 190px) !important;
+                min-height: var(--hbl-cargo-row-h, 190px) !important;
+                max-height: var(--hbl-cargo-row-h, 190px) !important;
                 overflow: hidden !important;
                 vertical-align: top !important;
                 padding: 0 !important;
                 font-size: 11px !important;
                 line-height: 1.35 !important;
+                white-space: pre-line !important;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
             }
@@ -118,12 +119,14 @@
                 overflow: hidden !important;
                 font-size: 11px !important;
                 line-height: 1.35 !important;
+                white-space: pre-line !important;
                 box-sizing: border-box !important;
                 padding: 2px 4px !important;
             }
             #hblPage2 .cargo-table tbody tr.cargo-data-row > td {
                 font-size: 11px !important;
                 line-height: 1.35 !important;
+                white-space: pre-line !important;
             }
             .cargo-table tfoot td { padding: 2px 4px; font-size: 8pt; font-style: normal; }
             .bottom-section td { font-size: 8pt; }
@@ -368,12 +371,12 @@
             .hbl-page-2 { border-top: none; margin-top: 0; padding-top: 0; }
         }
         #hblCargoPage1Box {
-            --hbl-cargo-row-h: 180px;
+            --hbl-cargo-row-h: 190px;
             --hbl-cargo-note-h: 22px;
             position: relative;
         }
         #hblCargoPage1Box.has-cargo-overflow {
-            --hbl-cargo-row-h: calc(180px - var(--hbl-cargo-note-h));
+            --hbl-cargo-row-h: calc(190px - var(--hbl-cargo-note-h));
         }
         #hblCargoPage1Box .cargo-table tbody tr.cargo-data-row td {
             height: var(--hbl-cargo-row-h);
@@ -833,7 +836,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=34"></script>
+    <script src="js/hbl-document.js?v=36"></script>
 </body>
 
 </html>
