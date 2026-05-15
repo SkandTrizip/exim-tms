@@ -70,18 +70,18 @@
                 overflow: hidden;
                 font-size: 8pt;
             }
-            .hbl-cargo-continuation {
+            .hbl-cargo-page-block {
                 page-break-before: always;
                 break-before: page;
             }
-            .hbl-primary-page.hbl-has-continuations {
-                page-break-after: always;
-                break-after: page;
+            .hbl-cargo-page-block .cargo-table thead {
+                display: table-header-group;
             }
-            .hbl-cargo-continuation .cargo-table tbody tr.cargo-data-row td {
-                height: 58px;
+            .hbl-cargo-page-block .cargo-table tbody tr.cargo-data-row td {
+                height: auto;
                 min-height: 58px;
-                max-height: 58px;
+                max-height: none;
+                overflow: visible;
             }
             .cargo-table tfoot td { padding: 2px 4px; font-size: 8pt; font-style: normal; }
             .bottom-section td { font-size: 8pt; }
@@ -179,7 +179,12 @@
             z-index: 1;
             border: 1px solid #000;
             box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
         }
+        .mtd-grid-frame > .mtd-table { order: 1; }
+        .mtd-grid-frame > .hbl-cargo-page-block { order: 2; }
+        .mtd-grid-frame > #hblBottomSection { order: 3; }
 
         .mtd-table, .cargo-table, .bottom-section {
             width: 100%;
@@ -286,28 +291,13 @@
             white-space: pre-line;
             box-sizing: border-box;
         }
-        .hbl-cargo-continuations { display: none; }
-        .hbl-print-paginated .hbl-cargo-continuations { display: block; }
-        .hbl-cargo-continuation {
+        .hbl-cargo-page-block .end-of-bl {
             margin-top: 0;
         }
-        .hbl-cargo-continuation .mtd-sheet {
-            margin-top: 0;
-        }
-        .hbl-cargo-continuation .mtd-doc-header {
-            display: none;
-        }
-        .hbl-print-paginated #hblBottomSection.hbl-detached-tail,
-        .hbl-print-paginated #hblEndOfBlBlock.hbl-detached-tail {
-            display: none;
-        }
-        #hblPrintArea.hbl-measure-print .cargo-table tbody tr.cargo-data-row td {
-            height: 58px;
-            min-height: 58px;
-            max-height: 58px;
-        }
-        .hbl-print-paginated #cargoTable tfoot {
-            display: none;
+        @media print {
+            .mtd-grid-frame > .mtd-table { order: 1; }
+            .mtd-grid-frame > #hblBottomSection { order: 2; }
+            .mtd-grid-frame > .hbl-cargo-page-block { order: 3; }
         }
         .cargo-table thead th {
             border: 1px solid #000;
@@ -547,6 +537,7 @@
                 </tr>
             </table>
 
+            <div id="hblCargoPageBlock" class="hbl-cargo-page-block">
             <!-- Cargo Details Table -->
             <section id="cargoSection">
             <table class="cargo-table" id="cargoTable">
@@ -584,6 +575,13 @@
                 </tfoot>
             </table>
             </section>
+
+            <div id="hblEndOfBlBlock">
+            <div class="end-of-bl">
+                <span>******************END OF BL : <span id="endOfBlNo"></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;******************</span>
+            </div>
+            </div>
+            </div>
 
             <!-- Bottom Section -->
             <div id="hblBottomSection">
@@ -649,21 +647,12 @@
 
         </div>
         </div>
-
-        <div id="hblCargoContinuations" class="hbl-cargo-continuations" aria-hidden="true"></div>
-
-        <!-- END OF BL (outside the bordered sheet) -->
-        <div id="hblEndOfBlBlock">
-        <div class="end-of-bl">
-            <span>******************END OF BL : <span id="endOfBlNo"></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;******************</span>
-        </div>
-        </div>
         </div>
     </div>
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=18"></script>
+    <script src="js/hbl-document.js?v=19"></script>
 </body>
 
 </html>
