@@ -70,22 +70,31 @@
                 overflow: hidden;
                 font-size: 8pt;
             }
-            #hblCargoPageBlock,
-            #hblBottomSection {
+            .mtd-grid-frame {
+                display: block !important;
+            }
+            #hblCargoPageBlock {
                 page-break-inside: avoid;
                 break-inside: avoid;
             }
             #hblBottomSection {
-                page-break-before: avoid;
-                break-before: avoid;
+                page-break-before: auto !important;
+                break-before: auto !important;
+                page-break-inside: auto !important;
+                break-inside: auto !important;
+            }
+            .hbl-cargo-continuations {
+                height: 0;
+                overflow: visible;
+                margin: 0;
+                padding: 0;
+            }
+            .hbl-print-paginated .hbl-cargo-continuations {
+                height: auto;
             }
             .hbl-cargo-continuations .hbl-cargo-continuation:first-child {
                 page-break-before: always;
                 break-before: page;
-            }
-            .hbl-cargo-continuations .hbl-cargo-continuation {
-                page-break-inside: avoid;
-                break-inside: avoid;
             }
             .hbl-cargo-continuation .cargo-table thead {
                 display: table-header-group;
@@ -192,12 +201,7 @@
             z-index: 1;
             border: 1px solid #000;
             box-sizing: border-box;
-            display: flex;
-            flex-direction: column;
         }
-        .mtd-grid-frame > .mtd-table { order: 1; }
-        .mtd-grid-frame > .hbl-cargo-page-block { order: 2; }
-        .mtd-grid-frame > #hblBottomSection { order: 3; }
 
         .mtd-table, .cargo-table, .bottom-section {
             width: 100%;
@@ -669,7 +673,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=22"></script>
+    <script src="js/hbl-document.js?v=24"></script>
 </body>
 
 </html>
