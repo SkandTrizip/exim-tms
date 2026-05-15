@@ -62,13 +62,21 @@
             #consignor { min-height: 44px !important; }
             #consignee, #deliveryAgent { min-height: 36px !important; }
             #notifyParty1, #notifyParty2 { min-height: 28px !important; }
+            .cargo-table {
+                table-layout: fixed !important;
+                width: 100% !important;
+                border-collapse: collapse !important;
+            }
             .cargo-table th { font-size: 7.5pt; }
-            .cargo-table tbody tr.cargo-data-row td {
-                height: 58px;
-                min-height: 58px;
-                max-height: 58px;
-                overflow: hidden;
+            #hblPage2 .cargo-table tbody tr.cargo-data-row > td {
+                height: auto !important;
+                min-height: 58px !important;
+                max-height: none !important;
+                overflow: visible !important;
                 font-size: 8pt;
+                vertical-align: top !important;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
             }
             .mtd-grid-frame {
                 display: block !important;
@@ -81,17 +89,27 @@
                 page-break-inside: avoid;
                 break-inside: avoid;
             }
-            #hblCargoPage1Box .cargo-table-preview .cargo-preview-cell {
-                height: calc(var(--hbl-cargo-row-h, 180px) * 0.48);
-                min-height: calc(var(--hbl-cargo-row-h, 180px) * 0.48);
-                max-height: calc(var(--hbl-cargo-row-h, 180px) * 0.48);
-                overflow: hidden;
+            #hblCargoPage1Box .cargo-table-preview tbody tr.cargo-data-row > td {
+                height: var(--hbl-cargo-row-h, 180px) !important;
+                min-height: var(--hbl-cargo-row-h, 180px) !important;
+                max-height: var(--hbl-cargo-row-h, 180px) !important;
+                overflow: hidden !important;
+                vertical-align: top !important;
+                padding: 2px 4px !important;
+                font-size: 8pt;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
             }
-            #hblPage2 .cargo-table tbody tr.cargo-data-row td {
-                height: auto;
-                min-height: 58px;
-                max-height: none;
-                overflow: visible;
+            #hblCargoPage1Box .cargo-preview-inner {
+                display: block !important;
+                width: 100% !important;
+                height: 100% !important;
+                min-height: 0 !important;
+                max-height: 100% !important;
+                overflow: hidden !important;
+                font-size: 8pt !important;
+                line-height: 1.22 !important;
+                box-sizing: border-box !important;
             }
             .cargo-table tfoot td { padding: 2px 4px; font-size: 8pt; font-style: normal; }
             .bottom-section td { font-size: 8pt; }
@@ -287,12 +305,28 @@
         .field-val { font-size: 12px; font-weight: normal; min-height: 14px; white-space: pre-line; }
         .field-val-bold { font-size: 12px; font-weight: bold; min-height: 14px; white-space: pre-line; }
 
+        .cargo-table {
+            table-layout: fixed;
+            width: 100%;
+            border-collapse: collapse;
+        }
         .cargo-table th {
             font-weight: bold;
             font-size: 10px;
             text-transform: none;
             text-align: left;
             vertical-align: top;
+        }
+        .cargo-table td {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        #hblPrintArea.hbl-print-measure #hblCargoPage1Box .cargo-preview-inner {
+            font-size: 8pt;
+            line-height: 1.22;
+        }
+        #hblPrintArea.hbl-print-measure #hblCargoPage1Box .cargo-table-preview tbody tr.cargo-data-row > td {
+            font-size: 8pt;
         }
         .hbl-page-sheet {
             max-width: 900px;
@@ -814,7 +848,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=31"></script>
+    <script src="js/hbl-document.js?v=32"></script>
 </body>
 
 </html>

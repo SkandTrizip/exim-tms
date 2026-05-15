@@ -378,14 +378,26 @@ function markPreviewOverflow(preview, fullText, headText) {
     preview.title = overflow ? 'Continued on page 2' : '';
 }
 
-function splitAllCargoFields() {
+function splitAllCargoFields(options = {}) {
     if (hblCargoSyncLock) return;
     hblCargoSyncLock = true;
+    const printArea = document.getElementById('hblPrintArea');
+    if (options.usePrintMetrics) printArea?.classList.add('hbl-print-measure');
     HBL_CARGO_PREVIEW_MAP.forEach(([page2Id, previewId]) => {
         const full = getCargoFullText(page2Id, previewId);
         setCargoSplit(page2Id, previewId, full);
     });
+    if (options.usePrintMetrics && !options.keepMeasure) {
+        printArea?.classList.remove('hbl-print-measure');
+    }
     hblCargoSyncLock = false;
+}
+
+function prepareCargoForPrint() {
+    const printArea = document.getElementById('hblPrintArea');
+    printArea?.classList.add('hbl-print-measure');
+    flushAllPreviewCargo();
+    splitAllCargoFields({ usePrintMetrics: true, keepMeasure: true });
 }
 
 function splitCargoFromStoredFull() {
@@ -490,7 +502,7 @@ function bindCargoPreviewSync() {
 
 function printDoc() {
     if (isEditing) toggleEdit();
-    splitAllCargoFields();
+    prepareCargoForPrint();
     document.title = '\u00A0';
     window.print();
 }
@@ -529,11 +541,9 @@ function toggleEdit() {
 document.addEventListener('DOMContentLoaded', async function () {
     initCargoBoxResize();
     bindCargoPreviewSync();
-    window.addEventListener('beforeprint', () => {
-        flushAllPreviewCargo();
-        splitAllCargoFields();
-    });
+    window.addEventListener('beforeprint', prepareCargoForPrint);
     window.addEventListener('afterprint', function () {
+        document.getElementById('hblPrintArea')?.classList.remove('hbl-print-measure');
         document.title = HBL_PAGE_TITLE;
     });
 
