@@ -1,5 +1,9 @@
 const HBL_PAGE_TITLE = 'HBL / MTD Document – ShipFlow TMS';
-const HBL_TERMS_HTML_URL = 'hbl-terms-conditions.html';
+const HBL_TERMS_PDF_URL = 'Reverse%20side%20terms%20%26%20conditions%20new.pdf';
+const HBL_PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+let hblTermsPagesReady = false;
+let hblTermsPagesPromise = null;
 
 let watermarkEnabled = true;
 let applySignEnabled = false;
@@ -528,9 +532,68 @@ function bindCargoPreviewSync() {
     });
 }
 
-function printDoc() {
+async function loadHblTermsPages() {
+    const container = document.getElementById('hblTermsPrintPages');
+    const pdfjs = window.pdfjsLib;
+    if (!container || !pdfjs) return;
+    if (container.dataset.loaded === '1') {
+        hblTermsPagesReady = true;
+        return;
+    }
+
+    if (!pdfjs.GlobalWorkerOptions.workerSrc) {
+        pdfjs.GlobalWorkerOptions.workerSrc = HBL_PDFJS_WORKER_URL;
+    }
+
+    const pdf = await pdfjs.getDocument(HBL_TERMS_PDF_URL).promise;
+    const printWidthPx = container.clientWidth > 0 ? container.clientWidth : 740;
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+        const page = await pdf.getPage(pageNum);
+        const baseViewport = page.getViewport({ scale: 1 });
+        const scale = printWidthPx / baseViewport.width;
+        const viewport = page.getViewport({ scale });
+
+        const canvas = document.createElement('canvas');
+        canvas.width = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d', { alpha: false });
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        const pageEl = document.createElement('div');
+        pageEl.className = 'hbl-terms-page';
+        const img = document.createElement('img');
+        img.className = 'hbl-terms-page-img';
+        img.alt = `Terms and conditions page ${pageNum}`;
+        img.src = canvas.toDataURL('image/jpeg', 0.92);
+        pageEl.appendChild(img);
+        container.appendChild(pageEl);
+    }
+
+    container.dataset.loaded = '1';
+    hblTermsPagesReady = true;
+}
+
+function ensureHblTermsPages() {
+    if (hblTermsPagesReady) return Promise.resolve();
+    if (!hblTermsPagesPromise) {
+        hblTermsPagesPromise = loadHblTermsPages().catch((err) => {
+            hblTermsPagesPromise = null;
+            console.error('Failed to load HBL terms PDF:', err);
+            throw err;
+        });
+    }
+    return hblTermsPagesPromise;
+}
+
+async function printDoc() {
     finishEditingWithoutResplit();
     prepareCargoForPrint();
+    try {
+        await ensureHblTermsPages();
+    } catch {
+        /* print HBL even if terms PDF fails */
+    }
     document.title = '\u00A0';
     window.print();
 }
@@ -566,57 +629,12 @@ function toggleEdit() {
     }
 }
 
-function scopeCssToContainer(cssText, containerSelector) {
-    return cssText.replace(/\/\*[\s\S]*?\*\//g, '').split('}').map((block) => {
-        const brace = block.indexOf('{');
-        if (brace === -1) return '';
-        const selectors = block.slice(0, brace).trim();
-        const rules = block.slice(brace + 1).trim();
-        if (!selectors) return '';
-        if (selectors.startsWith('@')) return `${selectors}{${rules}}`;
-        const scoped = selectors.split(',').map((sel) => {
-            const s = sel.trim();
-            if (!s) return s;
-            return `${containerSelector} ${s}`;
-        }).join(', ');
-        return `${scoped}{${rules}}`;
-    }).join('\n');
-}
-
-async function loadHblTermsPage() {
-    const container = document.getElementById('hblTermsContent');
-    if (!container || container.dataset.loaded === '1') return;
-    try {
-        const res = await fetch(HBL_TERMS_HTML_URL, { cache: 'no-cache' });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const html = await res.text();
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const styleEl = doc.querySelector('style');
-        if (styleEl?.textContent) {
-            const scoped = document.createElement('style');
-            scoped.id = 'hblTermsScopedStyles';
-            scoped.textContent = scopeCssToContainer(styleEl.textContent, '#hblTermsContent');
-            container.appendChild(scoped);
-        }
-        const section = doc.querySelector('.WordSection1');
-        if (section) {
-            container.appendChild(section.cloneNode(true));
-        } else {
-            container.innerHTML = doc.body?.innerHTML || '';
-        }
-        container.dataset.loaded = '1';
-    } catch (err) {
-        console.error('Failed to load HBL terms page:', err);
-        container.innerHTML = '<p style="font-size:11px;color:#b91c1c;">Terms &amp; conditions could not be loaded.</p>';
-    }
-}
-
 document.addEventListener('DOMContentLoaded', async function () {
     bindCargoPreviewSync();
-    loadHblTermsPage();
-    window.addEventListener('beforeprint', async () => {
-        await loadHblTermsPage();
+    ensureHblTermsPages().catch(() => {});
+    window.addEventListener('beforeprint', () => {
         prepareCargoForPrint();
+        ensureHblTermsPages().catch(() => {});
     });
     window.addEventListener('afterprint', function () {
         const printArea = document.getElementById('hblPrintArea');

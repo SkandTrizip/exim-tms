@@ -88,10 +88,6 @@
             #hblPage2.hidden {
                 display: none !important;
             }
-            .hbl-terms-page {
-                page-break-before: always;
-                break-before: page;
-            }
             #hblCargoPage1Box {
                 page-break-inside: avoid;
                 break-inside: avoid;
@@ -151,6 +147,21 @@
                 print-color-adjust: exact;
             }
             .end-of-bl { margin: 4px 0 0; padding: 2px 0; font-size: 8.5pt; }
+            .hbl-terms-print-pages { margin: 0; padding: 0; }
+            .hbl-terms-page {
+                page-break-before: always;
+                break-before: page;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                margin: 0;
+            }
+            .hbl-terms-page-img {
+                display: block;
+                width: 100%;
+                max-height: 277mm;
+                height: auto;
+                object-fit: contain;
+            }
             .watermark:not(.hidden) {
                 display: block !important;
                 visibility: visible !important;
@@ -362,6 +373,33 @@
         #hblPage2.hidden {
             display: none !important;
         }
+        .hbl-terms-print-pages {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 4px;
+        }
+        .hbl-terms-screen-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: #64748b;
+            margin: 28px 0 10px;
+            padding-top: 12px;
+            border-top: 2px dashed #cbd5e1;
+        }
+        .hbl-terms-page {
+            page-break-before: always;
+            break-before: page;
+            margin: 0 auto 24px;
+        }
+        .hbl-terms-page-img {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+        @media print {
+            .hbl-terms-screen-label { display: none !important; }
+            .hbl-terms-page { margin: 0; }
+        }
         .hbl-page-label {
             font-size: 12px;
             font-weight: 700;
@@ -373,28 +411,9 @@
             padding: 0 4px;
         }
         .hbl-page-label.hbl-page-2-label { color: #2563eb; }
-        .hbl-terms-page {
-            margin-top: 8px;
-            padding-top: 8px;
-            border-top: 2px dashed #cbd5e1;
-        }
-        #hblTermsContent {
-            max-width: 100%;
-            overflow-x: auto;
-        }
         @media print {
             .hbl-page-label { display: none !important; }
             .hbl-page-2 { border-top: none; margin-top: 0; padding-top: 0; }
-            .hbl-terms-page {
-                page-break-before: always;
-                break-before: page;
-                border-top: none;
-                margin-top: 0;
-                padding-top: 0;
-            }
-            #hblTermsContent .WordSection1 {
-                width: 100%;
-            }
         }
         #hblCargoPage1Box {
             --hbl-cargo-row-h: 190px;
@@ -861,12 +880,13 @@
         <div id="hblEndOfBlAnchorPage2"></div>
         </div>
 
-        <div id="hblTermsPage" class="hbl-page-sheet hbl-terms-page" aria-label="Reverse side terms and conditions">
-            <div id="hblTermsContent"></div>
+        <div id="hblTermsPrintPages" class="hbl-terms-print-pages">
+            <p class="hbl-terms-screen-label no-print">Reverse side — Terms &amp; Conditions (included at end of print)</p>
         </div>
     </div>
     </div>
 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
     <script src="js/hbl-document.js?v=38"></script>
