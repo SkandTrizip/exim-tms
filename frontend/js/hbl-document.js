@@ -1,6 +1,10 @@
 const HBL_PAGE_TITLE = 'HBL / MTD Document – ShipFlow TMS';
 const HBL_TERMS_PDF_URL = 'Reverse%20side%20terms%20%26%20conditions%20new.pdf';
 const HBL_PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+const HBL_TERMS_PAGE_MARGIN_MM = 5;
+const HBL_TERMS_LOGICAL_DPI = 150;
+const HBL_TERMS_RENDER_QUALITY = 3;
+const HBL_TERMS_LOADED_VERSION = '2';
 
 let hblTermsPagesReady = false;
 let hblTermsPagesPromise = null;
@@ -532,45 +536,62 @@ function bindCargoPreviewSync() {
     });
 }
 
+function getHblTermsPrintBoxPx() {
+    const mmToPx = (mm) => (mm / 25.4) * HBL_TERMS_LOGICAL_DPI;
+    const width = mmToPx(210 - HBL_TERMS_PAGE_MARGIN_MM * 2);
+    const height = mmToPx(297 - HBL_TERMS_PAGE_MARGIN_MM * 2);
+    return { width, height };
+}
+
 async function loadHblTermsPages() {
     const container = document.getElementById('hblTermsPrintPages');
     const pdfjs = window.pdfjsLib;
     if (!container || !pdfjs) return;
-    if (container.dataset.loaded === '1') {
+    if (container.dataset.loaded === HBL_TERMS_LOADED_VERSION) {
         hblTermsPagesReady = true;
         return;
     }
+
+    container.querySelectorAll('.hbl-terms-page').forEach((el) => el.remove());
 
     if (!pdfjs.GlobalWorkerOptions.workerSrc) {
         pdfjs.GlobalWorkerOptions.workerSrc = HBL_PDFJS_WORKER_URL;
     }
 
     const pdf = await pdfjs.getDocument(HBL_TERMS_PDF_URL).promise;
-    const printWidthPx = container.clientWidth > 0 ? container.clientWidth : 740;
+    const box = getHblTermsPrintBoxPx();
 
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         const page = await pdf.getPage(pageNum);
         const baseViewport = page.getViewport({ scale: 1 });
-        const scale = printWidthPx / baseViewport.width;
-        const viewport = page.getViewport({ scale });
+        const fitScale = Math.min(box.width / baseViewport.width, box.height / baseViewport.height);
+        const renderScale = fitScale * HBL_TERMS_RENDER_QUALITY;
+        const viewport = page.getViewport({ scale: renderScale });
 
         const canvas = document.createElement('canvas');
         canvas.width = viewport.width;
         canvas.height = viewport.height;
         const ctx = canvas.getContext('2d', { alpha: false });
-        await page.render({ canvasContext: ctx, viewport }).promise;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport, intent: 'print' }).promise;
+
+        const displayW = Math.round(viewport.width / HBL_TERMS_RENDER_QUALITY);
+        const displayH = Math.round(viewport.height / HBL_TERMS_RENDER_QUALITY);
 
         const pageEl = document.createElement('div');
         pageEl.className = 'hbl-terms-page';
         const img = document.createElement('img');
         img.className = 'hbl-terms-page-img';
         img.alt = `Terms and conditions page ${pageNum}`;
-        img.src = canvas.toDataURL('image/jpeg', 0.92);
+        img.src = canvas.toDataURL('image/png');
+        img.width = displayW;
+        img.height = displayH;
         pageEl.appendChild(img);
         container.appendChild(pageEl);
     }
 
-    container.dataset.loaded = '1';
+    container.dataset.loaded = HBL_TERMS_LOADED_VERSION;
     hblTermsPagesReady = true;
 }
 
