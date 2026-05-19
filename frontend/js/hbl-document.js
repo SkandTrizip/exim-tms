@@ -1,4 +1,5 @@
 const HBL_PAGE_TITLE = 'HBL / MTD Document – ShipFlow TMS';
+const HBL_TERMS_HTML_URL = 'hbl-terms-conditions.html';
 
 let watermarkEnabled = true;
 let applySignEnabled = false;
@@ -565,9 +566,58 @@ function toggleEdit() {
     }
 }
 
+function scopeCssToContainer(cssText, containerSelector) {
+    return cssText.replace(/\/\*[\s\S]*?\*\//g, '').split('}').map((block) => {
+        const brace = block.indexOf('{');
+        if (brace === -1) return '';
+        const selectors = block.slice(0, brace).trim();
+        const rules = block.slice(brace + 1).trim();
+        if (!selectors) return '';
+        if (selectors.startsWith('@')) return `${selectors}{${rules}}`;
+        const scoped = selectors.split(',').map((sel) => {
+            const s = sel.trim();
+            if (!s) return s;
+            return `${containerSelector} ${s}`;
+        }).join(', ');
+        return `${scoped}{${rules}}`;
+    }).join('\n');
+}
+
+async function loadHblTermsPage() {
+    const container = document.getElementById('hblTermsContent');
+    if (!container || container.dataset.loaded === '1') return;
+    try {
+        const res = await fetch(HBL_TERMS_HTML_URL, { cache: 'no-cache' });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const html = await res.text();
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const styleEl = doc.querySelector('style');
+        if (styleEl?.textContent) {
+            const scoped = document.createElement('style');
+            scoped.id = 'hblTermsScopedStyles';
+            scoped.textContent = scopeCssToContainer(styleEl.textContent, '#hblTermsContent');
+            container.appendChild(scoped);
+        }
+        const section = doc.querySelector('.WordSection1');
+        if (section) {
+            container.appendChild(section.cloneNode(true));
+        } else {
+            container.innerHTML = doc.body?.innerHTML || '';
+        }
+        container.dataset.loaded = '1';
+    } catch (err) {
+        console.error('Failed to load HBL terms page:', err);
+        container.innerHTML = '<p style="font-size:11px;color:#b91c1c;">Terms &amp; conditions could not be loaded.</p>';
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async function () {
     bindCargoPreviewSync();
-    window.addEventListener('beforeprint', prepareCargoForPrint);
+    loadHblTermsPage();
+    window.addEventListener('beforeprint', async () => {
+        await loadHblTermsPage();
+        prepareCargoForPrint();
+    });
     window.addEventListener('afterprint', function () {
         const printArea = document.getElementById('hblPrintArea');
         printArea?.classList.remove('hbl-print-measure', 'hbl-print-wysiwyg');
