@@ -654,7 +654,7 @@ function addPricingRowToSection(btn) {
 function addPricingRowToTbody(tbody, data = {}) {
     const row = document.createElement('tr');
     const defaultQty = currentEnquiry ? (currentEnquiry.container_count || 1) : 1;
-    const core = ["Ocean Freight", "BL Fee", "Origin THC", "Seal Charge", "MUC"];
+    const core = ["Ocean Freight", "BL Fee", "Origin THC", "Seal Charge"];
     const isCore = data.desc && core.includes(data.desc);
     const defaultEx = (data.curr === 'USD') ? (data.ex || currentExchangeRate) : (data.ex || 1);
     const hasStoredVendor = data.vendor_rate != null && data.vendor_rate !== '';

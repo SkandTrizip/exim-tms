@@ -43,7 +43,6 @@ DEFAULT_CHARGES = [
     { "desc": "BL Fee", "account": "On Your Account", "curr": "INR", "on": "Per BL" },
     { "desc": "Origin THC", "account": "On Your Account", "curr": "INR", "on": "Per Container" },
     { "desc": "Seal Charge", "account": "On Your Account", "curr": "INR", "on": "Per Container" },
-    { "desc": "MUC", "account": "On Your Account", "curr": "INR", "on": "Per Container" }
 ]
 
 def get_frontend_config() -> dict:

@@ -23,6 +23,22 @@ router = APIRouter(prefix="/invoice", tags=["Invoice"])
 
 from typing import Optional
 
+
+def _client_rate_for_invoice(charge) -> Optional[float]:
+    """
+    Client rate (vendor_rate) only — no shipping-line fallback.
+    Returns None when rate is empty/zero (charge not billed on client invoice).
+    """
+    if charge.vendor_rate is None:
+        return None
+    try:
+        rate = float(charge.vendor_rate)
+    except (TypeError, ValueError):
+        return None
+    if rate <= 0:
+        return None
+    return rate
+
 class InvoiceCreate(BaseModel):
     enquiry_id: int
     invoice_number: str
@@ -411,11 +427,9 @@ async def generate_invoice_pdf(
                 if charge.account_type != "On Your Account":
                     continue
 
-                # Use vendor_rate (client-facing per-unit price); fall back to shipping line rate if not set
-                vendor_rate_per_unit = charge.vendor_rate if (charge.vendor_rate and charge.vendor_rate > 0) else None
+                vendor_rate_per_unit = _client_rate_for_invoice(charge)
                 if vendor_rate_per_unit is None:
-                    # Fallback: use the shipping line rate (same formula will apply below)
-                    vendor_rate_per_unit = charge.rate
+                    continue
 
                 desc_lower = charge.charge_description.lower()
 
@@ -432,9 +446,6 @@ async def generate_invoice_pdf(
                     gst_pct = 18.0
                 elif "seal charge" in desc_lower or "seal fee" in desc_lower:
                     sac_code = "996799"
-                    gst_pct = 18.0
-                elif "muc" in desc_lower:
-                    sac_code = "996711"
                     gst_pct = 18.0
                 elif "facilitation" in desc_lower:
                     sac_code = "996711"
@@ -500,8 +511,6 @@ async def generate_invoice_pdf(
             elif "origin thc" in desc_lower or "origin terminal" in desc_lower:
                 gst_pct = 18.0
             elif "seal charge" in desc_lower or "seal fee" in desc_lower:
-                gst_pct = 18.0
-            elif "muc" in desc_lower:
                 gst_pct = 18.0
             elif "facilitation" in desc_lower:
                 gst_pct = 18.0
