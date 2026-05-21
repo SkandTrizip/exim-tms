@@ -236,7 +236,7 @@ function initConfirmMode() {
             const container = document.querySelector(selector);
             if (container) {
                 const elements = container.querySelectorAll(
-                    'input:not(.p-vendor, .p-rate, .p-ex), select, textarea, button:not(.btn-secondary):not(#confirmQuoteBtn)'
+                    'input:not(.p-vendor, .p-rate, .p-ex), select, textarea, button:not(.btn-secondary):not(#confirmQuoteBtn):not(.btn-icon-overlay):not(.btn-add-integrated)'
                 );
                 elements.forEach(el => {
                     el.disabled = true;
@@ -651,23 +651,26 @@ function addPricingRowToSection(btn) {
     calculatePricingTotal();
 }
 
+function removePricingRow(btn) {
+    const row = btn.closest('tr');
+    if (!row) return;
+    row.remove();
+    calculatePricingTotal();
+}
+
 function addPricingRowToTbody(tbody, data = {}) {
     const row = document.createElement('tr');
     const defaultQty = currentEnquiry ? (currentEnquiry.container_count || 1) : 1;
-    const core = ["Ocean Freight", "BL Fee", "Origin THC", "Seal Charge"];
-    const isCore = data.desc && core.includes(data.desc);
     const defaultEx = (data.curr === 'USD') ? (data.ex || currentExchangeRate) : (data.ex || 1);
     const hasStoredVendor = data.vendor_rate != null && data.vendor_rate !== '';
     const defaultVendorRate = hasStoredVendor ? data.vendor_rate : (data.rate || '');
     const vendorManual = hasStoredVendor && String(data.vendor_rate) !== String(data.rate ?? '') ? 'true' : 'false';
 
-    // Delete button overlaid on the INR cell (only for non-core rows)
-    const deleteBtn = !isCore
-        ? `<button type="button" class="btn-icon-overlay" onclick="this.closest('tr').remove(); calculatePricingTotal()" title="Remove row"><i class="fas fa-trash"></i></button>`
-        : '';
+    const deleteBtn =
+        '<button type="button" class="btn-icon-overlay" onclick="removePricingRow(this)" title="Remove charge line"><i class="fas fa-trash"></i></button>';
 
     row.innerHTML = `
-        <td><input type="text" class="p-desc" value="${data.desc || ''}" ${isCore ? 'readonly' : ''} oninput="calculatePricingTotal()"></td>
+        <td><input type="text" class="p-desc" value="${data.desc || ''}" oninput="calculatePricingTotal()"></td>
         <td><select class="p-account" onchange="calculatePricingTotal()"><option value="On Your Account" ${data.account === 'On Your Account' ? 'selected' : ''}>On Your Account</option><option value="Consignee Account" ${data.account === 'Consignee Account' ? 'selected' : ''}>Consignee Account</option></select></td>
         <td><select class="p-curr" onchange="handleCurrencyChange(this)"><option value="USD" ${data.curr === 'USD' ? 'selected' : ''}>USD</option><option value="INR" ${data.curr === 'INR' ? 'selected' : ''}>INR</option></select></td>
         <td><select class="p-on" onchange="handleChargedOnChange(this)"><option value="Per BL" ${data.on === 'Per BL' ? 'selected' : ''}>Per BL</option><option value="Per Container" ${data.on === 'Per Container' ? 'selected' : ''}>Per Container</option></select></td>
