@@ -59,7 +59,7 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
     # Map extra metadata fields if provided
     metadata_fields = [
         'si_number', 'consignee', 'port_of_origin', 
-        'final_destination', 'vessel', 'voyage','master_number', 
+        'final_destination', 'vessel', 'voyage', 'master_number', 'container_number',
         'pay_line', 'inv_raised', 'pay_client',
         'utr_number', 'payment_date', 'payment_amount'
     ]

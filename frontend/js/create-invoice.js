@@ -120,7 +120,6 @@ async function fetchAllData() {
                 `;
 
                 document.getElementById('customer_code_val').textContent = master.client_code;
-                document.getElementById('customer_pan_val').textContent = master.pan_no || '---';
 
                 calculateDueDate();
             }
@@ -130,6 +129,9 @@ async function fetchAllData() {
             const invData = await invoiceRes.json();
             if (invData) {
                 if (invData.invoice_number) document.getElementById('invoice_number').value = invData.invoice_number;
+                if (invData.customer_invoice_no) {
+                    document.getElementById('customer_invoice_no').value = invData.customer_invoice_no;
+                }
                 if (invData.place_of_supply) document.getElementById('place_of_supply').value = invData.place_of_supply;
                 if (invData.invoice_date) document.getElementById('invoice_date').value = invData.invoice_date;
                 if (invData.payment_due_date) document.getElementById('payment_due_date').value = invData.payment_due_date;
@@ -188,6 +190,7 @@ async function generateInvoice(type = 'draft') {
 
         // Construct URL with query parameters
         const irnValue = document.getElementById('irn_val').value.trim();
+        const customerInvNo = document.getElementById('customer_invoice_no').value.trim();
         const params = new URLSearchParams({
             invoice_number: invoiceData.invoice_number,
             place_of_supply: invoiceData.place_of_supply,
@@ -196,6 +199,7 @@ async function generateInvoice(type = 'draft') {
             invoice_type: type,           // 'draft' or 'tax'
             item_type: document.getElementById('invoice_item_type').value || 'all'
         });
+        if (customerInvNo) params.append('customer_invoice_no', customerInvNo);
         if (irnValue) params.append('irn', irnValue);
 
         const pdfUrl = `${CONFIG.API_URL}/api/invoice/generate/${enquiryId}?${params.toString()}`;
@@ -272,10 +276,12 @@ function confirmRecordInvoice() {
 }
 
 async function recordInvoice() {
+    const customerInvNo = document.getElementById('customer_invoice_no').value.trim();
     const invoiceData = {
         enquiry_id: parseInt(enquiryId),
         place_of_supply: document.getElementById('place_of_supply').value,
         invoice_number: document.getElementById('invoice_number').value,
+        customer_invoice_no: customerInvNo || null,
         irn: document.getElementById('irn_val').value || null,
         invoice_date: document.getElementById('invoice_date').value,
         payment_due_date: document.getElementById('payment_due_date').value,

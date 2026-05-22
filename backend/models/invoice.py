@@ -9,6 +9,7 @@ class Invoice(Base):
     id = Column(Integer, primary_key=True, index=True)
     enquiry_id = Column(Integer, ForeignKey("enquiries.id", ondelete="CASCADE"))
     invoice_number = Column(String, index=True, unique=True)
+    customer_invoice_no = Column(String, nullable=True)
     invoice_date = Column(Date)
     place_of_supply = Column(String)
     payment_due_date = Column(Date)

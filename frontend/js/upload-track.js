@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Attach autosave to metadata fields
     const metadataFields = [
         'si_number', 'bl_consignee', 'bl_port_origin', 'bl_final_dest', 'bl_master_number',
-        'bl_vessel', 'bl_voyage', 'bl_etd', 'bl_eta'
+        'bl_vessel', 'bl_voyage', 'bl_etd', 'bl_eta', 'bl_container_number'
     ];
     metadataFields.forEach(id => {
         const el = document.getElementById(id);
@@ -552,6 +552,7 @@ function getChecklistState() {
     state.voyage = document.getElementById('bl_voyage')?.value || '';
     state.etd = document.getElementById('bl_etd')?.value || '';
     state.eta = document.getElementById('bl_eta')?.value || '';
+    state.container_number = document.getElementById('bl_container_number')?.value || '';
 
     return state;
 }
@@ -707,7 +708,8 @@ function applyChecklistState(state, isBackend = false) {
         'vessel': 'bl_vessel',
         'voyage': 'bl_voyage',
         'etd': 'bl_etd',
-        'eta': 'bl_eta'
+        'eta': 'bl_eta',
+        'container_number': 'bl_container_number'
     };
 
     Object.entries(metadataMapping).forEach(([backendKey, elementId]) => {

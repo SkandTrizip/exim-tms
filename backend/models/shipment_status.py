@@ -36,6 +36,7 @@ class ShipmentStatus(Base):
     etd = Column(DateTime)
     eta = Column(DateTime)
     master_number = Column(String)
+    container_number = Column(String)
     
     # Finance Statuses
     pay_line = Column(DateTime)

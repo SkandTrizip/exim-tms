@@ -45,6 +45,7 @@ class InvoiceCreate(BaseModel):
     invoice_date: datetime.date
     payment_due_date: datetime.date
     place_of_supply: str
+    customer_invoice_no: Optional[str] = None
     irn: Optional[str] = None
     item_type: str = "all"
 
@@ -167,6 +168,7 @@ async def generate_invoice_pdf(
     place_of_supply: str = "06AAFCL3674H1ZE/Gurugram",
     roe: float = Query(...),
     irn: str = None,
+    customer_invoice_no: Optional[str] = None,
     item_type: str = "all",      # 'all', 'main', or 'additional'
     db: Session = Depends(get_db)
 ):
@@ -289,7 +291,14 @@ async def generate_invoice_pdf(
     cust_addr = client_origin.office_address if client_origin else "Address specific to client..."
     cust_gst = client_origin.gst_no if client_origin else "N/A"
     cust_code = client_master.client_code if client_master else "N/A"
-    cust_pan = client_master.pan_no if client_master else "N/A"
+
+    cust_invoice_no = (customer_invoice_no or "").strip()
+    if not cust_invoice_no:
+        saved_inv = db.query(Invoice).filter(Invoice.enquiry_id == enquiry_id).first()
+        if saved_inv and getattr(saved_inv, "customer_invoice_no", None):
+            cust_invoice_no = (saved_inv.customer_invoice_no or "").strip()
+    if not cust_invoice_no:
+        cust_invoice_no = "N/A"
     
     shipper_val = "N/A"
     if client_master:
@@ -305,11 +314,15 @@ async def generate_invoice_pdf(
     etd = status.etd.strftime("%d-%b-%y") if (status and status.etd) else "N/A"
     eta = status.eta.strftime("%d-%b-%y") if (status and status.eta) else "N/A"
     master_no = status.master_number if status else "N/A"
-    house_no = "N/A"
     reverse_charge = "No"
     
-    job_no = enquiry.enquiry_number
+    job_no = enquiry.enquiry_number or "N/A"
     job_date = enquiry.created_at.strftime("%d-%b-%y")
+    # When HBL is required, House Number on invoice = Job Number (sale/enquiry no.)
+    if getattr(enquiry, "hbl_required", False) and job_no != "N/A":
+        house_no = job_no
+    else:
+        house_no = "N/A"
     
     inv_no_val = invoice_number if invoice_number else "INV-DRAFT"
     inv_date_val = invoice_date if invoice_date else datetime.date.today().strftime("%d-%b-%y")
@@ -367,11 +380,14 @@ async def generate_invoice_pdf(
     left_col_data.append(kv_row("Final Destination", pod))
     left_col_data.append(kv_row("Vessel", vessel))
     left_col_data.append(kv_row("Voyage Number", voyage))
+    container_no = (status.container_number or "").strip() if status else ""
+    if container_no:
+        left_col_data.append(kv_row("Container No.", container_no))
     
     # Right Column Data
     right_col_data = []
     right_col_data.append(kv_row("Customer Code", cust_code))
-    right_col_data.append(kv_row("Customer PAN No.", cust_pan))
+    right_col_data.append(kv_row("Customer Invoice No.", cust_invoice_no))
     right_col_data.append([Spacer(1, 2), Spacer(1, 2)])
     right_col_data.append(kv_row("Invoice Number", inv_no_val))
     # IRN: 64-char hash — same font size as other fields, wraps naturally in the column
