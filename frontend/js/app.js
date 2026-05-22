@@ -277,27 +277,24 @@ async function handleFinanceReceivedClick(ev) {
 async function fetchDashboardStats() {
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/dashboard/stats`);
-        if (response.ok) {
-            const data = await response.json();
-            document.getElementById('totalEnquiry').textContent = data.total_enquiries;
-            document.getElementById('pendingPricing').textContent = data.pending_at_pricing;
-            document.getElementById('pendingConfirmation').textContent = data.pending_client_confirmation;
-            // Updated Booking Pending
-            if (document.getElementById('bookingPendingCount'))
-                document.getElementById('bookingPendingCount').textContent = data.booking_pending;
-
-            // Updated milestone counts (Pending)
-            if (document.getElementById('siPendingCount'))
-                document.getElementById('siPendingCount').textContent = data.si_pending;
-            if (document.getElementById('blPendingCount'))
-                document.getElementById('blPendingCount').textContent = data.bl_pending;
-            if (document.getElementById('sobPendingCount'))
-                document.getElementById('sobPendingCount').textContent = data.sob_pending;
-            if (document.getElementById('financeInvoicesRaised'))
-                document.getElementById('financeInvoicesRaised').textContent = data.invoices_raised || 0;
-            if (document.getElementById('paymentPendingCount'))
-                document.getElementById('paymentPendingCount').textContent = data.payment_pending || 0;
+        if (!response.ok) {
+            console.error('Dashboard stats HTTP error:', response.status, await response.text());
+            return;
         }
+        const data = await response.json();
+        const setStat = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val ?? 0;
+        };
+        setStat('totalEnquiry', data.total_enquiries);
+        setStat('pendingPricing', data.pending_at_pricing);
+        setStat('pendingConfirmation', data.pending_client_confirmation);
+        setStat('bookingPendingCount', data.booking_pending);
+        setStat('siPendingCount', data.si_pending);
+        setStat('blPendingCount', data.bl_pending);
+        setStat('sobPendingCount', data.sob_pending);
+        setStat('financeInvoicesRaised', data.invoices_raised);
+        setStat('paymentPendingCount', data.payment_pending);
     } catch (error) {
         console.error('Error fetching dashboard stats:', error);
     }

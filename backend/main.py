@@ -30,6 +30,8 @@ _column_migrations = [
     ("enquiries", "voyage_no", "VARCHAR"),
     ("enquiries", "notify_party_address", "TEXT"),
     ("enquiries", "notify_party_2_address", "TEXT"),
+    ("shipment_statuses", "container_number", "VARCHAR"),
+    ("invoices", "customer_invoice_no", "VARCHAR"),
 ]
 with engine.connect() as _conn:
     _inspector = inspect(engine)
