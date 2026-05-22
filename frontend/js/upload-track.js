@@ -22,7 +22,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     ];
     metadataFields.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.addEventListener('change', saveChecklistState);
+        if (el) {
+            el.addEventListener('change', saveChecklistState);
+            el.addEventListener('input', saveChecklistState);
+        }
     });
 });
 
@@ -714,13 +717,13 @@ function applyChecklistState(state, isBackend = false) {
 
     Object.entries(metadataMapping).forEach(([backendKey, elementId]) => {
         const el = document.getElementById(elementId);
-        if (el && state[backendKey]) {
-            let value = state[backendKey];
-            if ((backendKey === 'etd' || backendKey === 'eta') && typeof value === 'string' && value.includes('T')) {
-                value = value.split('T')[0];
-            }
-            el.value = value;
+        if (!el || !Object.prototype.hasOwnProperty.call(state, backendKey)) return;
+        let value = state[backendKey];
+        if (value == null) value = '';
+        if ((backendKey === 'etd' || backendKey === 'eta') && typeof value === 'string' && value.includes('T')) {
+            value = value.split('T')[0];
         }
+        el.value = value;
     });
 
     // Ensure dependencies are applied AFTER applying state
@@ -912,9 +915,16 @@ function removeFile(inputId, displayId) {
  * Save tracking details and uploaded documents
  */
 async function saveTracking() {
-    // Prepare minimal tracking data
+    if (!currentEnquiryData?.id) {
+        showModal('Error', 'Enquiry not loaded. Please refresh the page.', 'error');
+        return;
+    }
+
+    // Persist checklist/metadata (container no., BL fields, SI number) before file upload
+    await saveChecklistState();
+
     const trackingData = {
-        enquiry_id: currentEnquiryData?.id,
+        enquiry_id: currentEnquiryData.id,
         quote_id: currentPricingData?.id,
         checklist_state: getChecklistState()
     };
@@ -944,7 +954,9 @@ async function saveTracking() {
             const result = await response.json();
             console.log('✅ Tracking data saved:', result);
 
-            // Show Success Modal and Redirect
+            await saveChecklistState();
+            await loadChecklistState();
+
             showModal('Success', 'Documents uploaded successfully!', 'success');
         } else {
             const error = await response.json();

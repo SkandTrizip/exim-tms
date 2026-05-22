@@ -754,7 +754,7 @@ function switchBlType(type) {
         count.textContent = 'Number of Original MTD: 0 / ZERO';
         ['watermark', 'watermarkPage2'].forEach((id) => {
             const wm = document.getElementById(id);
-            if (wm) wm.textContent = 'Seaway BL';
+            if (wm) wm.textContent = 'SEAWAY BL';
         });
         if (toggleWrap) toggleWrap.style.display = 'flex';
         if (toggle) toggle.checked = watermarkEnabled;

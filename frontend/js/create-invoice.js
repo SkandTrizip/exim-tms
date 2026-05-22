@@ -14,6 +14,26 @@ function stripBranchSuffix(name) {
     return name;
 }
 
+/** Customer Invoice No. is taken from Shipper Invoice No. (SI) on Upload & Track. */
+function syncCustomerInvoiceFromShipper(shipperInv) {
+    const el = document.getElementById('customer_invoice_no');
+    if (!el) return;
+    const val = (shipperInv || '').trim();
+    if (el.tagName === 'INPUT') {
+        el.value = val;
+    } else {
+        el.textContent = val || '---';
+    }
+}
+
+function getCustomerInvoiceNo() {
+    const el = document.getElementById('customer_invoice_no');
+    if (!el) return '';
+    if (el.tagName === 'INPUT') return (el.value || '').trim();
+    const text = (el.textContent || '').trim();
+    return text === '---' ? '' : text;
+}
+
 document.addEventListener('DOMContentLoaded', async function () {
     const urlParams = new URLSearchParams(window.location.search);
     enquiryId = urlParams.get('enquiry_id');
@@ -78,8 +98,10 @@ async function fetchAllData() {
                 document.getElementById('voyage_val').textContent = status.voyage || '---';
                 document.getElementById('etd_val').textContent = status.etd ? new Date(status.etd).toLocaleDateString() : '---';
                 document.getElementById('eta_val').textContent = status.eta ? new Date(status.eta).toLocaleDateString() : '---';
-                document.getElementById('shipper_inv_no').textContent = status.si_number || '---';
+                const shipperInv = (status.si_number || '').trim();
+                document.getElementById('shipper_inv_no').textContent = shipperInv || '---';
                 document.getElementById('master_no_val').textContent = status.master_number || '---';
+                syncCustomerInvoiceFromShipper(shipperInv);
             }
         }
 
@@ -129,8 +151,8 @@ async function fetchAllData() {
             const invData = await invoiceRes.json();
             if (invData) {
                 if (invData.invoice_number) document.getElementById('invoice_number').value = invData.invoice_number;
-                if (invData.customer_invoice_no) {
-                    document.getElementById('customer_invoice_no').value = invData.customer_invoice_no;
+                if (invData.customer_invoice_no && !getCustomerInvoiceNo()) {
+                    syncCustomerInvoiceFromShipper(invData.customer_invoice_no);
                 }
                 if (invData.place_of_supply) document.getElementById('place_of_supply').value = invData.place_of_supply;
                 if (invData.invoice_date) document.getElementById('invoice_date').value = invData.invoice_date;
@@ -190,7 +212,7 @@ async function generateInvoice(type = 'draft') {
 
         // Construct URL with query parameters
         const irnValue = document.getElementById('irn_val').value.trim();
-        const customerInvNo = document.getElementById('customer_invoice_no').value.trim();
+        const customerInvNo = getCustomerInvoiceNo();
         const params = new URLSearchParams({
             invoice_number: invoiceData.invoice_number,
             place_of_supply: invoiceData.place_of_supply,
@@ -276,7 +298,7 @@ function confirmRecordInvoice() {
 }
 
 async function recordInvoice() {
-    const customerInvNo = document.getElementById('customer_invoice_no').value.trim();
+    const customerInvNo = getCustomerInvoiceNo();
     const invoiceData = {
         enquiry_id: parseInt(enquiryId),
         place_of_supply: document.getElementById('place_of_supply').value,

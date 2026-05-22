@@ -293,6 +293,8 @@ async def generate_invoice_pdf(
     cust_code = client_master.client_code if client_master else "N/A"
 
     cust_invoice_no = (customer_invoice_no or "").strip()
+    if not cust_invoice_no and status and getattr(status, "si_number", None):
+        cust_invoice_no = (status.si_number or "").strip()
     if not cust_invoice_no:
         saved_inv = db.query(Invoice).filter(Invoice.enquiry_id == enquiry_id).first()
         if saved_inv and getattr(saved_inv, "customer_invoice_no", None):

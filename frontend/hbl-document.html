@@ -262,17 +262,30 @@
             margin-top: 0;
         }
 
-        /* Watermark for Seaway */
+        /* Watermark for Seaway — centered on full page, not table block */
         .watermark {
-            position: absolute; top: 50%; left: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
             transform: translate(-50%, -50%) rotate(-35deg);
-            font-size: 80px; font-weight: bold; color: rgba(0, 0, 0, 0.06);
-            white-space: nowrap; pointer-events: none; z-index: 0;
+            font-size: 80px;
+            font-weight: bold;
+            color: rgba(0, 0, 0, 0.06);
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 0;
             letter-spacing: 4px;
             font-family: Arial, Helvetica, sans-serif;
         }
         .watermark.hidden { display: none; }
-        .mtd-table, .cargo-table, .bottom-section { position: relative; z-index: 1; }
+        .mtd-doc-header,
+        .mtd-sheet,
+        .mtd-table,
+        .cargo-table,
+        .bottom-section {
+            position: relative;
+            z-index: 1;
+        }
 
         .mtd-grid-frame {
             position: relative;
@@ -392,9 +405,16 @@
             font-size: 8pt;
         }
         .hbl-page-sheet {
+            position: relative;
             max-width: 900px;
             margin: 0 auto 28px;
             background: #fff;
+            min-height: 1050px;
+        }
+        @media print {
+            .hbl-page-sheet {
+                min-height: calc(297mm - 14mm);
+            }
         }
         .hbl-page-2 {
             margin-top: 8px;
@@ -649,6 +669,7 @@
         <!-- MTD Document Sheet (print/PDF capture area) -->
         <div id="hblPrintArea">
         <div id="hblPage1" class="hbl-page-sheet">
+            <div class="watermark" id="watermark">SEAWAY BL</div>
         <div class="mtd-doc-header">
             <div class="mtd-bl-no-line">
                 <span id="mtdDraftPrefix" class="mtd-draft-inline hidden" aria-hidden="true">Draft</span><span>MTD BL NO:</span>
@@ -657,7 +678,6 @@
             <div class="mtd-title-wrap">MULTI-MODAL TRANSPORT DOCUMENT<br><span id="blTypeLabel">SEAWAY BILL OF LADING</span></div>
         </div>
         <div class="mtd-sheet">
-            <div class="watermark" id="watermark">SEAWAY BL</div>
             <div class="mtd-grid-frame">
             <table class="mtd-table">
                 <tr>
@@ -867,8 +887,8 @@
         </div>
 
         <div id="hblPage2" class="hbl-page-sheet hbl-page-2 hidden" aria-hidden="true">
-        <div class="mtd-sheet">
             <div class="watermark hbl-page2-watermark" id="watermarkPage2">SEAWAY BL</div>
+        <div class="mtd-sheet">
             <div class="mtd-grid-frame">
             <section id="cargoSection">
             <table class="cargo-table" id="cargoTable">

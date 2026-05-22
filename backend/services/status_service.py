@@ -64,17 +64,22 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
         'utr_number', 'payment_date', 'payment_amount'
     ]
     
+    datetime_meta = {'pay_line', 'inv_raised', 'pay_client'}
     for field in metadata_fields:
-        if field in status_data:
-            val = status_data[field]
-            if val and field in ['pay_line', 'inv_raised', 'pay_client']:
+        if field not in status_data:
+            continue
+        val = status_data[field]
+        if field in datetime_meta:
+            if val:
                 try:
-                    # Parse ISO format from JS Date.toISOString()
                     setattr(status, field, datetime.fromisoformat(val.replace('Z', '+00:00')))
-                except:
+                except Exception:
                     setattr(status, field, datetime.now())
             else:
-                setattr(status, field, val)
+                setattr(status, field, None)
+        else:
+            # Always persist text metadata (including empty strings to allow clearing)
+            setattr(status, field, val if val is not None else None)
 
     # Handle Date fields in metadata (etd, eta, payment_date)
     for field in ['etd', 'eta', 'payment_date']:
