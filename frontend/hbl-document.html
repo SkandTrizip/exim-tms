@@ -194,12 +194,30 @@
                 print-color-adjust: exact;
             }
             .watermark:not(.hidden) {
-                display: block !important;
+                display: flex !important;
                 visibility: visible !important;
-                color: rgba(0, 0, 0, 0.14) !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
+            }
+            .hbl-watermark-text {
+                color: rgba(0, 0, 0, 0.14) !important;
                 font-size: 64px;
+            }
+            .hbl-page-sheet {
+                position: relative;
+                min-height: calc(297mm - 14mm);
+                height: calc(297mm - 14mm);
+                page-break-after: always;
+                break-after: page;
+            }
+            .hbl-page-sheet .watermark:not(.hidden) {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                transform: none;
             }
             .mtd-company-block { gap: 6px; }
             .mtd-company { font-size: 9pt; margin-bottom: 2px; }
@@ -262,20 +280,30 @@
             margin-top: 0;
         }
 
-        /* Watermark for Seaway — centered on full page, not table block */
+        /* Watermark — centered on full A4 page (not table block) */
         .watermark {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(-35deg);
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: var(--hbl-page-height, 1123px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            z-index: 0;
+            margin: 0;
+            transform: none;
+        }
+        .hbl-watermark-text {
+            transform: rotate(-35deg);
             font-size: 80px;
             font-weight: bold;
             color: rgba(0, 0, 0, 0.06);
             white-space: nowrap;
-            pointer-events: none;
-            z-index: 0;
             letter-spacing: 4px;
             font-family: Arial, Helvetica, sans-serif;
+            line-height: 1;
         }
         .watermark.hidden { display: none; }
         .mtd-doc-header,
@@ -409,12 +437,7 @@
             max-width: 900px;
             margin: 0 auto 28px;
             background: #fff;
-            min-height: 1050px;
-        }
-        @media print {
-            .hbl-page-sheet {
-                min-height: calc(297mm - 14mm);
-            }
+            --hbl-page-height: 1123px;
         }
         .hbl-page-2 {
             margin-top: 8px;
@@ -669,7 +692,7 @@
         <!-- MTD Document Sheet (print/PDF capture area) -->
         <div id="hblPrintArea">
         <div id="hblPage1" class="hbl-page-sheet">
-            <div class="watermark" id="watermark">SEAWAY BL</div>
+            <div class="watermark" id="watermark"><span class="hbl-watermark-text">SEAWAY BL</span></div>
         <div class="mtd-doc-header">
             <div class="mtd-bl-no-line">
                 <span id="mtdDraftPrefix" class="mtd-draft-inline hidden" aria-hidden="true">Draft</span><span>MTD BL NO:</span>
@@ -887,7 +910,7 @@
         </div>
 
         <div id="hblPage2" class="hbl-page-sheet hbl-page-2 hidden" aria-hidden="true">
-            <div class="watermark hbl-page2-watermark" id="watermarkPage2">SEAWAY BL</div>
+            <div class="watermark hbl-page2-watermark" id="watermarkPage2"><span class="hbl-watermark-text">SEAWAY BL</span></div>
         <div class="mtd-sheet">
             <div class="mtd-grid-frame">
             <section id="cargoSection">
@@ -939,7 +962,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=40"></script>
+    <script src="js/hbl-document.js?v=41"></script>
 </body>
 
 </html>

@@ -425,6 +425,7 @@ async def generate_invoice_pdf(
     headers = ["SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt", "ROE", "Taxable Amt", "Rate", "IGST", "Amt in INR"]
     
     table_data = [headers]
+    grand_total_taxable = 0.0
     grand_total_inr = 0.0
     sn = 1
     
@@ -488,6 +489,7 @@ async def generate_invoice_pdf(
 
                 igst_amt = taxable_amt * (gst_pct / 100.0)
                 total_inr = taxable_amt + igst_amt
+                grand_total_taxable += taxable_amt
                 grand_total_inr += total_inr
 
                 row = [
@@ -551,6 +553,7 @@ async def generate_invoice_pdf(
 
             igst_amt = taxable_amt * (gst_pct / 100.0)
             total_inr = taxable_amt + igst_amt
+            grand_total_taxable += taxable_amt
             grand_total_inr += total_inr
 
             table_data.append([
@@ -569,7 +572,13 @@ async def generate_invoice_pdf(
             ])
             sn += 1
             
-    # Total Row
+    # Summary rows
+    taxable_total_val = Paragraph(f"<b>{grand_total_taxable:.2f}</b>", t_style_row)
+    table_data.append([
+        '', Paragraph('<b>Total Taxable Amount</b>', t_style_row),
+        '', '', '', '', '', '', taxable_total_val, '', '', ''
+    ])
+
     total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)
     table_data.append(['', 'Total', '', '', '', '', '', '', '', '', '', total_val])
 
@@ -578,9 +587,11 @@ async def generate_invoice_pdf(
         ('GRID', (0,0), (-1,-1), 0.5, colors.black),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('SPAN', (1,-1), (10,-1)), 
-        ('ALIGN', (1,-1), (10,-1), 'RIGHT'), 
-        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('SPAN', (1,-2), (7,-2)),
+        ('ALIGN', (1,-2), (7,-2), 'RIGHT'),
+        ('SPAN', (1,-1), (10,-1)),
+        ('ALIGN', (1,-1), (10,-1), 'RIGHT'),
+        ('FONTNAME', (0,-2), (-1,-1), 'Helvetica-Bold'),
         ('TOPPADDING', (0,0), (-1,-1), 2),
         ('BOTTOMPADDING', (0,0), (-1,-1), 2),
     ]))
