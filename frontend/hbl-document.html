@@ -166,6 +166,8 @@
                 margin: 0;
                 padding: 0;
                 zoom: 1 !important;
+                page-break-before: always;
+                break-before: page;
             }
             .hbl-terms-page {
                 page: hbl-terms;
@@ -178,46 +180,47 @@
                 margin: 0;
                 padding: 0;
                 width: 100%;
+                height: calc(297mm - 10mm);
+                min-height: calc(297mm - 10mm);
                 box-sizing: border-box;
-                display: flex;
-                align-items: flex-start;
-                justify-content: center;
+                display: block;
+                overflow: hidden;
             }
             .hbl-terms-page-img {
                 display: block;
                 width: 100%;
-                height: auto;
+                height: 100%;
                 max-width: 100%;
+                max-height: 100%;
                 margin: 0 auto;
+                object-fit: contain;
+                object-position: top center;
                 image-rendering: auto;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
             }
             .watermark:not(.hidden) {
-                display: flex !important;
+                display: block !important;
                 visibility: visible !important;
+                position: absolute !important;
+                top: 50% !important;
+                left: 50% !important;
+                width: auto !important;
+                height: auto !important;
+                margin: 0 !important;
+                transform: translate(-50%, -50%) rotate(-35deg) !important;
+                color: rgba(0, 0, 0, 0.14) !important;
+                font-size: 64px !important;
                 -webkit-print-color-adjust: exact;
                 print-color-adjust: exact;
-            }
-            .hbl-watermark-text {
-                color: rgba(0, 0, 0, 0.14) !important;
-                font-size: 64px;
             }
             .hbl-page-sheet {
                 position: relative;
                 min-height: calc(297mm - 14mm);
-                height: calc(297mm - 14mm);
+            }
+            .hbl-page-2:not(.hidden) {
                 page-break-after: always;
                 break-after: page;
-            }
-            .hbl-page-sheet .watermark:not(.hidden) {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                margin: 0;
-                transform: none;
             }
             .mtd-company-block { gap: 6px; }
             .mtd-company { font-size: 9pt; margin-bottom: 2px; }
@@ -280,30 +283,20 @@
             margin-top: 0;
         }
 
-        /* Watermark — centered on full A4 page (not table block) */
+        /* Watermark — classic centered diagonal text on full page */
         .watermark {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: var(--hbl-page-height, 1123px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            pointer-events: none;
-            z-index: 0;
-            margin: 0;
-            transform: none;
-        }
-        .hbl-watermark-text {
-            transform: rotate(-35deg);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-35deg);
             font-size: 80px;
             font-weight: bold;
             color: rgba(0, 0, 0, 0.06);
             white-space: nowrap;
+            pointer-events: none;
+            z-index: 0;
             letter-spacing: 4px;
             font-family: Arial, Helvetica, sans-serif;
-            line-height: 1;
         }
         .watermark.hidden { display: none; }
         .mtd-doc-header,
@@ -437,7 +430,7 @@
             max-width: 900px;
             margin: 0 auto 28px;
             background: #fff;
-            --hbl-page-height: 1123px;
+            min-height: 1050px;
         }
         .hbl-page-2 {
             margin-top: 8px;
@@ -451,11 +444,14 @@
             max-width: 900px;
             margin: 24px auto 0;
             padding: 0;
+            page-break-before: always;
+            break-before: page;
         }
         .hbl-terms-page {
             page-break-before: always;
             break-before: page;
             margin: 0 auto 20px;
+            min-height: 1050px;
         }
         .hbl-terms-page-img {
             display: block;
@@ -692,7 +688,7 @@
         <!-- MTD Document Sheet (print/PDF capture area) -->
         <div id="hblPrintArea">
         <div id="hblPage1" class="hbl-page-sheet">
-            <div class="watermark" id="watermark"><span class="hbl-watermark-text">SEAWAY BL</span></div>
+            <div class="watermark" id="watermark">SEAWAY BL</div>
         <div class="mtd-doc-header">
             <div class="mtd-bl-no-line">
                 <span id="mtdDraftPrefix" class="mtd-draft-inline hidden" aria-hidden="true">Draft</span><span>MTD BL NO:</span>
@@ -910,7 +906,7 @@
         </div>
 
         <div id="hblPage2" class="hbl-page-sheet hbl-page-2 hidden" aria-hidden="true">
-            <div class="watermark hbl-page2-watermark" id="watermarkPage2"><span class="hbl-watermark-text">SEAWAY BL</span></div>
+            <div class="watermark hbl-page2-watermark" id="watermarkPage2">SEAWAY BL</div>
         <div class="mtd-sheet">
             <div class="mtd-grid-frame">
             <section id="cargoSection">
@@ -962,7 +958,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=41"></script>
+    <script src="js/hbl-document.js?v=42"></script>
 </body>
 
 </html>

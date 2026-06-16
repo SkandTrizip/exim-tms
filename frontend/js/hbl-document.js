@@ -4,7 +4,7 @@ const HBL_PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11
 const HBL_TERMS_PAGE_MARGIN_MM = 5;
 const HBL_TERMS_LOGICAL_DPI = 150;
 const HBL_TERMS_RENDER_QUALITY = 3;
-const HBL_TERMS_LOADED_VERSION = '2';
+const HBL_TERMS_LOADED_VERSION = '3';
 
 let hblTermsPagesReady = false;
 let hblTermsPagesPromise = null;
@@ -576,17 +576,16 @@ async function loadHblTermsPages() {
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         await page.render({ canvasContext: ctx, viewport, intent: 'print' }).promise;
 
-        const displayW = Math.round(viewport.width / HBL_TERMS_RENDER_QUALITY);
-        const displayH = Math.round(viewport.height / HBL_TERMS_RENDER_QUALITY);
-
         const pageEl = document.createElement('div');
         pageEl.className = 'hbl-terms-page';
         const img = document.createElement('img');
         img.className = 'hbl-terms-page-img';
         img.alt = `Terms and conditions page ${pageNum}`;
         img.src = canvas.toDataURL('image/png');
-        img.width = displayW;
-        img.height = displayH;
+        img.style.width = '100%';
+        img.style.height = '100%';
+        img.style.objectFit = 'contain';
+        img.style.objectPosition = 'top center';
         pageEl.appendChild(img);
         container.appendChild(pageEl);
     }
