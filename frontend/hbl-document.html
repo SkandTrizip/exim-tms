@@ -203,7 +203,7 @@
                 display: block !important;
                 visibility: visible !important;
                 position: absolute !important;
-                top: 50% !important;
+                top: calc(var(--hbl-page-h) / 2) !important;
                 left: 50% !important;
                 width: auto !important;
                 height: auto !important;
@@ -216,7 +216,8 @@
             }
             .hbl-page-sheet {
                 position: relative;
-                min-height: calc(297mm - 14mm);
+                min-height: var(--hbl-page-h);
+                --hbl-page-h: calc(297mm - 14mm);
             }
             .hbl-page-2:not(.hidden) {
                 page-break-after: always;
@@ -283,10 +284,10 @@
             margin-top: 0;
         }
 
-        /* Watermark — classic centered diagonal text on full page */
+        /* Watermark — centered on first printed page (not full content height) */
         .watermark {
             position: absolute;
-            top: 50%;
+            top: calc(var(--hbl-page-h) / 2);
             left: 50%;
             transform: translate(-50%, -50%) rotate(-35deg);
             font-size: 80px;
@@ -430,7 +431,8 @@
             max-width: 900px;
             margin: 0 auto 28px;
             background: #fff;
-            min-height: 1050px;
+            --hbl-page-h: 1050px;
+            min-height: var(--hbl-page-h);
         }
         .hbl-page-2 {
             margin-top: 8px;
@@ -958,7 +960,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=42"></script>
+    <script src="js/hbl-document.js?v=43"></script>
 </body>
 
 </html>
