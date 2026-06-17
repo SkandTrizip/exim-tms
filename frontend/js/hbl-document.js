@@ -181,10 +181,10 @@ function toggleDraftMark() {
 function applyWatermarkVisibility() {
     const blType = document.getElementById('blTypeSelect').value;
     const show = blType === 'seaway' && watermarkEnabled;
-    ['watermark', 'watermarkPage2'].forEach((id) => {
-        const wm = document.getElementById(id);
-        if (!wm) return;
-        wm.classList.toggle('hidden', !show);
+    ['watermarkLayer', 'watermarkLayerPage2'].forEach((id) => {
+        const layer = document.getElementById(id);
+        if (!layer) return;
+        layer.classList.toggle('hidden', !show);
     });
 }
 
@@ -762,9 +762,9 @@ function switchBlType(type) {
         label.textContent = '';
         count.textContent = 'Number of Original MTD: 3 / THREE';
         if (toggleWrap) toggleWrap.style.display = 'none';
-        ['watermark', 'watermarkPage2'].forEach((id) => {
-            const wm = document.getElementById(id);
-            if (wm) wm.classList.add('hidden');
+        ['watermarkLayer', 'watermarkLayerPage2'].forEach((id) => {
+            const layer = document.getElementById(id);
+            if (layer) layer.classList.add('hidden');
         });
     }
 
