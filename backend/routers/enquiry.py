@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -185,6 +186,57 @@ async def get_hbl_document_data(enquiry_id: int, db: Session = Depends(get_db)):
         "eta": status.eta.isoformat() if status and status.eta else None,
         "sob": status.sob.isoformat() if status and status.sob else None,
         "si_submitted": status.si_submitted.isoformat() if status and status.si_submitted else None,
+    }
+
+
+@router.get("/hbl-document/{enquiry_id}/snapshot")
+async def get_hbl_document_snapshot(enquiry_id: int, db: Session = Depends(get_db)):
+    """Return the last saved HBL/MTD editable snapshot for this enquiry (server-side)."""
+    from backend.models.enquiry import Enquiry as EnquiryModel
+
+    enq = db.query(EnquiryModel).filter(EnquiryModel.id == enquiry_id).first()
+    if not enq:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+    if not enq.hbl_document_snapshot:
+        return {"snapshot": None, "saved_at": None}
+    try:
+        snap = json.loads(enq.hbl_document_snapshot)
+    except Exception:
+        # If legacy/bad data exists, do not crash the page.
+        return {"snapshot": None, "saved_at": None}
+    return {
+        "snapshot": snap,
+        "saved_at": enq.hbl_document_saved_at.isoformat() if enq.hbl_document_saved_at else None,
+    }
+
+
+@router.put("/hbl-document/{enquiry_id}/snapshot")
+async def save_hbl_document_snapshot(enquiry_id: int, payload: dict, db: Session = Depends(get_db)):
+    """Persist HBL/MTD editable snapshot for this enquiry (server-side)."""
+    from backend.models.enquiry import Enquiry as EnquiryModel
+
+    enq = db.query(EnquiryModel).filter(EnquiryModel.id == enquiry_id).first()
+    if not enq:
+        raise HTTPException(status_code=404, detail="Enquiry not found")
+
+    snapshot = payload.get("snapshot")
+    if snapshot is None:
+        raise HTTPException(status_code=400, detail="Missing snapshot")
+
+    try:
+        enq.hbl_document_snapshot = json.dumps(snapshot)
+        enq.hbl_document_saved_at = datetime.utcnow()
+        db.commit()
+        db.refresh(enq)
+    except Exception as e:
+        db.rollback()
+        logger.exception("Failed to save HBL snapshot for enquiry %s", enquiry_id)
+        raise HTTPException(status_code=500, detail="Could not save snapshot") from e
+
+    return {
+        "status": "ok",
+        "id": enq.id,
+        "saved_at": enq.hbl_document_saved_at.isoformat() if enq.hbl_document_saved_at else None,
     }
 
 

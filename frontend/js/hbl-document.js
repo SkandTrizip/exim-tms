@@ -21,10 +21,6 @@ const HBL_SNAPSHOT_FIELD_IDS = [
     'cargoWeight', 'cargoMeasurement', 'sobDate', 'placeAndDateOfIssue', 'endOfBlNo'
 ];
 
-function hblStorageKey() {
-    return `hbl_document_snapshot_${currentEnquiryId}`;
-}
-
 function getFreightSelection() {
     const prepaid = document.getElementById('freightPrepaid');
     if (!prepaid) return 'prepaid';
@@ -39,7 +35,9 @@ function collectSnapshot() {
         if (cargoPair) {
             fields[id] = getCargoFullText(cargoPair[0], cargoPair[1]);
         } else {
-            fields[id] = el ? el.innerHTML : '';
+            // Use textContent so whitespace/newlines/alignment via spaces survives restore.
+            // (innerHTML can be rewritten by the browser during contenteditable editing.)
+            fields[id] = el ? (el.textContent || '') : '';
         }
     }
     const draftCb = document.getElementById('draftMarkToggle');
@@ -61,7 +59,7 @@ function applySnapshot(s) {
     for (const id of HBL_SNAPSHOT_FIELD_IDS) {
         if (s.fields[id] !== undefined) {
             const el = document.getElementById(id);
-            if (el) el.innerHTML = s.fields[id];
+            if (el) el.textContent = s.fields[id] ?? '';
         }
     }
     const sel = document.getElementById('blTypeSelect');
@@ -100,29 +98,27 @@ function applySnapshot(s) {
     splitCargoFromStoredFull();
 }
 
-function updateSavedDraftNotice() {
+async function updateSavedDraftNotice() {
     const wrap = document.getElementById('savedDraftNotice');
     const text = document.getElementById('savedDraftNoticeText');
     if (!wrap || !text || !currentEnquiryId) return;
-    let raw;
     try {
-        raw = localStorage.getItem(hblStorageKey());
-    } catch (e) {
-        wrap.classList.remove('visible');
-        return;
-    }
-    if (!raw) {
-        wrap.classList.remove('visible');
-        return;
-    }
-    try {
-        const s = JSON.parse(raw);
-        const when = s.savedAt ? new Date(s.savedAt).toLocaleString() : '';
+        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${currentEnquiryId}/snapshot`);
+        if (!res.ok) {
+            wrap.classList.remove('visible');
+            return;
+        }
+        const d = await res.json();
+        if (!d || !d.snapshot) {
+            wrap.classList.remove('visible');
+            return;
+        }
+        const when = d.saved_at ? new Date(d.saved_at).toLocaleString() : '';
         text.textContent = when
             ? `Previously saved copy from ${when}.`
             : 'Previously saved copy available for this enquiry.';
         wrap.classList.add('visible');
-    } catch (e) {
+    } catch {
         wrap.classList.remove('visible');
     }
 }
@@ -135,33 +131,37 @@ function flashSaveButton() {
     setTimeout(() => { btn.innerHTML = prev; }, 2200);
 }
 
-function saveDocumentLocally() {
+async function saveDocumentToServer() {
     if (!currentEnquiryId) return;
     try {
-        localStorage.setItem(hblStorageKey(), JSON.stringify(collectSnapshot()));
-        updateSavedDraftNotice();
+        const snapshot = collectSnapshot();
+        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${currentEnquiryId}/snapshot`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ snapshot }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await updateSavedDraftNotice();
         flashSaveButton();
     } catch (e) {
         console.error(e);
-        alert('Could not save (storage may be full or disabled).');
+        alert('Could not save to server. Please try again.');
     }
 }
 
-function openPreviouslySaved() {
+async function openPreviouslySaved() {
     if (!currentEnquiryId) return;
-    let raw;
     try {
-        raw = localStorage.getItem(hblStorageKey());
-    } catch (e) {
-        return;
-    }
-    if (!raw) return;
-    try {
-        applySnapshot(JSON.parse(raw));
-        updateSavedDraftNotice();
+        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${currentEnquiryId}/snapshot`);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const d = await res.json();
+        if (!d || !d.snapshot) return;
+        applySnapshot(d.snapshot);
+        await updateSavedDraftNotice();
         flashSaveButton();
     } catch (e) {
-        alert('Could not read saved data.');
+        console.error(e);
+        alert('Could not read saved data from server.');
     }
 }
 
@@ -678,7 +678,7 @@ async function loadDocument(id) {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const d = await res.json();
         populateDocument(d);
-        updateSavedDraftNotice();
+        await updateSavedDraftNotice();
     } catch (err) {
         console.error('Failed to load HBL document data:', err);
         alert('Could not load document data. Please try again.');

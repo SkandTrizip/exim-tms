@@ -18,6 +18,7 @@ import json
 
 from backend.database import engine, Base
 from sqlalchemy import text, inspect
+from sqlalchemy.exc import ProgrammingError
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -30,6 +31,8 @@ _column_migrations = [
     ("enquiries", "voyage_no", "VARCHAR"),
     ("enquiries", "notify_party_address", "TEXT"),
     ("enquiries", "notify_party_2_address", "TEXT"),
+    ("enquiries", "hbl_document_snapshot", "TEXT"),
+    ("enquiries", "hbl_document_saved_at", "TIMESTAMP"),
     ("shipment_statuses", "container_number", "VARCHAR"),
     ("invoices", "customer_invoice_no", "VARCHAR"),
 ]
@@ -38,8 +41,13 @@ with engine.connect() as _conn:
     for _table, _col, _col_type in _column_migrations:
         existing = [c["name"] for c in _inspector.get_columns(_table)]
         if _col not in existing:
-            _conn.execute(text(f'ALTER TABLE {_table} ADD COLUMN {_col} {_col_type}'))
-            logger.info(f"Added column {_table}.{_col}")
+            try:
+                _conn.execute(text(f'ALTER TABLE {_table} ADD COLUMN {_col} {_col_type}'))
+                logger.info(f"Added column {_table}.{_col}")
+            except ProgrammingError:
+                # If multiple workers start at once, or the inspector is stale,
+                # the column may already exist; don't crash the app.
+                logger.info(f"Column already exists (race): {_table}.{_col}")
     _conn.commit()
 
 app = FastAPI(

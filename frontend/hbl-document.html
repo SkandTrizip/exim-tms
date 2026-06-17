@@ -415,8 +415,8 @@
             margin-bottom: 4px;
             font-weight: normal;
         }
-        .field-val { font-size: 12px; font-weight: normal; min-height: 14px; white-space: pre-line; }
-        .field-val-bold { font-size: 12px; font-weight: bold; min-height: 14px; white-space: pre-line; }
+        .field-val { font-size: 12px; font-weight: normal; min-height: 14px; white-space: pre-wrap; }
+        .field-val-bold { font-size: 12px; font-weight: bold; min-height: 14px; white-space: pre-wrap; }
 
         .cargo-table {
             table-layout: fixed;
@@ -694,7 +694,7 @@
             <button class="btn btn-secondary" id="editBtn" onclick="toggleEdit()" style="padding: 8px 16px; font-size: 13px;">
                 <i class="fas fa-pen"></i> Edit
             </button>
-            <button class="btn btn-secondary" id="saveLocalBtn" onclick="saveDocumentLocally()" style="padding: 8px 16px; font-size: 13px;" title="Save all fields in this browser so you can restore later">
+            <button class="btn btn-secondary" id="saveLocalBtn" onclick="saveDocumentToServer()" style="padding: 8px 16px; font-size: 13px;" title="Save all fields to server so you can restore later">
                 <i class="fas fa-save"></i> Save
             </button>
             <button class="btn btn-primary" id="printBtn" onclick="printDoc()" style="padding: 8px 16px; font-size: 13px;">
@@ -978,7 +978,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=44"></script>
+    <script src="js/hbl-document.js?v=45"></script>
 </body>
 
 </html>

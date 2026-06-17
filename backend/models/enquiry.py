@@ -44,6 +44,10 @@ class Enquiry(Base):
     voyage_no = Column(String)
     notify_party_address = Column(Text)
     notify_party_2_address = Column(Text)
+    # Persisted HBL/MTD editable document snapshot (JSON string).
+    # Stored here instead of localStorage so edits survive across browsers/users.
+    hbl_document_snapshot = Column(Text)
+    hbl_document_saved_at = Column(DateTime)
     status = Column(String, default="pending")
     stage = Column(Integer, default=1)
     is_void = Column(Boolean, default=False, nullable=False, server_default='false')
