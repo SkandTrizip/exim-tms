@@ -81,6 +81,21 @@
                 </button>
             </div>
 
+            <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap;">
+                <div style="flex: 1; min-width: 280px; max-width: 480px; position: relative;">
+                    <i class="fas fa-search" style="position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-tertiary); font-size: 13px;"></i>
+                    <input type="text" id="hblRefSearch" class="form-control" placeholder="Open by shipment ref (e.g. LLP/OFE/26/06/00014)"
+                        style="padding: 10px 14px 10px 38px; font-size: 13px; width: 100%;"
+                        onkeydown="if (event.key === 'Enter') openHblByReference()">
+                </div>
+                <button type="button" class="btn btn-primary" onclick="openHblByReference()" style="padding: 10px 18px; font-size: 13px; white-space: nowrap;">
+                    <i class="fas fa-folder-open"></i> Open HBL
+                </button>
+                <p style="margin: 0; font-size: 12px; color: var(--text-tertiary); flex: 1; min-width: 220px;">
+                    Saved HBLs restore all fields automatically. Use <strong>Save</strong> or <strong>Print</strong> once to keep your edits.
+                </p>
+            </div>
+
             <div class="hbl-table-wrap">
                 <table class="hbl-table">
                     <thead>

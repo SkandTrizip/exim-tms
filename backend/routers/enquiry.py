@@ -86,8 +86,38 @@ async def get_hbl_pending(db: Session = Depends(get_db)):
             "consignee": status.consignee if status else None,
             "master_number": status.master_number if status else None,
             "created_at": enq.created_at.isoformat() if enq.created_at else None,
+            "hbl_saved_at": enq.hbl_document_saved_at.isoformat() if enq.hbl_document_saved_at else None,
         })
     return result
+
+
+@router.get("/lookup-hbl/{enquiry_number:path}")
+async def lookup_hbl_by_number(enquiry_number: str, db: Session = Depends(get_db)):
+    """Find an HBL-required enquiry by shipment / job number and open its document."""
+    from backend.models.enquiry import Enquiry as EnquiryModel
+    from backend.models.shipment_status import ShipmentStatus
+
+    ref = enquiry_number.strip()
+    if not ref:
+        raise HTTPException(status_code=400, detail="Shipment reference is required")
+
+    enq = db.query(EnquiryModel).filter(EnquiryModel.enquiry_number == ref).first()
+    if not enq:
+        raise HTTPException(status_code=404, detail=f"No enquiry found for {ref}")
+    if not enq.hbl_required:
+        raise HTTPException(status_code=400, detail="This enquiry does not require HBL")
+    if enq.is_void:
+        raise HTTPException(status_code=400, detail="This enquiry is void")
+
+    status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == enq.id).first()
+    return {
+        "id": enq.id,
+        "enquiry_number": enq.enquiry_number,
+        "client_name": enq.client_name,
+        "si_submitted": status.si_submitted.isoformat() if status and status.si_submitted else None,
+        "hbl_saved_at": enq.hbl_document_saved_at.isoformat() if enq.hbl_document_saved_at else None,
+        "has_saved_snapshot": bool(enq.hbl_document_snapshot),
+    }
 
 
 @router.get("/hbl-document/{enquiry_id}")
