@@ -12,6 +12,7 @@ let hblTermsPagesPromise = null;
 let watermarkEnabled = true;
 let applySignEnabled = false;
 let currentEnquiryId = null;
+let isEditing = false;
 
 const HBL_SNAPSHOT_FIELD_IDS = [
     'mtdBlNo', 'consignor', 'shipmentRefNo', 'consignee', 'deliveryAgent',
@@ -98,25 +99,38 @@ function applySnapshot(s) {
     splitCargoFromStoredFull();
 }
 
-async function updateSavedDraftNotice() {
+async function fetchSavedSnapshot(enquiryId = currentEnquiryId) {
+    if (!enquiryId) return { snapshot: null, saved_at: null };
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${enquiryId}/snapshot`);
+        if (!res.ok) return { snapshot: null, saved_at: null };
+        return await res.json();
+    } catch {
+        return { snapshot: null, saved_at: null };
+    }
+}
+
+function prepareDocumentForSave() {
+    if (!isEditing) return;
+    finishEditingWithoutResplit();
+    flushAllPreviewCargo();
+    splitAllCargoFields();
+}
+
+async function updateSavedDraftNotice(cached) {
     const wrap = document.getElementById('savedDraftNotice');
     const text = document.getElementById('savedDraftNoticeText');
     if (!wrap || !text || !currentEnquiryId) return;
     try {
-        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${currentEnquiryId}/snapshot`);
-        if (!res.ok) {
-            wrap.classList.remove('visible');
-            return;
-        }
-        const d = await res.json();
+        const d = cached || await fetchSavedSnapshot();
         if (!d || !d.snapshot) {
             wrap.classList.remove('visible');
             return;
         }
         const when = d.saved_at ? new Date(d.saved_at).toLocaleString() : '';
         text.textContent = when
-            ? `Previously saved copy from ${when}.`
-            : 'Previously saved copy available for this enquiry.';
+            ? `Last saved on ${when}. Use Restore if you want to undo recent edits.`
+            : 'A previously saved copy is available for this enquiry.';
         wrap.classList.add('visible');
     } catch {
         wrap.classList.remove('visible');
@@ -131,9 +145,11 @@ function flashSaveButton() {
     setTimeout(() => { btn.innerHTML = prev; }, 2200);
 }
 
-async function saveDocumentToServer() {
-    if (!currentEnquiryId) return;
+async function saveDocumentToServer(options = {}) {
+    const { silent = false } = options;
+    if (!currentEnquiryId) return false;
     try {
+        prepareDocumentForSave();
         const snapshot = collectSnapshot();
         const res = await fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${currentEnquiryId}/snapshot`, {
             method: 'PUT',
@@ -141,23 +157,30 @@ async function saveDocumentToServer() {
             body: JSON.stringify({ snapshot }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        await updateSavedDraftNotice();
-        flashSaveButton();
+        const saved = await res.json();
+        await updateSavedDraftNotice({
+            snapshot,
+            saved_at: saved.saved_at || snapshot.savedAt,
+        });
+        if (!silent) flashSaveButton();
+        return true;
     } catch (e) {
         console.error(e);
-        alert('Could not save to server. Please try again.');
+        if (!silent) alert('Could not save to server. Please try again.');
+        return false;
     }
 }
 
 async function openPreviouslySaved() {
     if (!currentEnquiryId) return;
     try {
-        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${currentEnquiryId}/snapshot`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const d = await res.json();
-        if (!d || !d.snapshot) return;
+        const d = await fetchSavedSnapshot();
+        if (!d || !d.snapshot) {
+            alert('No saved HBL found for this enquiry.');
+            return;
+        }
         applySnapshot(d.snapshot);
-        await updateSavedDraftNotice();
+        await updateSavedDraftNotice(d);
         flashSaveButton();
     } catch (e) {
         console.error(e);
@@ -607,7 +630,8 @@ function ensureHblTermsPages() {
 }
 
 async function printDoc() {
-    finishEditingWithoutResplit();
+    prepareDocumentForSave();
+    await saveDocumentToServer({ silent: true });
     prepareCargoForPrint();
     try {
         await ensureHblTermsPages();
@@ -617,8 +641,6 @@ async function printDoc() {
     document.title = '\u00A0';
     window.print();
 }
-
-let isEditing = false;
 
 function toggleEdit() {
     isEditing = !isEditing;
@@ -674,11 +696,17 @@ document.addEventListener('DOMContentLoaded', async function () {
 
 async function loadDocument(id) {
     try {
-        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${id}`);
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const d = await res.json();
+        const [docRes, saved] = await Promise.all([
+            fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${id}`),
+            fetchSavedSnapshot(id),
+        ]);
+        if (!docRes.ok) throw new Error(`HTTP ${docRes.status}`);
+        const d = await docRes.json();
         populateDocument(d);
-        await updateSavedDraftNotice();
+        if (saved?.snapshot) {
+            applySnapshot(saved.snapshot);
+        }
+        await updateSavedDraftNotice(saved?.snapshot ? saved : null);
     } catch (err) {
         console.error('Failed to load HBL document data:', err);
         alert('Could not load document data. Please try again.');

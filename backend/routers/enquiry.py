@@ -2,7 +2,7 @@ from datetime import datetime
 import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.services.enquiry_service import (
@@ -211,7 +211,11 @@ async def get_hbl_document_snapshot(enquiry_id: int, db: Session = Depends(get_d
 
 
 @router.put("/hbl-document/{enquiry_id}/snapshot")
-async def save_hbl_document_snapshot(enquiry_id: int, payload: dict, db: Session = Depends(get_db)):
+async def save_hbl_document_snapshot(
+    enquiry_id: int,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
     """Persist HBL/MTD editable snapshot for this enquiry (server-side)."""
     from backend.models.enquiry import Enquiry as EnquiryModel
 
