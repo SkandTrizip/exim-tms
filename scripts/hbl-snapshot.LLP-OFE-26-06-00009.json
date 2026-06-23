@@ -1,0 +1,47 @@
+{
+  "enquiry_number": "LLP/OFE/26/06/00009",
+  "blType": "seaway",
+  "draftMark": false,
+  "watermarkEnabled": true,
+  "applySign": false,
+  "freight": "prepaid",
+  "fields": {
+    "mtdBlNo": "LLP/OFE/26/06/00009",
+    "shipmentRefNo": "LLP/OFE/26/06/00009",
+    "endOfBlNo": "LLP/OFE/26/06/00009",
+
+    "consignor": "CAMBAY TECHNOPACK PRIVATE LIMITED\nBLOCK NO. 1000, SURVEY NO 667 & 691, VILLAGE TADKESHWAR,\nKIM-MANDVI HIGHWAY, SURAT-394170, GUJARAT, INDIA\nSURAT, India, 394170\nTel: +919313925094\nEmail: info@cambaytechnopack.com",
+
+    "consignee": "GM Packaging (UK) Ltd\nUnit 3, Jade Business Park, Spring Road, Murton, Seaham, SR7 9DR, United Kingdom.",
+
+    "deliveryAgent": "BLACKSTONE SHIPPING UK LIMITED\nOffice 101, Citibase Business centre, 42 - 44 Clarendon Road, Watford WD17 1JJ.\nPh: 7324792686",
+
+    "notifyParty1": "GM Packaging (UK) Ltd\nUnit 3, Jade Business Park, Spring Road, Murton, Seaham, SR7 9DR, United Kingdom.\n+44 (0) 7796 330391, mirren.foreman@gmpackaging.co.uk",
+
+    "notifyParty2": "",
+
+    "placeAcceptance": "HAZIRA, INDIA",
+    "portLoading": "HAZIRA, INDIA",
+    "portDischarge": "FELIXSTOWE, UK",
+    "placeDelivery": "FELIXSTOWE, UK",
+    "dateAcceptance": "",
+    "routeTranshipment": "",
+
+    "vesselName": "MSC SARA ELENA",
+    "voyageNo": "IP624A",
+    "modesTransport": "",
+    "dateDelivery": "",
+
+    "containerNos": "TCNU4110995\nSEAL: SCI024758",
+    "marksNumber": "NO MARKS",
+
+    "cargoDescription": "1x 40 HC\n1066 CFC BOXES, PRINTED PAPER BOARD CUPS\nHS CODE:48236900\nINV NO:CE/26-27/0250 DATE:11/06/2026\nCOUNTRY OF ORIGIN: INDIA\nGROSS WEIGHT:8822.370 KGS\nNET WEIGHT:7995.568 KGS\nSHIPPING BILL NO: 4074617 DT:11/07/2026\n\nCIF UPTO FELIXSTOWE PORT, UNITED KINGDOM",
+
+    "cargoWeight": "8822.370 KGS",
+
+    "cargoMeasurement": "",
+
+    "sobDate": "",
+    "placeAndDateOfIssue": "Gurugram, 12 Jun 2026"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "enquiry_number": "LLP/OFE/26/06/00010",
+  "blType": "seaway",
+  "draftMark": false,
+  "watermarkEnabled": true,
+  "applySign": false,
+  "freight": "prepaid",
+  "fields": {
+    "mtdBlNo": "LLP/OFE/26/06/00010",
+    "shipmentRefNo": "LLP/OFE/26/06/00010",
+    "endOfBlNo": "LLP/OFE/26/06/00010",
+
+    "consignor": "CAMBAY TECHNOPACK PRIVATE LIMITED\nBLOCK NO. 1000, SURVEY NO 667 & 691, VILLAGE TADKESHWAR,\nKIM-MANDVI HIGHWAY, SURAT-394170, GUJARAT, INDIA\nSURAT, India, 394170\nTel: +919313925094\nEmail: info@cambaytechnopack.com",
+
+    "consignee": "ZNP PACKAGING B.V.\nALFRED NOBELSTRAAT 10-12, 2665 KZ BLEISWIJK, NETHERLANDS.\nEORI NUMBER: 008823844",
+
+    "deliveryAgent": "BLACKSTONE SHIPPING NETHERLANDS BV\nAlbert Plesmanweg 41F, 3088 GB Rotterdam, The Netherlands\nTel: +31 10 899 5822\nEmail: carrier.eu@blackstoneshipping.com",
+
+    "notifyParty1": "ZNP PACKAGING B.V.\nALFRED NOBELSTRAAT 10-12, 2665 KZ BLEISWIJK, NETHERLANDS.\nEORI NUMBER: 008823844\nTel: +310105216955\nEmail: akhoenkhoen@znpperpakkingen.nl",
+
+    "notifyParty2": "",
+
+    "placeAcceptance": "HAZIRA, INDIA",
+    "portLoading": "HAZIRA, INDIA",
+    "portDischarge": "ROTTERDAM, NL",
+    "placeDelivery": "ROTTERDAM, NL",
+    "dateAcceptance": "",
+    "routeTranshipment": "",
+
+    "vesselName": "MSC SARA ELENA",
+    "voyageNo": "IP624A",
+    "modesTransport": "",
+    "dateDelivery": "",
+
+    "containerNos": "TGCU0151984\nSEAL: SCI024752",
+    "marksNumber": "NO MARKS",
+
+    "cargoDescription": "1x 40 HC\n1540 CFC BOXES, PRINTED PAPER BOARD CUPS\nHS CODE:48236900\nINV NO:CE/26-27/0254 DATE:12/06/2026\nCOUNTRY OF ORIGIN: INDIA\nGROSS WEIGHT:13619.439 KGS\nNET WEIGHT:12918.939 KGS\nSHIPPING BILL NO: 4108848 DT:12/06/2026\n\nCIF UPTO ROTTERDAM PORT, NETHERLANDS",
+
+    "cargoWeight": "13619.439 KGS",
+
+    "cargoMeasurement": "",
+
+    "sobDate": "",
+    "placeAndDateOfIssue": "Gurugram, 13 Jun 2026"
+  }
+}

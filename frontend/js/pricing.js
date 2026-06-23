@@ -336,19 +336,31 @@ async function fetchQuotesForEnquiry(enquiryId) {
                     transit_time: q.transit_time_days,
                     validity: q.rate_validity_date ? q.rate_validity_date.split('T')[0] : '',
                     free_days: q.destination_free_days,
-                    container_prices: q.containers ? q.containers.map(c => ({
-                        container_type: c.container_type,
-                        charges: c.charges ? c.charges.map(ch => ({
-                            desc: ch.charge_description,
-                            account: ch.account_type,
-                            curr: ch.currency,
-                            on: ch.charged_on,
-                            qty: ch.quantity,
-                            rate: ch.rate,
-                            ex: ch.exchange_rate,
-                            vendor_rate: ch.vendor_rate != null ? ch.vendor_rate : null
-                        })) : []
-                    })) : [],
+                    container_prices: q.containers
+                        ? [...q.containers]
+                            .sort((a, b) =>
+                                (a.container_sequence ?? 0) - (b.container_sequence ?? 0) ||
+                                (a.id ?? 0) - (b.id ?? 0))
+                            .map(c => ({
+                                container_type: c.container_type,
+                                charges: c.charges
+                                    ? [...c.charges]
+                                        .sort((a, b) =>
+                                            (a.charge_sequence ?? 0) - (b.charge_sequence ?? 0) ||
+                                            (a.id ?? 0) - (b.id ?? 0))
+                                        .map(ch => ({
+                                            desc: ch.charge_description,
+                                            account: ch.account_type,
+                                            curr: ch.currency,
+                                            on: ch.charged_on,
+                                            qty: ch.quantity,
+                                            rate: ch.rate,
+                                            ex: ch.exchange_rate,
+                                            vendor_rate: ch.vendor_rate != null ? ch.vendor_rate : null
+                                        }))
+                                    : []
+                            }))
+                        : [],
                     status: q.status || 'draft'
                 }));
             }

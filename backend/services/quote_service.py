@@ -64,12 +64,12 @@ def create_quote(db: Session, quote_data: QuoteCreate) -> Quote:
     quote_final_inr = 0.0
 
     # Create containers and charges
-    for container_data in quote_data.containers:
+    for container_seq, container_data in enumerate(quote_data.containers):
         db_container = QuoteContainer(
             quote_id=db_quote.id,
             enquiry_id=db_quote.enquiry_id,
             container_type=container_data.container_type,
-            container_sequence=container_data.container_sequence
+            container_sequence=container_seq,
         )
         db.add(db_container)
         db.flush()  # Get the container ID
@@ -161,12 +161,12 @@ def update_quote(db: Session, quote_id: int, quote_data: QuoteUpdate) -> Quote:
         quote_final_inr = 0.0
         
         # Create new containers and charges
-        for container_data in quote_data.containers:
+        for container_seq, container_data in enumerate(quote_data.containers):
             db_container = QuoteContainer(
                 quote_id=db_quote.id,
                 enquiry_id=db_quote.enquiry_id,
                 container_type=container_data.container_type,
-                container_sequence=container_data.container_sequence
+                container_sequence=container_seq,
             )
             db.add(db_container)
             db.flush()

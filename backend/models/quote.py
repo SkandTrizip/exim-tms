@@ -42,7 +42,12 @@ class Quote(Base):
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
     # Relationships
-    containers = relationship("QuoteContainer", back_populates="quote", cascade="all, delete-orphan")
+    containers = relationship(
+        "QuoteContainer",
+        back_populates="quote",
+        cascade="all, delete-orphan",
+        order_by="QuoteContainer.container_sequence, QuoteContainer.id",
+    )
 
 
 class QuoteContainer(Base):
@@ -62,7 +67,12 @@ class QuoteContainer(Base):
     
     # Relationships
     quote = relationship("Quote", back_populates="containers")
-    charges = relationship("QuoteCharge", back_populates="container", cascade="all, delete-orphan")
+    charges = relationship(
+        "QuoteCharge",
+        back_populates="container",
+        cascade="all, delete-orphan",
+        order_by="QuoteCharge.charge_sequence, QuoteCharge.id",
+    )
 
 
 class QuoteCharge(Base):
