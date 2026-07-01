@@ -7,135 +7,208 @@
     <title>ShipFlow - Freight Forwarding Management System</title>
     <link href="css/styles.css" rel="stylesheet">
     <link href="css/dashboard.css" rel="stylesheet">
-    <link href="css/modal.css" rel="stylesheet">
+    <link href="css/action-modal.css" rel="stylesheet">
+    <link href="css/masters.css" rel="stylesheet">
+    <link href="css/global-search.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
-    <header>
-        <div class="container">
-            <div class="header-content">
-                <div class="logo">
-                    <div class="logo-icon">SF</div>
-                    <div class="logo-text">ShipFlow</div>
-                </div>
-                <div class="header-actions">
-                    <div class="user-profile"
-                        style="display: flex; align-items: center; gap: 12px; margin-right: 12px; padding-right: 12px; border-right: 1px solid var(--border-light);">
-                        <div class="user-avatar"
-                            style="width: 32px; height: 32px; background: var(--navy-100); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--navy-700); font-weight: 700; font-size: 14px; border: 1.5px solid var(--navy-600);">
-                            AD</div>
-                        <span id="userNameDisplay"
-                            style="font-size: 14px; font-weight: 600; color: var(--navy-800);">Admin</span>
+    <div class="app-shell">
+        <aside class="nav-rail" aria-label="Primary navigation">
+            <div class="rail-top">
+                <a class="rail-brand" href="#dashboard" title="Dashboard">
+                    <span class="rail-brand-mark">ex</span>
+                </a>
+                <nav class="rail-nav">
+                    <a href="#dashboard" class="sidebar-link rail-link active" id="navDashboard" title="Dashboard" aria-label="Dashboard">
+                        <i class="fas fa-home"></i>
+                    </a>
+                    <a href="#enquiries" class="sidebar-link rail-link" id="navEnquiries" title="Sales" aria-label="Sales">
+                        <i class="fas fa-chart-line"></i>
+                    </a>
+                    <a href="#quotes" class="sidebar-link rail-link" id="navPricing" title="Quotes & Pricing" aria-label="Quotes & Pricing">
+                        <i class="fas fa-file-invoice-dollar"></i>
+                    </a>
+                    <a href="#tracking" class="sidebar-link rail-link" id="navTracking" title="Tracking" aria-label="Tracking">
+                        <i class="fas fa-route"></i>
+                    </a>
+
+                    <div class="rail-group" id="financeRailGroup">
+                        <a href="#" class="sidebar-link rail-link" id="navFinance" onclick="toggleFinanceNav(event)" title="Finance" aria-label="Finance">
+                            <i class="fas fa-wallet"></i>
+                        </a>
+                        <ul class="sidebar-subnav rail-subnav" id="financeSubnav" aria-label="Finance navigation">
+                            <li><a href="#finance-payments" class="sidebar-link rail-subnav-link" id="navFinancePayments">Payment to Shipping Line</a></li>
+                            <li><a href="#finance-invoices" class="sidebar-link rail-subnav-link" id="navFinanceInvoices">Create Invoice</a></li>
+                            <li><a href="#finance-received" class="sidebar-link rail-subnav-link" id="navFinanceReceived">Payments Received</a></li>
+                        </ul>
                     </div>
 
-                    <button class="btn btn-secondary" onclick="handleLogout()" title="Logout"
-                        style="padding: 8px 12px; width: 40px; justify-content: center;">
-                        <i class="fas fa-sign-out-alt"></i>
-                    </button>
-                </div>
+                    <div class="rail-group" id="settingsRailGroup">
+                        <a href="#" class="sidebar-link rail-link" id="navSettings" onclick="toggleSettingsNav(event)" title="Settings" aria-label="Settings">
+                            <i class="fas fa-sliders-h"></i>
+                        </a>
+                        <ul class="sidebar-subnav rail-subnav" id="settingsSubnav" aria-label="Settings navigation">
+                            <li><a href="#masters" class="sidebar-link rail-subnav-link" id="navMasters">Masters</a></li>
+                            <li><a href="/generate-hbl" class="sidebar-link rail-subnav-link">Generate HBL</a></li>
+                        </ul>
+                    </div>
+                </nav>
             </div>
-        </div>
-    </header>
 
-    <main>
-        <div class="container">
-            <div class="dashboard">
-                <aside class="sidebar">
-                    <div class="sidebar-title">Navigation</div>
-                    <ul class="sidebar-nav">
-                        <li><a href="#dashboard" class="sidebar-link active" id="navDashboard"><span
-                                    class="icon">📊</span> Dashboard</a></li>
-                        <li><a href="#enquiries" class="sidebar-link" id="navEnquiries"><span class="icon">📋</span>
-                                Sales</a></li>
-                        <li><a href="#quotes" class="sidebar-link" id="navPricing"><span class="icon">💰</span> Quotes &
-                                Pricing</a></li>
-                        <li><a href="#tracking" class="sidebar-link" id="navTracking"><span class="icon">📦</span>
-                                Tracking</a></li>
-                        <li><a href="#finance" class="sidebar-link" id="navFinance"><span
-                                    class="icon">💼</span>
-                                Finance</a>
-                            <ul class="sidebar-subnav"
-                                style="list-style: none; padding-left: 24px; margin-top: 4px; display: none;"
-                                id="financeSubnav">
-                                <li><a href="#finance-payments" class="sidebar-link" id="navFinancePayments"
-                                        style="font-size: 13px; padding: 8px 12px;">Payment to Shipping Line</a></li>
-                                <li><a href="#finance-invoices" class="sidebar-link" id="navFinanceInvoices"
-                                        style="font-size: 13px; padding: 8px 12px;">Create Invoice</a></li>
-                                <li><a href="#finance-received" class="sidebar-link" id="navFinanceReceived"
-                                        style="font-size: 13px; padding: 8px 12px;">Payments Received</a></li>
-                            </ul>
-                        </li>
-                        <li>
-                            <a href="#" class="sidebar-link" id="navSettings" onclick="toggleSettingsNav(event)">
-                                <span class="icon">⚙️</span> Settings
-                            </a>
-                            <ul class="sidebar-subnav"
-                                style="list-style: none; padding-left: 24px; margin-top: 4px; display: none;"
-                                id="settingsSubnav">
-                                <li><a href="/generate-hbl" class="sidebar-link"
-                                        style="font-size: 13px; padding: 8px 12px;">📄 Generate HBL</a></li>
-                                <li><a href="/client-master" class="sidebar-link"
-                                        style="font-size: 13px; padding: 8px 12px;">👥 Add Client</a></li>
-                                <li><a href="/shipping-line" class="sidebar-link"
-                                        style="font-size: 13px; padding: 8px 12px;">🚢 Add Shipping Line</a></li>
-                            </ul>
-                        </li>
-                    </ul>
-                </aside>
+            <div class="rail-bottom">
+                <div class="rail-user" title="Signed in">
+                    <div class="user-avatar">AD</div>
+                    <div class="rail-user-meta">
+                        <div class="rail-user-label">Welcome back</div>
+                        <div id="userNameDisplay" class="rail-user-name">Admin</div>
+                    </div>
+                </div>
+                <button class="btn btn-secondary rail-logout" onclick="handleLogout()" title="Logout" aria-label="Logout">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+        </aside>
 
+        <div class="app-main">
+            <main class="main-panel" aria-label="Main content">
                 <div class="content" id="mainContent">
                     <!-- Dashboard View -->
                     <div id="dashboardView" class="view-content">
-                        <h1 style="margin-bottom: 24px; font-size: 28px; color: var(--navy-800);">Dashboard Overview
-                        </h1>
+                        <div class="page-topbar">
+                            <div class="page-title">
+                                <h1 class="page-h1">Dashboard</h1>
+                                <div class="page-subtitle">Welcome back, <span class="page-user" id="pageUserName">User</span></div>
+                            </div>
 
-                        <div class="dashboard-stats">
-                            <div class="stat-card">
-                                <div class="stat-value" id="totalEnquiry">0</div>
-                                <div class="stat-label">Total Sales</div>
-                                <button class="btn action-btn" onclick="showEnquiriesView()">View All</button>
-                            </div>
-                            <div class="stat-card accent">
-                                <div class="stat-value" id="pendingPricing">0</div>
-                                <div class="stat-label">Pending at Pricing</div>
-                                <button class="btn action-btn"
-                                    onclick="showEnquiriesView('pending_pricing')">Process</button>
-                            </div>
-                            <div class="stat-card warning">
-                                <div class="stat-value" id="pendingConfirmation">0</div>
-                                <div class="stat-label">Pending for Client Confirmation</div>
-                                <button class="btn action-btn"
-                                    onclick="showEnquiriesView('pending_confirmation')">View</button>
-                            </div>
-                            <div class="stat-card success">
-                                <div class="stat-value" id="bookingPendingCount">0</div>
-                                <div class="stat-label">Booking To Be Secured</div>
-                                <button class="btn action-btn"
-                                    onclick="showTrackingView('pending_booking')">View</button>
-                            </div>
-                            <!-- New Milestone Cards -->
-                            <div class="stat-card info">
-                                <div class="stat-value" id="siPendingCount">0</div>
-                                <div class="stat-label">SI To Be Submitted</div>
-                                <button class="btn action-btn" onclick="showTrackingView('pending_si')">View</button>
-                            </div>
-                            <div class="stat-card purple">
-                                <div class="stat-value" id="blPendingCount">0</div>
-                                <div class="stat-label">BL To Be Received</div>
-                                <button class="btn action-btn" onclick="showTrackingView('pending_bl')">View</button>
-                            </div>
-                            <div class="stat-card cyan">
-                                <div class="stat-value" id="sobPendingCount">0</div>
-                                <div class="stat-label">SOB Remaining</div>
-                                <button class="btn action-btn" onclick="showTrackingView('pending_sob')">View</button>
+                            <div class="page-actions">
+                                <div class="page-kpi">
+                                    <div class="page-kpi-label">Total Enquiries</div>
+                                    <div class="page-kpi-value" id="totalEnquiry">0</div>
+                                </div>
+                                <button class="btn btn-secondary page-refresh" id="refreshDashboardBtn" type="button" title="Refresh">
+                                    <i class="fas fa-rotate-right"></i> Refresh
+                                </button>
                             </div>
                         </div>
 
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                            <h2 style="font-size: 20px; margin: 0; color: var(--navy-700);">Recent Sales</h2>
-                            <button class="btn btn-primary" onclick="startNewEnquiry()">+ Create New</button>
+                        <section class="section-card">
+                            <div class="section-header">
+                                <div class="section-title">
+                                    <div class="section-icon sales"><i class="fas fa-chart-line"></i></div>
+                                    <div>
+                                        <div class="section-name">Sales</div>
+                                        <div class="section-desc">Manage sales enquiries and confirmations</div>
+                                    </div>
+                                </div>
+                                <div class="section-total">
+                                    <div class="section-total-value" id="salesTotalInline">0</div>
+                                </div>
+                            </div>
+
+                            <div class="section-grid">
+                                <button class="kpi-card" type="button" onclick="showEnquiriesView('pending_pricing')">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">Pending at Pricing</div>
+                                        <span class="kpi-pill">Sales</span>
+                                    </div>
+                                    <div class="kpi-value" id="pendingPricing">0</div>
+                                </button>
+
+                                <button class="kpi-card" type="button" onclick="showEnquiriesView('pending_confirmation')">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">Client Confirmation</div>
+                                        <span class="kpi-pill">Sales</span>
+                                    </div>
+                                    <div class="kpi-value" id="pendingConfirmation">0</div>
+                                </button>
+                            </div>
+                        </section>
+
+                        <section class="section-card">
+                            <div class="section-header">
+                                <div class="section-title">
+                                    <div class="section-icon traffic"><i class="fas fa-truck-fast"></i></div>
+                                    <div>
+                                        <div class="section-name">Traffic</div>
+                                        <div class="section-desc">Handle sourcing, assignments and documentation</div>
+                                    </div>
+                                </div>
+                                <div class="section-total">
+                                    <div class="section-total-value" id="trafficTotalInline">0</div>
+                                </div>
+                            </div>
+
+                            <div class="section-grid section-grid-3">
+                                <button class="kpi-card" type="button" onclick="showTrackingView('pending_booking')">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">Booking Pending</div>
+                                        <span class="kpi-pill">Traffic</span>
+                                    </div>
+                                    <div class="kpi-value" id="bookingPendingCount">0</div>
+                                </button>
+                                <button class="kpi-card" type="button" onclick="showTrackingView('pending_si')">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">SI Pending</div>
+                                        <span class="kpi-pill">Traffic</span>
+                                    </div>
+                                    <div class="kpi-value" id="siPendingCount">0</div>
+                                </button>
+                                <button class="kpi-card" type="button" onclick="showTrackingView('pending_bl')">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">BL Pending</div>
+                                        <span class="kpi-pill">Traffic</span>
+                                    </div>
+                                    <div class="kpi-value" id="blPendingCount">0</div>
+                                </button>
+                            </div>
+                        </section>
+
+                        <section class="section-card">
+                            <div class="section-header">
+                                <div class="section-title">
+                                    <div class="section-icon ops"><i class="fas fa-cubes"></i></div>
+                                    <div>
+                                        <div class="section-name">Operations</div>
+                                        <div class="section-desc">Track operations, payments and delivery</div>
+                                    </div>
+                                </div>
+                                <div class="section-total">
+                                    <div class="section-total-value" id="opsTotalInline">0</div>
+                                </div>
+                            </div>
+
+                            <div class="section-grid section-grid-3">
+                                <button class="kpi-card" type="button" onclick="showTrackingView('pending_sob')">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">SOB Remaining</div>
+                                        <span class="kpi-pill">Operations</span>
+                                    </div>
+                                    <div class="kpi-value" id="sobPendingCount">0</div>
+                                </button>
+                                <button class="kpi-card" type="button" onclick="showFinanceView('invoices')">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">Invoices Raised</div>
+                                        <span class="kpi-pill">Operations</span>
+                                    </div>
+                                    <div class="kpi-value" id="financeInvoicesRaised">0</div>
+                                </button>
+                                <button class="kpi-card" type="button" onclick="showFinanceView('payments')">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">Payment Pending</div>
+                                        <span class="kpi-pill">Operations</span>
+                                    </div>
+                                    <div class="kpi-value" id="paymentPendingCount">0</div>
+                                </button>
+                            </div>
+                        </section>
+
+                        <div class="table-topbar">
+                            <div>
+                                <h2 class="table-title">Recent Sales</h2>
+                                <div class="table-subtitle">A quick view of the latest enquiries</div>
+                            </div>
                         </div>
 
                         <div class="table-container"
@@ -159,136 +232,654 @@
 
                     <!-- All Enquiries View -->
                     <div id="enquiriesView" class="view-content" style="display: none;">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                            <h1 style="font-size: 28px; margin: 0; color: var(--navy-800);">Sales</h1>
-                            <button class="btn btn-primary" onclick="startNewEnquiry()">+ New Sale</button>
+                        <div class="view-topbar">
+                            <div class="view-title">
+                                <h1 class="view-h1">Sales</h1>
+                                <div class="view-subtitle">All enquiries, statuses and actions in one place</div>
+                            </div>
+                            <div class="view-actions">
+                                <button class="btn btn-primary" onclick="startNewEnquiry()">+ New Sale</button>
+                            </div>
                         </div>
 
-                        <div class="table-container"
-                            style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
-                            <table class="data-table">
+                        <div class="status-sections" id="salesStatusSections" role="tablist" aria-label="Sales status sections">
+                            <button type="button" class="status-section-card" data-view="sales" data-section="pending_pricing" role="tab" aria-selected="false">
+                                <div class="status-section-icon sales"><i class="fas fa-chart-line"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">Pending at Pricing</div>
+                                    <div class="status-section-count"><span data-count="pending_pricing">0</span> LEFT</div>
+                                </div>
+                            </button>
+                            <button type="button" class="status-section-card" data-view="sales" data-section="pending_confirmation" role="tab" aria-selected="false">
+                                <div class="status-section-icon traffic"><i class="fas fa-check-double"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">Pending Confirmation</div>
+                                    <div class="status-section-count"><span data-count="pending_confirmation">0</span> LEFT</div>
+                                </div>
+                            </button>
+                            <button type="button" class="status-section-card active" data-view="sales" data-section="all" role="tab" aria-selected="true">
+                                <div class="status-section-icon ops"><i class="fas fa-list"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">All Enquiries</div>
+                                    <div class="status-section-count"><span data-count="all">0</span> LEFT</div>
+                                </div>
+                            </button>
+                        </div>
+
+                        <div class="table-container table-card enquiries-card list-table-card" id="enquiriesTableCard">
+                            <div class="table-head">
+                                <div class="table-head-left">
+                                    <div class="table-head-title">Enquiry Details</div>
+                                    <div class="table-head-sub">Search, export, and manage columns</div>
+                                </div>
+                                <div class="table-head-right">
+                                    <div class="status-pill" id="enquiriesStatusPill">
+                                        <span class="status-dot"></span>
+                                        <span class="status-text">All</span>
+                                    </div>
+                                    <div class="records-pill" id="enquiriesRecordsPill">
+                                        <i class="fas fa-list"></i>
+                                        <span id="enquiriesRecordsCount">0</span> records
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="table-tools">
+                                <div class="table-tools-left">
+                                    <div class="table-search">
+                                        <i class="fas fa-magnifying-glass"></i>
+                                        <input id="enquiriesSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
+                                    </div>
+                                </div>
+                                <div class="table-tools-right">
+                                    <button class="btn btn-secondary table-tool-btn" id="enquiriesExportBtn" type="button">
+                                        <i class="fas fa-arrow-up-from-bracket"></i> Export Data
+                                    </button>
+
+                                    <div class="table-dropdown" id="enquiriesColumnsDropdown">
+                                        <button class="btn btn-secondary table-tool-btn" type="button" id="enquiriesToggleColumnsBtn">
+                                            Toggle Columns <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <div class="table-dropdown-menu" id="enquiriesColumnsMenu" role="menu" aria-label="Toggle columns">
+                                            <label class="dropdown-item"><input type="checkbox" data-col="details" checked> Enquiry Details</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="type" checked> Enquiry Type</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="client" checked> Client Name</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="commodity" checked> Commodity</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="location" checked> Location</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="container" checked> Container</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="required" checked> Required On</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="status" checked> Status</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="action" checked> Actions</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="list-table-scroll">
+                            <table class="data-table list-table" id="enquiriesDataTable">
                                 <thead>
                                     <tr>
-                                        <th>Sale #</th>
-                                        <th>Client</th>
-                                        <th>Route</th>
-                                        <th>Status</th>
-                                        <th>Stuffing Date</th>
-                                        <th>Action</th>
+                                        <th data-col="details">Enquiry Details</th>
+                                        <th data-col="type">Enquiry Type</th>
+                                        <th data-col="client">Client Name</th>
+                                        <th data-col="commodity">Commodity</th>
+                                        <th data-col="location">Location</th>
+                                        <th data-col="container">Container</th>
+                                        <th data-col="required">Required On</th>
+                                        <th data-col="status">Status</th>
+                                        <th data-col="action">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="allEnquiriesTable"></tbody>
                             </table>
+                            </div>
                             <div class="pagination-container" id="allEnquiriesPagination"></div>
                         </div>
                     </div>
 
                     <!-- Quotes & Pricing View -->
                     <div id="quotesView" class="view-content" style="display: none;">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                            <h1 style="font-size: 28px; margin: 0; color: var(--navy-800);">Quotes & Pricing</h1>
-                            <div style="color: var(--text-tertiary); font-size: 14px;">Select a sale to manage or
-                                view its quotations</div>
+                        <div class="view-topbar">
+                            <div class="view-title">
+                                <h1 class="view-h1">Quotes & Pricing</h1>
+                                <div class="view-subtitle">Select a sale to manage or view its quotations</div>
+                            </div>
                         </div>
 
-                        <div class="table-container"
-                            style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
-                            <table class="data-table">
+                        <div class="table-container table-card list-table-card" id="quotesTableCard">
+                            <div class="table-head">
+                                <div class="table-head-left">
+                                    <div class="table-head-title">Quote Details</div>
+                                    <div class="table-head-sub">Search, export, and manage columns</div>
+                                </div>
+                                <div class="table-head-right">
+                                    <div class="status-pill" id="quotesStatusPill">
+                                        <span class="status-dot"></span>
+                                        <span class="status-text">All Quotes</span>
+                                    </div>
+                                    <div class="records-pill" id="quotesRecordsPill">
+                                        <i class="fas fa-list"></i>
+                                        <span id="quotesRecordsCount">0</span> records
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="table-tools">
+                                <div class="table-tools-left">
+                                    <div class="table-search">
+                                        <i class="fas fa-magnifying-glass"></i>
+                                        <input id="quotesSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
+                                    </div>
+                                </div>
+                                <div class="table-tools-right">
+                                    <button class="btn btn-secondary table-tool-btn" id="quotesExportBtn" type="button">
+                                        <i class="fas fa-arrow-up-from-bracket"></i> Export Data
+                                    </button>
+                                    <div class="table-dropdown" id="quotesColumnsDropdown">
+                                        <button class="btn btn-secondary table-tool-btn" type="button" id="quotesToggleColumnsBtn">
+                                            Toggle Columns <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <div class="table-dropdown-menu" id="quotesColumnsMenu" role="menu" aria-label="Toggle columns">
+                                            <label class="dropdown-item"><input type="checkbox" data-col="details" checked> Enquiry Details</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="type" checked> Enquiry Type</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="client" checked> Client Name</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="location" checked> Location</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="required" checked> Required On</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="line" checked> Shipping Line</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="total" checked> Total (INR)</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="status" checked> Status</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="action" checked> Actions</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="list-table-scroll">
+                            <table class="data-table list-table" id="quotesDataTable">
                                 <thead>
                                     <tr>
-                                        <th>Sale #</th>
-                                        <th>Client</th>
-                                        <th>Route</th>
-                                        <th>Shipping Line</th>
-                                        <th>Status</th>
-                                        <th>Total (INR)</th>
-                                        <th>Action</th>
+                                        <th data-col="details">Enquiry Details</th>
+                                        <th data-col="type">Enquiry Type</th>
+                                        <th data-col="client">Client Name</th>
+                                        <th data-col="location">Location</th>
+                                        <th data-col="required">Required On</th>
+                                        <th data-col="line">Shipping Line</th>
+                                        <th data-col="total">Total (INR)</th>
+                                        <th data-col="status">Status</th>
+                                        <th data-col="action">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="quotesTable"></tbody>
                             </table>
+                            </div>
                             <div class="pagination-container" id="quotesPagination"></div>
                         </div>
                     </div>
 
                     <!-- Tracking & Documents View -->
                     <div id="trackingView" class="view-content" style="display: none;">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                            <h1 style="font-size: 28px; margin: 0; color: var(--navy-800);">Tracking & Documents</h1>
-                            <div style="color: var(--text-tertiary); font-size: 14px;">Select a sale to manage or
-                                upload documents</div>
+                        <div class="view-topbar">
+                            <div class="view-title">
+                                <h1 class="view-h1">Tracking & Documents</h1>
+                                <div class="view-subtitle">Select a sale to manage milestones and upload documents</div>
+                            </div>
                         </div>
-                        <div class="table-container"
-                            style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
-                            <table class="data-table">
+
+                        <div class="status-sections" id="trackingStatusSections" role="tablist" aria-label="Tracking status sections">
+                            <button type="button" class="status-section-card active" data-view="tracking" data-section="pending_booking" role="tab" aria-selected="true">
+                                <div class="status-section-icon sales"><i class="fas fa-anchor"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">Booking Pending</div>
+                                    <div class="status-section-count"><span data-count="pending_booking">0</span> LEFT</div>
+                                </div>
+                            </button>
+                            <button type="button" class="status-section-card" data-view="tracking" data-section="pending_si" role="tab" aria-selected="false">
+                                <div class="status-section-icon traffic"><i class="fas fa-file-signature"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">SI Pending</div>
+                                    <div class="status-section-count"><span data-count="pending_si">0</span> LEFT</div>
+                                </div>
+                            </button>
+                            <button type="button" class="status-section-card" data-view="tracking" data-section="pending_bl" role="tab" aria-selected="false">
+                                <div class="status-section-icon ops"><i class="fas fa-file-contract"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">BL Pending</div>
+                                    <div class="status-section-count"><span data-count="pending_bl">0</span> LEFT</div>
+                                </div>
+                            </button>
+                            <button type="button" class="status-section-card" data-view="tracking" data-section="pending_sob" role="tab" aria-selected="false">
+                                <div class="status-section-icon sales"><i class="fas fa-ship"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">SOB Remaining</div>
+                                    <div class="status-section-count"><span data-count="pending_sob">0</span> LEFT</div>
+                                </div>
+                            </button>
+                        </div>
+
+                        <div class="table-container table-card list-table-card" id="trackingTableCard">
+                            <div class="table-head">
+                                <div class="table-head-left">
+                                    <div class="table-head-title">Tracking Details</div>
+                                    <div class="table-head-sub">Milestone-wise shipment tracking</div>
+                                </div>
+                                <div class="table-head-right">
+                                    <div class="status-pill" id="trackingStatusPill">
+                                        <span class="status-dot"></span>
+                                        <span class="status-text">Booking Pending</span>
+                                    </div>
+                                    <div class="records-pill" id="trackingRecordsPill">
+                                        <i class="fas fa-list"></i>
+                                        <span id="trackingRecordsCount">0</span> records
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="table-tools">
+                                <div class="table-tools-left">
+                                    <div class="table-search">
+                                        <i class="fas fa-magnifying-glass"></i>
+                                        <input id="trackingSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
+                                    </div>
+                                </div>
+                                <div class="table-tools-right">
+                                    <button class="btn btn-secondary table-tool-btn" id="trackingExportBtn" type="button">
+                                        <i class="fas fa-arrow-up-from-bracket"></i> Export Data
+                                    </button>
+                                    <div class="table-dropdown" id="trackingColumnsDropdown">
+                                        <button class="btn btn-secondary table-tool-btn" type="button" id="trackingToggleColumnsBtn">
+                                            Toggle Columns <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <div class="table-dropdown-menu" id="trackingColumnsMenu" role="menu" aria-label="Toggle columns">
+                                            <label class="dropdown-item"><input type="checkbox" data-col="details" checked> Enquiry Details</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="type" checked> Enquiry Type</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="client" checked> Client Name</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="location" checked> Location</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="required" checked> Required On</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="status" checked> Status</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="action" checked> Actions</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="list-table-scroll">
+                            <table class="data-table list-table" id="trackingDataTable">
                                 <thead>
                                     <tr>
-                                        <th>Sale #</th>
-                                        <th>Client</th>
-                                        <th>Route</th>
-                                        <th>Status</th>
-                                        <th>Action</th>
+                                        <th data-col="details">Enquiry Details</th>
+                                        <th data-col="type">Enquiry Type</th>
+                                        <th data-col="client">Client Name</th>
+                                        <th data-col="location">Location</th>
+                                        <th data-col="required">Required On</th>
+                                        <th data-col="status">Status</th>
+                                        <th data-col="action">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="trackingTable"></tbody>
                             </table>
+                            </div>
                             <div class="pagination-container" id="trackingPagination"></div>
                         </div>
                     </div>
 
                     <!-- Finance View -->
                     <div id="financeView" class="view-content" style="display: none;">
-                        <div
-                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                            <h1 style="font-size: 28px; margin: 0; color: var(--navy-800);">Finance Management</h1>
-                            <div style="color: var(--text-tertiary); font-size: 14px;">Manage payments and client
-                                invoices</div>
-                        </div>
-
-                        <div class="dashboard-stats" style="margin-bottom: 32px;">
-                            <div class="stat-card accent">
-                                <div class="stat-value" id="financePaymentsMade">0</div>
-                                <div class="stat-label">Payments Made to Shipping Line</div>
-                            </div>
-                            <div class="stat-card">
-                                <div class="stat-value" id="financeInvoicesRaised">0</div>
-                                <div class="stat-label">Invoices Raised to Client</div>
-                            </div>
-                            <div class="stat-card success">
-                                <div class="stat-value" id="financePaymentsReceived">0</div>
-                                <div class="stat-label">Payments Received from Client</div>
+                        <div class="view-topbar">
+                            <div class="view-title">
+                                <h1 class="view-h1">Finance</h1>
+                                <div class="view-subtitle">Manage payments and client invoices</div>
                             </div>
                         </div>
 
-                        <div id="financeTableWrap" class="table-container"
-                            style="background: white; border-radius: 8px; border: 1px solid var(--border-light); overflow: visible; box-shadow: var(--shadow-sm);">
-                            <table class="data-table">
+                        <div class="status-sections" id="financeStatusSections" role="tablist" aria-label="Finance status sections">
+                            <button type="button" class="status-section-card active" data-view="finance" data-section="payments" role="tab" aria-selected="true">
+                                <div class="status-section-icon sales"><i class="fas fa-money-bill-wave"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">Payment to Shipping Line</div>
+                                    <div class="status-section-count"><span data-count="payments">0</span> LEFT</div>
+                                </div>
+                            </button>
+                            <button type="button" class="status-section-card" data-view="finance" data-section="invoices" role="tab" aria-selected="false">
+                                <div class="status-section-icon traffic"><i class="fas fa-file-invoice"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">Create Invoice</div>
+                                    <div class="status-section-count"><span data-count="invoices">0</span> LEFT</div>
+                                </div>
+                            </button>
+                            <button type="button" class="status-section-card" data-view="finance" data-section="received" role="tab" aria-selected="false">
+                                <div class="status-section-icon ops"><i class="fas fa-coins"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">Payments Received</div>
+                                    <div class="status-section-count"><span data-count="received">0</span> LEFT</div>
+                                </div>
+                            </button>
+                        </div>
+
+                        <section class="section-card">
+                            <div class="section-header">
+                                <div class="section-title">
+                                    <div class="section-icon ops"><i class="fas fa-wallet"></i></div>
+                                    <div>
+                                        <div class="section-name">Finance snapshot</div>
+                                        <div class="section-desc">Quick totals for the current period</div>
+                                    </div>
+                                </div>
+                                <div class="section-total">
+                                    <div class="section-total-value" id="financeTotalInline">0</div>
+                                </div>
+                            </div>
+                            <div class="section-grid section-grid-3">
+                                <div class="kpi-card kpi-static" role="group" aria-label="Payments made">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">Payments Made</div>
+                                        <span class="kpi-pill">Finance</span>
+                                    </div>
+                                    <div class="kpi-value" id="financePaymentsMade">0</div>
+                                </div>
+                                <div class="kpi-card kpi-static" role="group" aria-label="Invoices raised">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">Invoices Raised</div>
+                                        <span class="kpi-pill">Finance</span>
+                                    </div>
+                                    <div class="kpi-value" id="financeInvoicesRaised">0</div>
+                                </div>
+                                <div class="kpi-card kpi-static" role="group" aria-label="Payments received">
+                                    <div class="kpi-top">
+                                        <div class="kpi-label">Payments Received</div>
+                                        <span class="kpi-pill">Finance</span>
+                                    </div>
+                                    <div class="kpi-value" id="financePaymentsReceived">0</div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <div id="financeTableWrap" class="table-container table-card list-table-card">
+                            <div class="table-head">
+                                <div class="table-head-left">
+                                    <div class="table-head-title">Finance Details</div>
+                                    <div class="table-head-sub">Payments, invoices and receipts</div>
+                                </div>
+                                <div class="table-head-right">
+                                    <div class="status-pill" id="financeStatusPill">
+                                        <span class="status-dot"></span>
+                                        <span class="status-text">Payment to Shipping Line</span>
+                                    </div>
+                                    <div class="records-pill" id="financeRecordsPill">
+                                        <i class="fas fa-list"></i>
+                                        <span id="financeRecordsCount">0</span> records
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="table-tools">
+                                <div class="table-tools-left">
+                                    <div class="table-search">
+                                        <i class="fas fa-magnifying-glass"></i>
+                                        <input id="financeSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
+                                    </div>
+                                </div>
+                                <div class="table-tools-right">
+                                    <button class="btn btn-secondary table-tool-btn" id="financeExportBtn" type="button">
+                                        <i class="fas fa-arrow-up-from-bracket"></i> Export Data
+                                    </button>
+                                    <div class="table-dropdown" id="financeColumnsDropdown">
+                                        <button class="btn btn-secondary table-tool-btn" type="button" id="financeToggleColumnsBtn">
+                                            Toggle Columns <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <div class="table-dropdown-menu" id="financeColumnsMenu" role="menu" aria-label="Toggle columns">
+                                            <label class="dropdown-item"><input type="checkbox" data-col="details" checked> Enquiry Details</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="type" checked> Enquiry Type</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="client" checked> Client Name</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="commodity" checked> Commodity</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="location" checked> Location</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="container" checked> Container</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="required" checked> Required On</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="status" checked> Finance Status</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="action" checked> Actions</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="list-table-scroll">
+                            <table class="data-table list-table" id="financeDataTable">
                                 <thead>
                                     <tr>
-                                        <th>Sale #</th>
-                                        <th>Client</th>
-                                        <th>Route</th>
-                                        <th>Finance Status</th>
-                                        <th>Action</th>
+                                        <th data-col="details">Enquiry Details</th>
+                                        <th data-col="type">Enquiry Type</th>
+                                        <th data-col="client">Client Name</th>
+                                        <th data-col="commodity">Commodity</th>
+                                        <th data-col="location">Location</th>
+                                        <th data-col="container">Container</th>
+                                        <th data-col="required">Required On</th>
+                                        <th data-col="status">Finance Status</th>
+                                        <th data-col="action">Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody id="financeTable"></tbody>
                             </table>
+                            </div>
                         </div>
 
-                        <div id="financeReceivedSections" style="display: none;"></div>
+                        <div id="financeReceivedSections" class="table-card list-table-card" style="display: none;"></div>
                         <div class="pagination-container" id="financePagination"></div>
                     </div>
+
+                    <!-- Masters Dashboard -->
+                    <div id="mastersDashboardView" class="view-content" style="display: none;">
+                        <div class="masters-dashboard-head">
+                            <h1>Masters Dashboard</h1>
+                            <span class="masters-count-badge" id="mastersTotalBadge">0</span>
+                        </div>
+
+                        <div class="masters-hub-grid">
+                            <button type="button" class="master-hub-card featured" onclick="showMastersClientList()">
+                                <div class="master-hub-card-top">
+                                    <span class="master-hub-icon clients"><i class="fas fa-user-circle"></i></span>
+                                    <span class="master-hub-status">Active</span>
+                                </div>
+                                <h2 class="master-hub-title">Client Master</h2>
+                                <p class="master-hub-desc">Manage client origins, branches, and billing entities.</p>
+                                <div class="master-hub-footer">
+                                    <span class="master-hub-access">Access</span>
+                                    <span class="master-hub-arrow"><i class="fas fa-arrow-right"></i></span>
+                                </div>
+                                <span style="position:absolute;bottom:52px;right:18px;font-size:11px;font-weight:700;color:var(--text-tertiary);" id="masterCardClientCount">0 records</span>
+                            </button>
+
+                            <button type="button" class="master-hub-card" onclick="showMastersShippingList()">
+                                <div class="master-hub-card-top">
+                                    <span class="master-hub-icon shipping"><i class="fas fa-ship"></i></span>
+                                    <span class="master-hub-status">Active</span>
+                                </div>
+                                <h2 class="master-hub-title">Shipping Line Master</h2>
+                                <p class="master-hub-desc">Manage shipping line partners, contacts, and documents.</p>
+                                <div class="master-hub-footer">
+                                    <span class="master-hub-access">Access</span>
+                                    <span class="master-hub-arrow"><i class="fas fa-arrow-right"></i></span>
+                                </div>
+                                <span style="position:absolute;bottom:52px;right:18px;font-size:11px;font-weight:700;color:var(--text-tertiary);" id="masterCardShippingCount">0 records</span>
+                            </button>
+
+                            <a href="/generate-hbl" class="master-hub-card" style="text-decoration:none;color:inherit;">
+                                <div class="master-hub-card-top">
+                                    <span class="master-hub-icon hbl"><i class="fas fa-file-contract"></i></span>
+                                    <span class="master-hub-status">Active</span>
+                                </div>
+                                <h2 class="master-hub-title">Generate HBL</h2>
+                                <p class="master-hub-desc">Create and manage House Bill of Lading documents.</p>
+                                <div class="master-hub-footer">
+                                    <span class="master-hub-access">Access</span>
+                                    <span class="master-hub-arrow"><i class="fas fa-arrow-right"></i></span>
+                                </div>
+                            </a>
+                        </div>
+                    </div>
+
+                    <!-- Client Master List -->
+                    <div id="mastersClientListView" class="view-content" style="display: none;">
+                        <div class="master-list-topbar">
+                            <div class="master-list-title-wrap">
+                                <div class="master-list-breadcrumb">
+                                    <a href="#masters" onclick="showMastersDashboard(); return false;">Masters</a>
+                                    <i class="fas fa-chevron-right"></i>
+                                    <span>Client Details</span>
+                                </div>
+                                <h1>Client Details</h1>
+                            </div>
+                            <div class="master-list-actions">
+                                <button type="button" class="master-icon-btn primary" title="Add Client" onclick="openMasterDrawer('add-client')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                                <button type="button" class="master-icon-btn" title="Refresh" onclick="loadMastersClientList()">
+                                    <i class="fas fa-rotate-right"></i>
+                                </button>
+                                <div class="master-records-pill">
+                                    <i class="fas fa-list"></i>
+                                    <span id="mastersClientsRecordsCount">0</span> records
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-container table-card list-table-card" id="mastersClientsTableCard">
+                            <div class="table-tools">
+                                <div class="table-tools-left">
+                                    <div class="table-search">
+                                        <i class="fas fa-magnifying-glass"></i>
+                                        <input id="mastersClientsSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
+                                    </div>
+                                </div>
+                                <div class="table-tools-right">
+                                    <button class="btn btn-secondary table-tool-btn" id="mastersClientsExportBtn" type="button">
+                                        <i class="fas fa-arrow-up-from-bracket"></i> Export Data
+                                    </button>
+                                    <div class="table-dropdown" id="mastersClientsColumnsDropdown">
+                                        <button class="btn btn-secondary table-tool-btn" type="button" id="mastersClientsToggleColumnsBtn">
+                                            Toggle Columns <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <div class="table-dropdown-menu" id="mastersClientsColumnsMenu" role="menu">
+                                            <label class="dropdown-item"><input type="checkbox" data-col="code" checked> Client Code</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="status" checked> Approval Status</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="company" checked> Company Name</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="branch" checked> Branch Name</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="phone" checked> Phone</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="location" checked> Location</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="action" checked> Actions</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="list-table-scroll">
+                            <table class="data-table list-table" id="mastersClientsDataTable">
+                                <thead>
+                                    <tr>
+                                        <th data-col="code">Client Code</th>
+                                        <th data-col="status">Approval Status</th>
+                                        <th data-col="company">Company Name</th>
+                                        <th data-col="branch">Branch Name</th>
+                                        <th data-col="phone">Phone</th>
+                                        <th data-col="location">Location</th>
+                                        <th data-col="action">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mastersClientsTable"></tbody>
+                            </table>
+                            </div>
+                            <div class="pagination-container" id="mastersClientsPagination"></div>
+                        </div>
+                    </div>
+
+                    <!-- Shipping Line Master List -->
+                    <div id="mastersShippingListView" class="view-content" style="display: none;">
+                        <div class="master-list-topbar">
+                            <div class="master-list-title-wrap">
+                                <div class="master-list-breadcrumb">
+                                    <a href="#masters" onclick="showMastersDashboard(); return false;">Masters</a>
+                                    <i class="fas fa-chevron-right"></i>
+                                    <span>Shipping Line Details</span>
+                                </div>
+                                <h1>Shipping Line Details</h1>
+                            </div>
+                            <div class="master-list-actions">
+                                <button type="button" class="master-icon-btn primary" title="Add Shipping Line" onclick="openMasterDrawer('add-shipping-line')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                                <button type="button" class="master-icon-btn" title="Refresh" onclick="loadMastersShippingList()">
+                                    <i class="fas fa-rotate-right"></i>
+                                </button>
+                                <div class="master-records-pill">
+                                    <i class="fas fa-list"></i>
+                                    <span id="mastersShippingRecordsCount">0</span> records
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-container table-card list-table-card" id="mastersShippingTableCard">
+                            <div class="table-tools">
+                                <div class="table-tools-left">
+                                    <div class="table-search">
+                                        <i class="fas fa-magnifying-glass"></i>
+                                        <input id="mastersShippingSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
+                                    </div>
+                                </div>
+                                <div class="table-tools-right">
+                                    <button class="btn btn-secondary table-tool-btn" id="mastersShippingExportBtn" type="button">
+                                        <i class="fas fa-arrow-up-from-bracket"></i> Export Data
+                                    </button>
+                                    <div class="table-dropdown" id="mastersShippingColumnsDropdown">
+                                        <button class="btn btn-secondary table-tool-btn" type="button" id="mastersShippingToggleColumnsBtn">
+                                            Toggle Columns <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <div class="table-dropdown-menu" id="mastersShippingColumnsMenu" role="menu">
+                                            <label class="dropdown-item"><input type="checkbox" data-col="code" checked> Line Code</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="status" checked> Approval Status</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="name" checked> Shipping Line</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="contact" checked> Contact Person</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="phone" checked> Phone</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="location" checked> Location</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="action" checked> Actions</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="list-table-scroll">
+                            <table class="data-table list-table" id="mastersShippingDataTable">
+                                <thead>
+                                    <tr>
+                                        <th data-col="code">Line Code</th>
+                                        <th data-col="status">Approval Status</th>
+                                        <th data-col="name">Shipping Line</th>
+                                        <th data-col="contact">Contact Person</th>
+                                        <th data-col="phone">Phone</th>
+                                        <th data-col="location">Location</th>
+                                        <th data-col="action">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mastersShippingTable"></tbody>
+                            </table>
+                            </div>
+                            <div class="pagination-container" id="mastersShippingPagination"></div>
+                        </div>
+                    </div>
+
+                    <!-- Shipment detail (global search destination) -->
+                    <div id="shipmentDetailView" class="view-content shipment-detail-view" style="display: none;">
+                        <div id="shipmentDetailContent"></div>
+                    </div>
                 </div>
-            </div>
+            </main>
         </div>
-    </main>
+    </div>
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
+    <script src="js/list-table.js"></script>
+    <script src="js/global-search.js"></script>
+    <script src="js/shipment-detail.js"></script>
+    <script src="js/action-modal.js"></script>
+    <script src="js/masters.js"></script>
     <script src="js/app.js"></script>
 </body>
 

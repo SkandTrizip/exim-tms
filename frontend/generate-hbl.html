@@ -36,6 +36,25 @@
         .empty-state { padding: 60px 24px; text-align: center; color: var(--text-tertiary); }
         .empty-state i { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
         .empty-state h3 { margin: 0 0 8px; color: var(--navy-700); }
+
+        .hbl-focus-banner {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            padding: 16px 18px;
+            border-radius: 12px;
+            border: 1px solid #bfdbfe;
+            background: linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%);
+        }
+        .hbl-focus-banner.visible { display: flex; }
+        .hbl-focus-banner strong { display: block; color: var(--navy-800); font-size: 15px; margin-bottom: 4px; }
+        .hbl-focus-banner p { margin: 0; font-size: 13px; color: var(--text-secondary); }
+        .hbl-focus-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+        .hbl-row-focused { background: #eff6ff !important; outline: 2px solid #93c5fd; outline-offset: -2px; }
+        .hbl-action-stack { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
     </style>
 </head>
 
@@ -94,6 +113,21 @@
                 <p style="margin: 0; font-size: 12px; color: var(--text-tertiary); flex: 1; min-width: 220px;">
                     Saved HBLs restore all fields automatically. Use <strong>Save</strong> or <strong>Print</strong> once to keep your edits.
                 </p>
+            </div>
+
+            <div id="hblFocusBanner" class="hbl-focus-banner" aria-live="polite">
+                <div>
+                    <strong id="hblFocusTitle">Shipment</strong>
+                    <p>Generate or view the draft HBL for this shipment.</p>
+                </div>
+                <div class="hbl-focus-actions">
+                    <button type="button" class="btn btn-primary" id="hblFocusGenerateBtn" style="padding: 10px 16px; font-size: 13px; white-space: nowrap;">
+                        <i class="fas fa-file-contract"></i> Generate HBL
+                    </button>
+                    <button type="button" class="btn btn-secondary" id="hblFocusViewDraftBtn" style="padding: 10px 16px; font-size: 13px; white-space: nowrap;">
+                        <i class="fas fa-eye"></i> View Draft
+                    </button>
+                </div>
             </div>
 
             <div class="hbl-table-wrap">

@@ -195,6 +195,9 @@ header {
     background: rgba(255, 255, 255, 0.95);
 }
 
+/* Dashboard now uses an app-shell with nav rail (see `dashboard.css`).
+   Keep legacy header styles for other pages, but don't add extra top padding here. */
+
 .header-content {
     display: flex;
     justify-content: space-between;
@@ -1102,6 +1105,18 @@ a.job-link:hover {
     border-radius: 4px;
 }
 
+.autocomplete-item.autocomplete-loading,
+.autocomplete-item.autocomplete-empty,
+.autocomplete-item.autocomplete-error {
+    cursor: default;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.autocomplete-item.autocomplete-error {
+    color: var(--danger, #dc2626);
+}
+
 /* ==========================================
    PRICING & OPS TABLE
    ========================================== */
@@ -1549,6 +1564,17 @@ a.job-link:hover {
     animation: fadeInScale 0.2s ease-out;
 }
 
+.actions-menu.actions-menu-floating {
+    position: fixed !important;
+    right: auto !important;
+    top: auto !important;
+    padding-top: 0;
+    margin: 0;
+    max-height: min(360px, calc(100vh - 16px));
+    overflow-y: auto;
+    z-index: 1200;
+}
+
 @keyframes fadeInScale {
     from {
         opacity: 0;
@@ -1561,8 +1587,18 @@ a.job-link:hover {
     }
 }
 
-.actions-dropdown:hover .actions-menu {
+.actions-dropdown:hover .actions-menu,
+.actions-dropdown .actions-menu.open,
+.actions-dropdown.actions-menu-open .actions-menu {
     display: block;
+}
+
+.actions-dropdown.actions-menu-dismissed:not(.actions-menu-open) .actions-menu {
+    display: none !important;
+}
+
+.actions-menu:not(.open) {
+    display: none !important;
 }
 
 /* Invisible bridge to prevent closing when moving to menu */

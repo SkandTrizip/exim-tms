@@ -1,7 +1,21 @@
 // Enquiry Page Logic
 let currentEnquiry = null;
 
+function isEmbeddedEnquiry() {
+    return document.documentElement.classList.contains('embedded-mode');
+}
+
+function notifySaleSaved(enquiry) {
+    if (isEmbeddedEnquiry() && window.parent !== window) {
+        window.parent.postMessage({ type: 'sale-saved', enquiry }, '*');
+    }
+}
+
 document.addEventListener('DOMContentLoaded', async function () {
+    if (new URLSearchParams(window.location.search).get('embedded') === '1') {
+        document.documentElement.classList.add('embedded-mode');
+        document.body.classList.add('embedded-mode');
+    }
     // 1. Initial UI Setup
     try {
         await populateInitialDropdowns();
@@ -401,6 +415,10 @@ async function saveEnquiry() {
         if (response.ok) {
             const result = await response.json();
             currentEnquiry = result; // Update current enquiry with saved data
+            if (isEmbeddedEnquiry()) {
+                notifySaleSaved(result);
+                return;
+            }
             showModal('Success', 'Sale saved successfully!', 'success');
         } else {
             const error = await response.json();
@@ -428,6 +446,352 @@ function updateModeVisibility() {
     else if (scope === 'Door to Door') {
         modeOriginGroup.style.display = 'block';
         modeDestGroup.style.display = 'block';
+    }
+
+    updateLocationPlaceholders(scope);
+
+    // Switch address autocomplete mode when scope changes
+    if (window._locationAutocompletes) {
+        window._locationAutocompletes.origin?.setMode(isDoorOrigin(scope) ? 'places' : 'ports');
+        window._locationAutocompletes.destination?.setMode(isDoorDestination(scope) ? 'places' : 'ports');
+    }
+}
+
+function isDoorOrigin(scope) {
+    return scope && scope.startsWith('Door');
+}
+
+function isDoorDestination(scope) {
+    return scope && scope.endsWith('Door');
+}
+
+function updateLocationPlaceholders(scope) {
+    const originInput = document.getElementById('origin');
+    const destInput = document.getElementById('destination');
+    const originLabel = originInput?.closest('.form-group')?.querySelector('label');
+    const destLabel = destInput?.closest('.form-group')?.querySelector('label');
+
+    if (originInput) {
+        originInput.placeholder = isDoorOrigin(scope)
+            ? 'e.g., 394170, Surat'
+            : 'e.g., Mundra';
+    }
+    if (destInput) {
+        destInput.placeholder = isDoorDestination(scope)
+            ? 'e.g., 50142, Firenze'
+            : 'e.g., Los Angeles';
+    }
+    if (originLabel) {
+        originLabel.innerHTML = isDoorOrigin(scope)
+            ? 'Origin (Zip, City) <span class="required">*</span>'
+            : 'Origin <span class="required">*</span>';
+    }
+    if (destLabel) {
+        destLabel.innerHTML = isDoorDestination(scope)
+            ? 'Destination (Zip, City) <span class="required">*</span>'
+            : 'Destination <span class="required">*</span>';
+    }
+}
+
+function createPlacesSessionToken() {
+    if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+    return `sess_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+function debounce(func, wait) {
+    let timeout;
+    return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), wait);
+    };
+}
+
+function extractPincodeFromAddressComponents(components) {
+    if (!Array.isArray(components)) return '';
+    const pin = components.find(c => Array.isArray(c.types) && c.types.includes('postal_code'));
+    return pin?.long_name || pin?.short_name || '';
+}
+
+function extractCityFromAddressComponents(components) {
+    if (!Array.isArray(components)) return '';
+    const cityTypes = [
+        'locality',
+        'postal_town',
+        'administrative_area_level_3',
+        'administrative_area_level_2',
+        'sublocality_level_1',
+        'sublocality',
+    ];
+    for (const type of cityTypes) {
+        const comp = components.find(c => Array.isArray(c.types) && c.types.includes(type));
+        if (comp?.long_name) return comp.long_name;
+    }
+    return '';
+}
+
+/** Door fields store "zip, city" — not full address or port code. */
+function formatDoorLocationValue(components, pincode) {
+    const zip = (pincode || extractPincodeFromAddressComponents(components) || '').trim();
+    const city = extractCityFromAddressComponents(components).trim();
+    if (zip && city) return `${zip}, ${city}`;
+    if (city) return city;
+    if (zip) return zip;
+    return '';
+}
+
+async function reverseGeocodeForPincode(lat, lng) {
+    try {
+        const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });
+        const res = await fetch(`${CONFIG.API_URL}/api/geocode/reverse?${params}`);
+        if (!res.ok) return '';
+        const data = await res.json();
+        const comps = data?.results?.[0]?.address_components || [];
+        return extractPincodeFromAddressComponents(comps);
+    } catch (e) {
+        console.warn('Reverse geocode failed:', e);
+        return '';
+    }
+}
+
+class LocationAutocomplete {
+    constructor({ input, dropdown, mode, placesCountry = null }) {
+        this.input = input;
+        this.dropdown = dropdown;
+        this.mode = mode; // 'places' | 'ports'
+        this.placesCountry = placesCountry; // optional ISO country; null = worldwide
+        this.sessionToken = createPlacesSessionToken();
+        this._bind();
+    }
+
+    setMode(mode) {
+        if (this.mode !== mode) {
+            this.mode = mode;
+            this.sessionToken = createPlacesSessionToken();
+            this.hide();
+            delete this.input.dataset.placeId;
+            delete this.input.dataset.lat;
+            delete this.input.dataset.lng;
+            delete this.input.dataset.pincode;
+            delete this.input.dataset.addressComponents;
+        }
+    }
+
+    _bind() {
+        this.input.addEventListener('focus', () => {
+            this.sessionToken = createPlacesSessionToken();
+        });
+
+        this.input.addEventListener('input', debounce(async (e) => {
+            const query = (e.target.value || '').trim();
+            const minLen = this.mode === 'places' ? 3 : 2;
+            if (query.length < minLen) return this.hide();
+
+            this.showLoading('Searching…');
+
+            try {
+                if (this.mode === 'places') {
+                    const places = await this._placesAutocomplete(query);
+                    const predictions = places?.predictions || [];
+
+                    if (predictions.length) {
+                        return this.showPlacePredictions(predictions);
+                    }
+
+                    // Fallback: Geocoding when Places returns no predictions
+                    const geo = await this._geocodeSearch(query);
+                    const results = geo?.results || [];
+                    return this.showGeocodeResults(results);
+                }
+
+                const res = await fetch(`${CONFIG.API_URL}/api/ports/search?q=${encodeURIComponent(query)}`);
+                const suggestions = await res.json();
+                return this.showPorts(suggestions || []);
+            } catch (err) {
+                console.error('Autocomplete error:', err);
+                this.showMessage('Could not load suggestions. Try again.', 'autocomplete-error');
+            }
+        }, 300));
+    }
+
+    hide() {
+        this.dropdown.style.display = 'none';
+        this.dropdown.innerHTML = '';
+    }
+
+    showLoading(text) {
+        this.dropdown.innerHTML = `<div class="autocomplete-item autocomplete-loading">${text}</div>`;
+        this.dropdown.style.display = 'block';
+    }
+
+    showMessage(text, cls) {
+        this.dropdown.innerHTML = `<div class="autocomplete-item ${cls}">${text}</div>`;
+        this.dropdown.style.display = 'block';
+    }
+
+    async _placesAutocomplete(inputText) {
+        const params = new URLSearchParams({ input: inputText, sessiontoken: this.sessionToken });
+        if (this.placesCountry) params.set('country', this.placesCountry);
+        const res = await fetch(`${CONFIG.API_URL}/api/places/autocomplete?${params}`);
+        if (!res.ok) throw new Error('Places search failed');
+        return await res.json();
+    }
+
+    async _placesDetails(placeId) {
+        const params = new URLSearchParams({ place_id: placeId });
+        const res = await fetch(`${CONFIG.API_URL}/api/places/details?${params}`);
+        if (!res.ok) throw new Error('Place details failed');
+        return await res.json();
+    }
+
+    async _geocodeSearch(address) {
+        const params = new URLSearchParams({ address });
+        if (this.placesCountry) params.set('country', this.placesCountry);
+        const res = await fetch(`${CONFIG.API_URL}/api/geocode/search?${params}`);
+        if (!res.ok) throw new Error('Geocode search failed');
+        return await res.json();
+    }
+
+    _displayValueForLocation({ address, addressComponents, pincode }) {
+        if (this.mode === 'places') {
+            const formatted = formatDoorLocationValue(addressComponents, pincode);
+            if (formatted) return formatted;
+        }
+        return address || '';
+    }
+
+    _setResolvedLocation({ address, placeId, lat, lng, addressComponents, pincode }) {
+        const displayValue = this._displayValueForLocation({ address, addressComponents, pincode });
+        if (displayValue) this.input.value = displayValue;
+        if (placeId) this.input.dataset.placeId = placeId;
+        if (typeof lat === 'number') this.input.dataset.lat = String(lat);
+        if (typeof lng === 'number') this.input.dataset.lng = String(lng);
+        if (pincode) this.input.dataset.pincode = String(pincode);
+        if (addressComponents) {
+            try {
+                this.input.dataset.addressComponents = JSON.stringify(addressComponents);
+            } catch (_) {
+                // ignore
+            }
+        }
+    }
+
+    showPlacePredictions(predictions) {
+        if (!predictions.length) {
+            this.showMessage('No addresses found', 'autocomplete-empty');
+            return;
+        }
+
+        this.dropdown.innerHTML = '';
+        predictions.forEach(prediction => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.setAttribute('role', 'option');
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'port-name';
+            nameDiv.textContent = prediction.description;
+            item.appendChild(document.createElement('div')).appendChild(nameDiv);
+
+            item.onclick = async () => {
+                this.hide();
+                this.showLoading('Fetching details…');
+                try {
+                    const details = await this._placesDetails(prediction.place_id);
+                    const result = details?.result || {};
+                    const address = result.formatted_address || prediction.description;
+                    const lat = result?.geometry?.location?.lat;
+                    const lng = result?.geometry?.location?.lng;
+                    const comps = result.address_components || [];
+
+                    let pincode = extractPincodeFromAddressComponents(comps);
+                    if (!pincode && typeof lat === 'number' && typeof lng === 'number') {
+                        pincode = await reverseGeocodeForPincode(lat, lng);
+                    }
+
+                    this._setResolvedLocation({
+                        address,
+                        placeId: prediction.place_id,
+                        lat: typeof lat === 'number' ? lat : undefined,
+                        lng: typeof lng === 'number' ? lng : undefined,
+                        addressComponents: comps,
+                        pincode,
+                    });
+                } catch (err) {
+                    console.error('Place details error:', err);
+                    this._setResolvedLocation({ address: prediction.description, placeId: prediction.place_id });
+                } finally {
+                    this.hide();
+                }
+            };
+
+            this.dropdown.appendChild(item);
+        });
+        this.dropdown.style.display = 'block';
+    }
+
+    showGeocodeResults(results) {
+        if (!results.length) {
+            this.showMessage('No addresses found', 'autocomplete-empty');
+            return;
+        }
+
+        this.dropdown.innerHTML = '';
+        results.slice(0, 10).forEach(r => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.setAttribute('role', 'option');
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'port-name';
+            nameDiv.textContent = r.formatted_address || 'Address';
+            item.appendChild(document.createElement('div')).appendChild(nameDiv);
+
+            item.onclick = async () => {
+                this.hide();
+                const lat = r?.geometry?.location?.lat;
+                const lng = r?.geometry?.location?.lng;
+                const comps = r.address_components || [];
+
+                let pincode = extractPincodeFromAddressComponents(comps);
+                if (!pincode && typeof lat === 'number' && typeof lng === 'number') {
+                    pincode = await reverseGeocodeForPincode(lat, lng);
+                }
+
+                this._setResolvedLocation({
+                    address: r.formatted_address,
+                    placeId: r.place_id,
+                    lat: typeof lat === 'number' ? lat : undefined,
+                    lng: typeof lng === 'number' ? lng : undefined,
+                    addressComponents: comps,
+                    pincode,
+                });
+            };
+
+            this.dropdown.appendChild(item);
+        });
+
+        this.dropdown.style.display = 'block';
+    }
+
+    showPorts(ports) {
+        if (!ports.length) return this.hide();
+        this.dropdown.innerHTML = '';
+        ports.forEach(port => {
+            const item = document.createElement('div');
+            item.className = 'autocomplete-item';
+            item.innerHTML = `<div><div class="port-name">${port.name}</div><div style="font-size: 0.7rem;">${port.unlocode}</div></div>`;
+            item.onclick = () => {
+                this.input.value = port.name;
+                delete this.input.dataset.placeId;
+                delete this.input.dataset.lat;
+                delete this.input.dataset.lng;
+                delete this.input.dataset.pincode;
+                delete this.input.dataset.addressComponents;
+                this.hide();
+            };
+            this.dropdown.appendChild(item);
+        });
+        this.dropdown.style.display = 'block';
     }
 }
 
@@ -515,66 +879,46 @@ function toggleRiskDetails() {
 }
 
 function initializeAutocomplete() {
-    const fields = [
-        { id: 'origin', dropdownId: 'originDropdown', filter: 'startsWith' },
-        { id: 'destination', dropdownId: 'destDropdown', filter: 'endsWith' },
-        { id: 'prefOriginPort', dropdownId: 'prefOriginPortDropdown', filter: 'always' },
-        { id: 'prefDestPort', dropdownId: 'prefDestPortDropdown', filter: 'always' }
-    ];
+    const scope = document.getElementById('clientScope')?.value || '';
 
-    fields.forEach(field => {
-        const input = document.getElementById(field.id);
-        const dropdown = document.getElementById(field.dropdownId);
-        if (!input || !dropdown) return;
+    const originInput = document.getElementById('origin');
+    const originDropdown = document.getElementById('originDropdown');
+    const destInput = document.getElementById('destination');
+    const destDropdown = document.getElementById('destDropdown');
+    const prefOriginInput = document.getElementById('prefOriginPort');
+    const prefOriginDropdown = document.getElementById('prefOriginPortDropdown');
+    const prefDestInput = document.getElementById('prefDestPort');
+    const prefDestDropdown = document.getElementById('prefDestPortDropdown');
 
-        input.addEventListener('input', debounce(async (e) => {
-            const query = e.target.value;
-            const scope = document.getElementById('clientScope').value;
-
-            if (field.filter !== 'always') {
-                if (field.filter === 'startsWith' && (!scope || !scope.startsWith('Port'))) {
-                    dropdown.style.display = 'none'; return;
-                }
-                if (field.filter === 'endsWith' && (!scope || !scope.endsWith('Port'))) {
-                    dropdown.style.display = 'none'; return;
-                }
-            }
-
-            if (query.length < 2) { dropdown.style.display = 'none'; return; }
-            const res = await fetch(`${CONFIG.API_URL}/api/ports/search?q=${encodeURIComponent(query)}`);
-            const suggestions = await res.json();
-            showSuggestions(suggestions, dropdown, input);
-        }, 300));
-    });
+    window._locationAutocompletes = {
+        origin: originInput && originDropdown
+            ? new LocationAutocomplete({
+                input: originInput,
+                dropdown: originDropdown,
+                mode: isDoorOrigin(scope) ? 'places' : 'ports',
+            })
+            : null,
+        destination: destInput && destDropdown
+            ? new LocationAutocomplete({
+                input: destInput,
+                dropdown: destDropdown,
+                mode: isDoorDestination(scope) ? 'places' : 'ports',
+            })
+            : null,
+        prefOriginPort: prefOriginInput && prefOriginDropdown
+            ? new LocationAutocomplete({ input: prefOriginInput, dropdown: prefOriginDropdown, mode: 'ports' })
+            : null,
+        prefDestPort: prefDestInput && prefDestDropdown
+            ? new LocationAutocomplete({ input: prefDestInput, dropdown: prefDestDropdown, mode: 'ports' })
+            : null,
+    };
 
     document.addEventListener('click', (e) => {
-        fields.forEach(f => {
-            const input = document.getElementById(f.id);
-            const dropdown = document.getElementById(f.dropdownId);
-            if (input && !input.contains(e.target) && !dropdown.contains(e.target)) dropdown.style.display = 'none';
+        Object.values(window._locationAutocompletes).forEach(ac => {
+            if (!ac) return;
+            if (!ac.input.contains(e.target) && !ac.dropdown.contains(e.target)) ac.hide();
         });
     });
-}
-
-function showSuggestions(suggestions, dropdown, input) {
-    if (!suggestions.length) { dropdown.style.display = 'none'; return; }
-    dropdown.innerHTML = '';
-    suggestions.forEach(port => {
-        const item = document.createElement('div');
-        item.className = 'autocomplete-item';
-        item.innerHTML = `<div><div class="port-name">${port.name}</div><div style="font-size: 0.7rem;">${port.unlocode}</div></div>`;
-        item.onclick = () => { input.value = port.name; dropdown.style.display = 'none'; };
-        dropdown.appendChild(item);
-    });
-    dropdown.style.display = 'block';
-}
-
-function debounce(func, wait) {
-    let timeout;
-    return (...args) => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func(...args), wait);
-    };
 }
 
 async function saveHblFields() {

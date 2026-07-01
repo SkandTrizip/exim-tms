@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+logs/
+.env
+venv/
+env/
+.vscode/
+.idea/
+.cursor/rules
+.cursor/rules
+.cursor/settings.json
+.cursor/settings.json
+logs/app.log
+.agents/

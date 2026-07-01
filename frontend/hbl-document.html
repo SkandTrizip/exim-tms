@@ -694,6 +694,9 @@
             <button class="btn btn-secondary" id="editBtn" onclick="toggleEdit()" style="padding: 8px 16px; font-size: 13px;">
                 <i class="fas fa-pen"></i> Edit
             </button>
+            <button class="btn btn-secondary" id="viewDraftBtn" onclick="viewDraftFromToolbar()" style="padding: 8px 16px; font-size: 13px;" title="Show the document with Draft marking enabled">
+                <i class="fas fa-eye"></i> View Draft
+            </button>
             <button class="btn btn-secondary" id="saveLocalBtn" onclick="saveDocumentToServer()" style="padding: 8px 16px; font-size: 13px;" title="Save all fields to server so you can restore later">
                 <i class="fas fa-save"></i> Save
             </button>
@@ -721,7 +724,7 @@
                 <tr>
                     <td colspan="3" rowspan="2">
                         <span class="field-label">Consignor</span>
-                        <div class="field-val-bold editable" id="consignor" style="min-height: 72px;"></div>
+                        <div class="field-val editable" id="consignor" style="min-height: 72px;"></div>
                     </td>
                     <td colspan="3" style="vertical-align: top;">
                         <div class="mtd-company-block">
@@ -739,7 +742,7 @@
                 <tr>
                     <td colspan="3" class="mtd-mto-cell">
                         <strong>MTO Registration Number:</strong> MTO/DGS/120260401000001/APR/2029<br>
-                        <strong>Shipment Reference No:</strong> <span id="shipmentRefNo" class="field-val-bold"></span>
+                        <strong>Shipment Reference No:</strong> <span id="shipmentRefNo" class="field-val"></span>
                     </td>
                 </tr>
 
@@ -771,11 +774,11 @@
                 <tr>
                     <td colspan="2">
                         <span class="field-label">Place of Acceptance</span>
-                        <div class="field-val-bold editable" id="placeAcceptance"></div>
+                        <div class="field-val editable" id="placeAcceptance"></div>
                     </td>
                     <td colspan="2">
                         <span class="field-label">Port of Loading</span>
-                        <div class="field-val-bold editable" id="portLoading"></div>
+                        <div class="field-val editable" id="portLoading"></div>
                     </td>
                     <td colspan="2">
                         <span class="field-label">Date of Acceptance</span>
@@ -787,11 +790,11 @@
                 <tr>
                     <td colspan="2">
                         <span class="field-label">Port of Discharge</span>
-                        <div class="field-val-bold editable" id="portDischarge"></div>
+                        <div class="field-val editable" id="portDischarge"></div>
                     </td>
                     <td colspan="2">
                         <span class="field-label">Place of Delivery</span>
-                        <div class="field-val-bold editable" id="placeDelivery"></div>
+                        <div class="field-val editable" id="placeDelivery"></div>
                     </td>
                     <td colspan="2">
                         <span class="field-label">Route / Place of Transshipment (if any)</span>
@@ -803,11 +806,11 @@
                 <tr>
                     <td colspan="1">
                         <span class="field-label">Vessel</span>
-                        <div class="field-val-bold editable" id="vesselName"></div>
+                        <div class="field-val editable" id="vesselName"></div>
                     </td>
                     <td colspan="1">
                         <span class="field-label">Voyage No.</span>
-                        <div class="field-val-bold editable" id="voyageNo"></div>
+                        <div class="field-val editable" id="voyageNo"></div>
                     </td>
                     <td colspan="2">
                         <span class="field-label">Modes Means of Transport</span>
@@ -978,7 +981,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=45"></script>
+    <script src="js/hbl-document.js?v=46"></script>
 </body>
 
 </html>

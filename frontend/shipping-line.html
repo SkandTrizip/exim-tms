@@ -7,7 +7,15 @@
     <title>Add Shipping Line – ShipFlow TMS</title>
     <link href="css/styles.css" rel="stylesheet">
     <link href="css/modal.css" rel="stylesheet">
+    <link href="css/action-modal.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        (function () {
+            if (new URLSearchParams(location.search).get('embedded') === '1') {
+                document.documentElement.classList.add('embedded-mode');
+            }
+        })();
+    </script>
     <style>
         .sl-page {
             padding: 36px 0 60px;
@@ -254,6 +262,7 @@
 
             <!-- ── TAB 1 : FORM ─────────────────────────────────────────── -->
             <div class="wizard-panel active" id="panel1">
+                <h2 class="embedded-drawer-title">Shipping Line Details</h2>
 
                 <!-- Status banner (shown when viewing existing record) -->
                 <div id="statusBanner" style="

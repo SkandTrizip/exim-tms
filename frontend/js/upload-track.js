@@ -10,6 +10,10 @@ let uploadedFiles = {};
 // Initialization
 // ==========================================
 document.addEventListener('DOMContentLoaded', async function () {
+    if (new URLSearchParams(window.location.search).get('embedded') === '1') {
+        document.documentElement.classList.add('embedded-mode');
+        document.body.classList.add('embedded-mode');
+    }
     console.log('📦 Upload & Track page loaded');
     await loadEnquiryData();
     // Run after enquiry + documents load so BL View link and checklist stay in sync
@@ -302,6 +306,34 @@ function populateShipmentInfo() {
 
     console.log('✅ Shipment information populated');
     updateInitialStatus();
+    updateGenerateHblRowVisibility();
+}
+
+function updateGenerateHblRowVisibility() {
+    const row = document.getElementById('row_generate_hbl');
+    if (!row) return;
+    const siChecked = !!document.getElementById('status_si_submitted')?.checked;
+    const hblRequired = !!currentEnquiryData?.hbl_required;
+    row.style.display = siChecked && hblRequired ? 'table-row' : 'none';
+}
+
+function openGenerateHblFromTracking() {
+    if (!currentEnquiryData?.id) {
+        showModal('Error', 'Enquiry not loaded. Please refresh the page.', 'error');
+        return;
+    }
+    if (!currentEnquiryData.hbl_required) {
+        showModal('HBL Not Required', 'This sale does not have HBL required.', 'info');
+        return;
+    }
+    const siChecked = !!document.getElementById('status_si_submitted')?.checked;
+    if (!siChecked) {
+        showModal('SI Required', 'Upload SI and mark SI Submitted before generating HBL.', 'warning');
+        return;
+    }
+    const url = `/hbl-document?enquiry_id=${currentEnquiryData.id}`;
+    const target = window.parent !== window ? window.parent : window;
+    target.location.href = url;
 }
 
 /**
@@ -520,8 +552,9 @@ function toggleDetailRow(checkbox, rowId) {
 function getChecklistState() {
     const checklistItems = [
         'booking_confirmed', 'booking_placed', 'booking_finalized',
-        'container_picked', 'stuffing_done', 'container_gated',
-        'draft_si', 'si_submitted', 'form13', 'shipping_bill', 'sob', 'shipping_invoice', 'bl_received'
+        'container_picked', 'stuffing_done',
+        'draft_si', 'si_submitted', 'shipping_bill', 'container_gated',
+        'sob', 'shipping_invoice', 'bl_received'
     ];
 
     const state = {};
@@ -629,8 +662,9 @@ function applyChecklistState(state, isBackend = false) {
 
     const checklistItems = [
         'booking_confirmed', 'booking_placed', 'booking_finalized',
-        'container_picked', 'stuffing_done', 'container_gated',
-        'draft_si', 'si_submitted', 'form13', 'shipping_bill', 'sob', 'shipping_invoice', 'bl_received'
+        'container_picked', 'stuffing_done',
+        'draft_si', 'si_submitted', 'shipping_bill', 'container_gated',
+        'sob', 'shipping_invoice', 'bl_received'
     ];
 
     // Check for payment status
@@ -728,6 +762,7 @@ function applyChecklistState(state, isBackend = false) {
 
     // Ensure dependencies are applied AFTER applying state
     checkAllDependencies();
+    updateGenerateHblRowVisibility();
 }
 
 // Update populateShipmentInfo to handle initial status date
@@ -816,6 +851,8 @@ function handleFileUpload(input, displayId) {
             }
         }
 
+        updateGenerateHblRowVisibility();
+
         // Display filename with icon and size
         const fileSize = (file.size / 1024).toFixed(2); // KB
         const tempUrl = URL.createObjectURL(file);
@@ -880,7 +917,7 @@ function removeFile(inputId, displayId) {
         'booking': 'booking_finalized',
         'draftSi': 'draft_si',
         'si': 'si_submitted',
-        'shippingBill': 'form13',
+        'shippingBill': 'shipping_bill',
         'shippingInvoice': 'shipping_invoice',
         'bl': 'bl_received'
     };
@@ -903,6 +940,8 @@ function removeFile(inputId, displayId) {
             saveChecklistState();
         }
     }
+
+    updateGenerateHblRowVisibility();
 
     console.log(`🗑️ File removed: ${fileKey}`);
 }
@@ -957,11 +996,11 @@ async function saveTracking() {
             await saveChecklistState();
             await loadChecklistState();
 
-            showModal('Success', 'Documents uploaded successfully!', 'success');
+            showModal('Success', 'Tracking saved successfully!', 'success');
         } else {
             const error = await response.json();
             console.error('❌ Error saving tracking data:', error);
-            showModal('Error', 'Error uploading documents: ' + (error.detail || 'Unknown error'), 'error');
+            showModal('Error', 'Error saving tracking: ' + (error.detail || 'Unknown error'), 'error');
         }
     } catch (error) {
         console.error('❌ Error:', error);

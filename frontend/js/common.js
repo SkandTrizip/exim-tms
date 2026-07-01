@@ -22,6 +22,25 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
+(function loadGlobalSearchForStandalonePages() {
+    if (window.location.pathname.includes('/login')) return;
+    if (document.querySelector('.app-shell')) return;
+
+    if (!document.querySelector('link[href*="global-search.css"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = '/css/global-search.css';
+        document.head.appendChild(link);
+    }
+
+    if (!document.querySelector('script[src*="global-search.js"]')) {
+        const script = document.createElement('script');
+        script.src = '/js/global-search.js';
+        script.defer = true;
+        document.head.appendChild(script);
+    }
+})();
+
 // ==========================================
 // Central Configuration & Constants
 // ==========================================

@@ -8,7 +8,15 @@
     <meta name="description" content="Create a new client origin and branch in ShipFlow TMS">
     <link href="css/styles.css" rel="stylesheet">
     <link href="css/modal.css" rel="stylesheet">
+    <link href="css/action-modal.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        (function () {
+            if (new URLSearchParams(location.search).get('embedded') === '1') {
+                document.documentElement.classList.add('embedded-mode');
+            }
+        })();
+    </script>
     <style>
         /* ── Page-specific styles ── */
         .cm-page {
@@ -281,6 +289,12 @@
                 </div>
             </div>
 
+            <!-- Embedded drawer step indicator (visible inside right-side panel) -->
+            <div class="embedded-drawer-steps" aria-label="Wizard steps" role="tablist">
+                <button type="button" class="embedded-step active" data-step="1" role="tab" aria-selected="true" onclick="switchEmbeddedStep(1)">Client Origin</button>
+                <button type="button" class="embedded-step" data-step="2" role="tab" aria-selected="false" onclick="switchEmbeddedStep(2)">Client Master</button>
+            </div>
+
             <!-- Wizard tabs -->
             <div class="wizard-tabs">
                 <button class="wizard-tab active" id="tab1" onclick="switchTab(1)">
@@ -298,7 +312,8 @@
             </div>
 
             <!-- ── STEP 1 : CLIENT ORIGIN ─────────────────────────────────── -->
-            <div class="wizard-panel active card" id="panel1">
+            <div class="wizard-panel active card embedded-panel" id="panel1" data-panel="1">
+                <h2 class="embedded-drawer-title">Client Origin</h2>
 
                 <p style="color:var(--text-secondary);font-size:14px;margin-bottom:8px;">
                     <i class="fas fa-info-circle" style="color:var(--info);"></i>
@@ -428,7 +443,8 @@
             </div>
 
             <!-- ── STEP 2 : CLIENT MASTER ─────────────────────────────────── -->
-            <div class="wizard-panel card" id="panel2">
+            <div class="wizard-panel card embedded-panel" id="panel2" data-panel="2" hidden>
+                <h2 class="embedded-drawer-title">Client Master</h2>
 
                 <!-- Origin link picker -->
                 <div class="origin-picker">
@@ -714,7 +730,7 @@
             </div>
 
             <!-- ── STEP 3 : VIEW CLIENTS ──────────────────────────────────── -->
-            <div class="wizard-panel card" id="panel3">
+            <div class="wizard-panel card embedded-panel" id="panel3" data-panel="3" hidden>
                 <div class="section-label"><i class="fas fa-list"></i> Existing Clients (Masters)</div>
                 <div style="overflow-x:auto;">
                     <table

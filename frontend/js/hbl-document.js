@@ -201,6 +201,17 @@ function toggleDraftMark() {
     applyDraftPrefixVisibility();
 }
 
+function applyViewDraftMode() {
+    const draftCb = document.getElementById('draftMarkToggle');
+    if (draftCb) draftCb.checked = true;
+    applyDraftPrefixVisibility();
+}
+
+function viewDraftFromToolbar() {
+    applyViewDraftMode();
+    document.getElementById('hblPrintArea')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
 function applyWatermarkVisibility() {
     const blType = document.getElementById('blTypeSelect').value;
     const show = blType === 'seaway' && watermarkEnabled;
@@ -692,6 +703,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
     currentEnquiryId = enquiryId;
     await loadDocument(enquiryId);
+
+    if (new URLSearchParams(window.location.search).get('view_draft') === '1') {
+        applyViewDraftMode();
+        document.getElementById('hblPrintArea')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
 });
 
 async function loadDocument(id) {

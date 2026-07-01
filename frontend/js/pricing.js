@@ -109,6 +109,10 @@ function applyPricingSheetSavedLock() {
 }
 
 document.addEventListener('DOMContentLoaded', async function () {
+    if (new URLSearchParams(window.location.search).get('embedded') === '1') {
+        document.documentElement.classList.add('embedded-mode');
+        document.body.classList.add('embedded-mode');
+    }
     // 1. Initial UI Setup
     populateInitialDropdowns();
     bindQuoteConfirmationActions();

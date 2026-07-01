@@ -6,8 +6,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create Sale - Exim TMS</title>
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/action-modal.css">
     <link rel="stylesheet" href="css/modal.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        if (new URLSearchParams(location.search).get('embedded') === '1') {
+            document.documentElement.classList.add('embedded-mode');
+        }
+    </script>
 </head>
 
 <body>
@@ -315,7 +321,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js?v=2"></script>
-    <script src="js/enquiry.js?v=3"></script>
+    <script src="js/enquiry.js?v=7"></script>
 </body>
 
 </html>

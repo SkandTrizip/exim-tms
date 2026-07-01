@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 # Add the project root to sys.path to resolve 'backend' imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.routers import enquiry, pricing, workflow, port, exchange_rate, quote, tracking, auth, client, dashboard, invoice, finance, shipping_line
+from backend.routers import enquiry, pricing, workflow, port, exchange_rate, quote, tracking, auth, client, dashboard, invoice, finance, shipping_line, google_maps, search
 from backend.models.user import User
 from backend.models.invoice import Invoice
 from backend.models.finance import ShippingPayment
@@ -177,6 +177,8 @@ app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"]
 app.include_router(invoice.router, prefix="/api", tags=["Invoice"])
 app.include_router(finance.router, prefix="/api", tags=["Finance"])
 app.include_router(shipping_line.router, prefix="/api/shipping-lines", tags=["Shipping Lines"])
+app.include_router(google_maps.router, prefix="/api", tags=["Google Maps"])
+app.include_router(search.router, prefix="/api", tags=["Global Search"])
 
 @app.get("/api")
 async def root():
@@ -266,4 +268,4 @@ app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
 if __name__ == "__main__":
     import uvicorn
     # Use uvicorn.run for the app and enable reload for development
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=5050, reload=True)

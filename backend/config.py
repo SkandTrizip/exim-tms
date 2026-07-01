@@ -1,12 +1,21 @@
 # Configuration constants for both Backend and Frontend
 
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
+
 # Upload directory path (absolute path on the server)
-UPLOAD_DIR = "/home/azureuser/uploads/"
+# UPLOAD_DIR = "/home/azureuser/uploads/"
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", str(_PROJECT_ROOT / "uploads"))
 
 # Injected into /js/config.js as CONFIG.API_URL. Use '' so the browser calls /api on the same host
 # you opened (localhost, 127.0.0.1, or a public IP). A fixed remote URL breaks local dev (Failed to fetch).
-#API_URL = 'http://localhost:8000'
-API_URL = 'http://20.193.250.226:8000'
+API_URL = os.getenv("API_URL", "")
+
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
 AUTH_USERS = [
     {"username": "Rohit", "full_name": "Rohit", "password": "rohit@3145", "is_admin": False},
