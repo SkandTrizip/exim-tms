@@ -1,4 +1,4 @@
-const HBL_PAGE_TITLE = 'HBL / MTD Document – Logipod Atlas';
+const HBL_PAGE_TITLE = 'HBL / MTD Document – ATLAS EXIM';
 const HBL_TERMS_PDF_URL = 'Reverse%20side%20terms%20%26%20conditions%20new.pdf';
 const HBL_PDFJS_WORKER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 const HBL_TERMS_PAGE_MARGIN_MM = 5;
