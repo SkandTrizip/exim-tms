@@ -64,7 +64,7 @@
 
 .login-form-wrap {
     width: 100%;
-    max-width: 20rem;
+    max-width: 24rem;
 }
 
 .login-form-content {
@@ -95,6 +95,7 @@
     font-weight: 500;
     color: #64748b;
     line-height: 1.5;
+    white-space: nowrap;
 }
 
 .login-form {
@@ -312,6 +313,12 @@
         display: block;
         min-height: 100vh;
         min-height: 100svh;
+    }
+}
+
+@media (max-width: 420px) {
+    .login-subtitle {
+        white-space: normal;
     }
 }
 
