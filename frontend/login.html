@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - ShipFlow TMS</title>
+    <title>Login - Logipod Atlas</title>
     <link href="css/styles.css" rel="stylesheet">
     <link href="css/login.css" rel="stylesheet">
     <link href="css/modal.css" rel="stylesheet">
@@ -14,74 +14,86 @@
 </head>
 
 <body class="login-page">
-    <!-- Floating Background Icons -->
-    <i class="fas fa-ship floating-icon icon-1"></i>
-    <i class="fas fa-box floating-icon icon-2"></i>
-    <i class="fas fa-truck-moving floating-icon icon-3"></i>
-    <i class="fas fa-globe-americas floating-icon icon-4"></i>
+    <div class="login-layout">
+        <div class="login-panel">
+            <div class="login-panel-inner">
+                <a href="/login" class="login-brand" aria-label="Logipod Atlas home">
+                    <img src="logipod-atlas-logo.png" alt="Logipod Atlas" class="login-brand-logo">
+                </a>
 
-    <div class="login-container">
-        <div class="login-card">
-            <div class="login-header">
-                <div class="login-logo">
-                    <div class="logo-icon">SF</div>
-                    <div class="logo-text">ShipFlow</div>
-                </div>
-                <h1 class="login-title">Welcome Back</h1>
-                <p class="login-subtitle">Please enter your details to sign in</p>
-            </div>
-
-            <form class="login-form" id="loginForm">
-                <div class="form-group">
-                    <label for="userId">User ID</label>
-                    <div class="input-with-icon">
-                        <i class="fas fa-user"></i>
-                        <input type="text" id="userId" name="userId" placeholder="Enter your User ID" required>
+                <div class="login-form-wrap">
+                    <div class="login-header">
+                        <h1 class="login-title">Login</h1>
+                        <p class="login-subtitle">Enter your credentials to access your dashboard</p>
                     </div>
+
+                    <form class="login-form" id="loginForm">
+                        <div class="form-group">
+                            <label for="userId">Email <span class="required" aria-hidden="true">*</span></label>
+                            <input type="text" id="userId" name="userId" placeholder="Enter your email" required
+                                autocomplete="username">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="password">Password <span class="required" aria-hidden="true">*</span></label>
+                            <div class="password-field">
+                                <input type="password" id="password" name="password" placeholder="Enter your password"
+                                    required autocomplete="current-password">
+                                <button type="button" class="password-toggle" id="passwordToggle"
+                                    aria-label="Show password" aria-pressed="false">
+                                    <i class="fas fa-eye" aria-hidden="true"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-login">
+                            <span>Enter Atlas</span>
+                            <i class="fas fa-arrow-right" aria-hidden="true"></i>
+                        </button>
+                    </form>
                 </div>
 
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <div class="input-with-icon">
-                        <i class="fas fa-lock"></i>
-                        <input type="password" id="password" name="password" placeholder="••••••••" required>
-                    </div>
+                <div class="login-legal">
+                    <p>By clicking continue, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy
+                            Policy</a>.</p>
+                    <p class="login-copyright">&copy; 2026 Atlas &bull; All rights reserved.</p>
                 </div>
-
-                <div class="login-options">
-                    <label class="remember-me">
-                        <input type="checkbox" name="remember">
-                        <span>Remember me</span>
-                    </label>
-                    <a href="#" class="forgot-password">Forgot Password?</a>
-                </div>
-
-                <button type="submit" class="btn btn-primary btn-login">
-                    <span>Sign In</span>
-                    <i class="fas fa-arrow-right"></i>
-                </button>
-            </form>
-
-            <div class="login-footer">
-                <p>New to ShipFlow? <a href="#">Contact Admin</a></p>
             </div>
+        </div>
+
+        <div class="login-hero" aria-hidden="true">
+            <div class="login-hero-sky">
+                <span class="login-hero-cloud login-hero-cloud--1"></span>
+                <span class="login-hero-cloud login-hero-cloud--2"></span>
+            </div>
+            <img src="login-hero.png" alt="" class="login-hero-image">
         </div>
     </div>
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
     <script>
+        const passwordInput = document.getElementById('password');
+        const passwordToggle = document.getElementById('passwordToggle');
+
+        passwordToggle.addEventListener('click', function () {
+            const isHidden = passwordInput.type === 'password';
+            passwordInput.type = isHidden ? 'text' : 'password';
+            passwordToggle.setAttribute('aria-pressed', String(isHidden));
+            passwordToggle.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+            passwordToggle.querySelector('i').className = isHidden ? 'fas fa-eye-slash' : 'fas fa-eye';
+        });
+
         document.getElementById('loginForm').addEventListener('submit', async function (e) {
             e.preventDefault();
 
             const username = document.getElementById('userId').value;
             const password = document.getElementById('password').value;
 
-            // Basic validation feedback
             const btn = this.querySelector('.btn-login');
             const originalText = btn.innerHTML;
 
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Authenticating...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Authenticating...';
             btn.disabled = true;
 
             try {
@@ -95,14 +107,11 @@
 
                 if (response.ok) {
                     const data = await response.json();
-                    console.log('Login success:', data);
 
-                    // Store real session data
                     localStorage.setItem('isLoggedIn', 'true');
                     localStorage.setItem('user', data.username);
                     localStorage.setItem('token', data.access_token);
 
-                    // Redirect to dashboard
                     window.location.href = '/';
                 } else {
                     const error = await response.json();

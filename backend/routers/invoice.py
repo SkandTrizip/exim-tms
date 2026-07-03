@@ -6,6 +6,7 @@ from backend.models.quote import Quote
 from backend.models.shipment_status import ShipmentStatus
 from backend.models.client_master import ClientMaster
 from backend.models.invoice import Invoice
+from backend.services.invoice_service import allocate_invoice_number, get_next_invoice_number
 from pydantic import BaseModel
 
 from reportlab.pdfgen import canvas
@@ -41,7 +42,7 @@ def _client_rate_for_invoice(charge) -> Optional[float]:
 
 class InvoiceCreate(BaseModel):
     enquiry_id: int
-    invoice_number: str
+    invoice_number: Optional[str] = None
     invoice_date: datetime.date
     payment_due_date: datetime.date
     place_of_supply: str
@@ -55,21 +56,43 @@ class InvoicePayment(BaseModel):
     payment_reference: str
     received_amount: float
 
+@router.get("/next-number")
+def next_invoice_number_endpoint(
+    invoice_date: Optional[datetime.date] = None,
+    db: Session = Depends(get_db),
+):
+    """Next invoice number: LPE/YY-YY/NNNNNN (per financial year)."""
+    ref = invoice_date or datetime.date.today()
+    number = get_next_invoice_number(db, ref)
+    logger.info(f"Next invoice number for {ref}: {number}")
+    return {"invoice_number": number}
+
+
 @router.post("/record")
 def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
-    logger.info(f"Recording invoice {invoice.invoice_number} for enquiry ID {invoice.enquiry_id}")
+    logger.info(f"Recording invoice for enquiry ID {invoice.enquiry_id}")
     try:
-        # Check if invoice number already exists
-        existing_inv = db.query(Invoice).filter(Invoice.invoice_number == invoice.invoice_number).first()
-        if existing_inv:
-            logger.warning(f"Failed to record invoice: Number {invoice.invoice_number} already exists")
-            raise HTTPException(status_code=400, detail="Invoice number already exists")
+        existing_for_enquiry = (
+            db.query(Invoice).filter(Invoice.enquiry_id == invoice.enquiry_id).first()
+        )
+        if existing_for_enquiry:
+            logger.warning(
+                f"Invoice already exists for enquiry {invoice.enquiry_id}: "
+                f"{existing_for_enquiry.invoice_number}"
+            )
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invoice already recorded for this enquiry ({existing_for_enquiry.invoice_number})",
+            )
+
+        allocated_number = allocate_invoice_number(db, invoice.invoice_date)
 
         # Only pass fields that exist on the SQLAlchemy model.
         # This avoids 500s if the Pydantic schema has extra keys (e.g. `item_type`)
         # while the DB/model doesn't.
         allowed_fields = set(Invoice.__table__.columns.keys())
         payload = {k: v for k, v in invoice.dict().items() if k in allowed_fields}
+        payload["invoice_number"] = allocated_number
 
         new_invoice = Invoice(**payload)
         db.add(new_invoice)
@@ -82,8 +105,12 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
 
         db.commit()
         db.refresh(new_invoice)
-        logger.info(f"Successfully recorded invoice {invoice.invoice_number} with ID {new_invoice.id}")
-        return {"message": "Invoice recorded successfully", "id": new_invoice.id}
+        logger.info(f"Successfully recorded invoice {allocated_number} with ID {new_invoice.id}")
+        return {
+            "message": "Invoice recorded successfully",
+            "id": new_invoice.id,
+            "invoice_number": allocated_number,
+        }
     except HTTPException:
         raise
     except Exception as e:

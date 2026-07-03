@@ -38,22 +38,22 @@
     width: 52px;
     height: 52px;
     border-radius: 16px;
-    background: linear-gradient(135deg, var(--navy-800), var(--navy-600));
+    background: #ffffff;
     box-shadow: var(--shadow-md);
     display: grid;
     place-items: center;
     text-decoration: none;
     margin: 2px auto 6px;
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    border: 1px solid var(--border-light);
+    overflow: hidden;
+    padding: 4px;
 }
 
-.rail-brand-mark {
-    font-family: 'Outfit', sans-serif;
-    font-weight: 900;
-    letter-spacing: -0.04em;
-    font-size: 16px;
-    color: white;
-    text-transform: lowercase;
+.rail-brand-logo {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
 }
 
 .rail-nav {

@@ -1,6 +1,7 @@
 let enquiryId = null;
 let clientData = null;
 let creditPeriod = 0;
+let hasSavedInvoice = false;
 
 /**
  * Strip the branch suffix from a client name for invoicing.
@@ -23,6 +24,59 @@ function syncCustomerInvoiceFromShipper(shipperInv) {
         el.value = val;
     } else {
         el.textContent = val || '---';
+    }
+}
+
+function getBaseInvoiceNumber() {
+    const invInput = document.getElementById('invoice_number');
+    if (!invInput) return '';
+    return (invInput.dataset.baseNumber || invInput.value || '').trim();
+}
+
+function setBaseInvoiceNumber(number) {
+    const invInput = document.getElementById('invoice_number');
+    if (!invInput) return;
+    const base = (number || '').trim();
+    invInput.dataset.baseNumber = base;
+    invInput.dataset.original = base;
+    applyInvoiceNumberForItemType();
+}
+
+function getInvoiceNumberForDisplay() {
+    const invInput = document.getElementById('invoice_number');
+    if (!invInput) return '';
+    return (invInput.value || '').trim();
+}
+
+function applyInvoiceNumberForItemType() {
+    const invInput = document.getElementById('invoice_number');
+    const itemTypeEl = document.getElementById('invoice_item_type');
+    if (!invInput) return;
+    const base = getBaseInvoiceNumber();
+    if (!base) {
+        invInput.value = '';
+        return;
+    }
+    if (itemTypeEl && itemTypeEl.value === 'additional') {
+        invInput.value = base.includes('-ADD') ? base : `${base}-ADD-1`;
+    } else {
+        invInput.value = base;
+    }
+}
+
+async function fetchNextInvoiceNumber() {
+    if (hasSavedInvoice) return;
+    const invoiceDate = document.getElementById('invoice_date')?.value;
+    const params = invoiceDate ? `?invoice_date=${encodeURIComponent(invoiceDate)}` : '';
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/invoice/next-number${params}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.invoice_number) {
+            setBaseInvoiceNumber(data.invoice_number);
+        }
+    } catch (err) {
+        console.error('Failed to fetch next invoice number:', err);
     }
 }
 
@@ -53,23 +107,14 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     await fetchAllData();
 
-    // Listen for invoice date changes to update due date
-    document.getElementById('invoice_date').addEventListener('change', calculateDueDate);
+    // Listen for invoice date changes to update due date and preview invoice number
+    document.getElementById('invoice_date').addEventListener('change', function () {
+        calculateDueDate();
+        fetchNextInvoiceNumber();
+    });
 
     // Auto-suffix for additional invoices
-    document.getElementById('invoice_item_type').addEventListener('change', function () {
-        const invInput = document.getElementById('invoice_number');
-        const originalVal = invInput.dataset.original || invInput.value;
-        if (!invInput.dataset.original) invInput.dataset.original = originalVal;
-
-        if (this.value === 'additional') {
-            if (!invInput.value.includes('-ADD')) {
-                invInput.value = originalVal + '-ADD-1';
-            }
-        } else {
-            invInput.value = originalVal;
-        }
-    });
+    document.getElementById('invoice_item_type').addEventListener('change', applyInvoiceNumberForItemType);
 });
 
 async function fetchAllData() {
@@ -150,7 +195,12 @@ async function fetchAllData() {
         if (invoiceRes.ok) {
             const invData = await invoiceRes.json();
             if (invData) {
-                if (invData.invoice_number) document.getElementById('invoice_number').value = invData.invoice_number;
+                hasSavedInvoice = true;
+                if (invData.invoice_number) {
+                    setBaseInvoiceNumber(invData.invoice_number);
+                    const invInput = document.getElementById('invoice_number');
+                    if (invInput) invInput.readOnly = true;
+                }
                 if (invData.customer_invoice_no && !getCustomerInvoiceNo()) {
                     syncCustomerInvoiceFromShipper(invData.customer_invoice_no);
                 }
@@ -158,6 +208,8 @@ async function fetchAllData() {
                 if (invData.invoice_date) document.getElementById('invoice_date').value = invData.invoice_date;
                 if (invData.payment_due_date) document.getElementById('payment_due_date').value = invData.payment_due_date;
                 if (invData.irn) document.getElementById('irn_val').value = invData.irn;
+            } else {
+                await fetchNextInvoiceNumber();
             }
         }
 
@@ -177,10 +229,11 @@ function calculateDueDate() {
 }
 
 async function generateInvoice(type = 'draft') {
+    const invoiceNumber = getInvoiceNumberForDisplay();
     const invoiceData = {
         enquiry_id: enquiryId,
         place_of_supply: document.getElementById('place_of_supply').value,
-        invoice_number: document.getElementById('invoice_number').value,
+        invoice_number: invoiceNumber,
         irn: document.getElementById('irn_val').value,
         invoice_date: document.getElementById('invoice_date').value,
         payment_due_date: document.getElementById('payment_due_date').value
@@ -188,9 +241,9 @@ async function generateInvoice(type = 'draft') {
 
     if (!invoiceData.invoice_number) {
         if (typeof showModal === 'function') {
-            showModal('Input Required', 'Please enter Invoice Number', 'warning');
+            showModal('Input Required', 'Invoice number is not ready yet. Please wait a moment and try again.', 'warning');
         } else {
-            alert('Please enter Invoice Number');
+            alert('Invoice number is not ready yet. Please wait a moment and try again.');
         }
         return;
     }
@@ -262,7 +315,7 @@ document.addEventListener('click', function (e) {
 });
 
 function confirmRecordInvoice() {
-    const invoiceNumber = document.getElementById('invoice_number').value;
+    const invoiceNumber = getInvoiceNumberForDisplay() || getBaseInvoiceNumber() || 'next in series';
 
     // Check if Enquiry ID is present
     if (!enquiryId) {
@@ -271,11 +324,11 @@ function confirmRecordInvoice() {
         return;
     }
 
-    if (!invoiceNumber) {
+    if (hasSavedInvoice) {
         if (typeof showModal === 'function') {
-            showModal('Validation Error', 'Please enter Invoice Number before recording.', 'warning');
+            showModal('Already Recorded', 'This invoice has already been saved to the system.', 'info');
         } else {
-            alert('Please enter Invoice Number before recording.');
+            alert('This invoice has already been saved to the system.');
         }
         return;
     }
@@ -284,14 +337,14 @@ function confirmRecordInvoice() {
     if (typeof showModal === 'function') {
         showModal(
             'Confirm Recording',
-            `Are you sure you want to record Invoice <b>${invoiceNumber}</b>? This action will save the invoice to the system.`,
+            `Save this invoice? The system will assign invoice number <b>${invoiceNumber}</b> (or the next available in the LPE series).`,
             'info',
             function () {
                 recordInvoice();
             }
         );
     } else {
-        if (confirm(`Are you sure you want to record Invoice ${invoiceNumber}?`)) {
+        if (confirm(`Save this invoice? The system will assign the next invoice number in the LPE series.`)) {
             recordInvoice();
         }
     }
@@ -302,7 +355,6 @@ async function recordInvoice() {
     const invoiceData = {
         enquiry_id: parseInt(enquiryId),
         place_of_supply: document.getElementById('place_of_supply').value,
-        invoice_number: document.getElementById('invoice_number').value,
         customer_invoice_no: customerInvNo || null,
         irn: document.getElementById('irn_val').value || null,
         invoice_date: document.getElementById('invoice_date').value,
@@ -334,8 +386,14 @@ async function recordInvoice() {
         const data = await response.json();
 
         if (response.ok) {
+            hasSavedInvoice = true;
+            if (data.invoice_number) {
+                setBaseInvoiceNumber(data.invoice_number);
+                const invInput = document.getElementById('invoice_number');
+                if (invInput) invInput.readOnly = true;
+            }
             const hasIrn = !!(invoiceData.irn && String(invoiceData.irn).trim());
-            const hasInvoiceNo = !!(invoiceData.invoice_number && String(invoiceData.invoice_number).trim());
+            const hasInvoiceNo = !!(data.invoice_number && String(data.invoice_number).trim());
             if (typeof notifyFinanceParentRefresh === 'function') {
                 notifyFinanceParentRefresh({
                     close: true,
@@ -343,10 +401,11 @@ async function recordInvoice() {
                     moveToCompleted: hasIrn && hasInvoiceNo,
                 });
             }
+            const savedNo = data.invoice_number ? ` (${data.invoice_number})` : '';
             if (typeof showModal === 'function') {
-                showModal('Success', 'Invoice recorded successfully!', 'success');
+                showModal('Success', `Invoice recorded successfully${savedNo}!`, 'success');
             } else {
-                alert('Invoice recorded successfully!');
+                alert(`Invoice recorded successfully${savedNo}!`);
             }
         } else {
             const errorMsg = data.detail || 'Failed to record invoice';

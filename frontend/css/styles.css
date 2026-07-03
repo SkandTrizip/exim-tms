@@ -210,30 +210,11 @@ header {
     gap: var(--space-3);
 }
 
-.logo-icon {
-    width: 44px;
-    height: 44px;
-    background: linear-gradient(135deg, var(--navy-700), var(--navy-600));
-    border-radius: var(--radius-lg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Outfit', monospace;
-    font-weight: 800;
-    font-size: 18px;
-    color: white;
-    box-shadow: var(--shadow-md);
-}
-
-.logo-text {
-    font-family: 'Outfit', sans-serif;
-    font-size: 1.5rem;
-    font-weight: 800;
-    background: linear-gradient(135deg, var(--navy-800), var(--navy-600));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    letter-spacing: -0.03em;
+.logo-img {
+    height: 48px;
+    width: auto;
+    object-fit: contain;
+    display: block;
 }
 
 .header-actions {
