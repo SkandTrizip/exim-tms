@@ -73,7 +73,7 @@ def require_admin(
 # ── Login endpoints ────────────────────────────────────────────────────────────
 
 @router.post("/login", response_model=Token)
-async def login(
+def login(
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db)
 ):
@@ -100,7 +100,7 @@ async def login(
 
 
 @router.post("/login-json", response_model=Token)
-async def login_json(user_data: UserLogin, db: Session = Depends(get_db)):
+def login_json(user_data: UserLogin, db: Session = Depends(get_db)):
     try:
         user = db.query(User).filter(User.username.ilike(user_data.username)).first()
         if not user or not verify_password(user_data.password, user.password_hash):

@@ -17,6 +17,20 @@ API_URL = os.getenv("API_URL", "")
 
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
+# Database (used by backend/database.py)
+POSTGRES_USER = os.getenv("POSTGRES_USER", "tmsbackend")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "sharkship@5")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "exim_prod")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "generalagent.postgres.database.azure.com")
+POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+EXCHANGE_RATE_API_KEY = os.getenv("EXCHANGE_RATE_API_KEY", "602d23926fb209dcce76d258")
+
+# SQLAlchemy pool tuning (override via env if needed)
+DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
+DB_MAX_OVERFLOW = int(os.getenv("DB_MAX_OVERFLOW", "20"))
+DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))
+DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "600"))
+
 AUTH_USERS = [
     {"username": "Rohit", "full_name": "Rohit", "password": "rohit@3145", "is_admin": False},
     {"username": "admin", "full_name": "Rohit", "password": "logipod@488!", "is_admin": True},
@@ -65,3 +79,14 @@ def get_frontend_config() -> dict:
         "shippingLines": SHIPPING_LINES,
         "defaultCharges": DEFAULT_CHARGES,
     }
+
+
+def build_database_url() -> str:
+    """Build a PostgreSQL URL with a URL-encoded password."""
+    from urllib.parse import quote_plus
+
+    encoded_password = quote_plus(POSTGRES_PASSWORD)
+    return (
+        f"postgresql://{POSTGRES_USER}:{encoded_password}"
+        f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}"
+    )

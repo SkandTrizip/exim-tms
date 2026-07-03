@@ -89,6 +89,20 @@ class ShipmentStatusDetail(BaseModel):
         from_attributes = True
 
 
+class ShippingPaymentItem(BaseModel):
+    id: int
+    utr_number: Optional[List[str]] = None
+    payment_date: Optional[List[date]] = None
+    amount: Optional[float] = None
+    currency: Optional[str] = None
+    description: Optional[str] = None
+    payment_type: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
 class ShipmentDetailResponse(BaseModel):
     enquiry: dict
     status: Optional[ShipmentStatusDetail] = None
@@ -96,3 +110,4 @@ class ShipmentDetailResponse(BaseModel):
     accepted_quote: Optional[ShipmentQuoteSummary] = None
     documents: List[ShipmentDocumentItem] = []
     invoices: List[ShipmentInvoiceItem] = []
+    shipping_payments: List[ShippingPaymentItem] = []

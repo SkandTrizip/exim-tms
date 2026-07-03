@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from backend.database import get_db
 from backend.services.pricing_service import calculate_pricing
 from backend.models.enquiry import Enquiry
-from backend.models.quote import Quote, QuoteCharge
+from backend.models.quote import Quote, QuoteCharge, QuoteContainer
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
@@ -17,12 +17,12 @@ from backend.utils.logger import logger
 router = APIRouter()
 
 @router.post("/calculate")
-async def get_price_quote(pricing_params: dict, db: Session = Depends(get_db)):
+def get_price_quote(pricing_params: dict, db: Session = Depends(get_db)):
     logger.info(f"Calculating pricing for params: {pricing_params.get('enquiry_id', 'Unknown Enquiry')}")
     return calculate_pricing(db, pricing_params)
 
 @router.get("/pdf/{enquiry_id}")
-async def generate_quote_pdf(enquiry_id: int, db: Session = Depends(get_db)):
+def generate_quote_pdf(enquiry_id: int, db: Session = Depends(get_db)):
     # Fetch Enquiry
     logger.info(f"Generating PDF quote for enquiry ID {enquiry_id}")
     enquiry = db.query(Enquiry).filter(Enquiry.id == enquiry_id).first()
@@ -30,8 +30,14 @@ async def generate_quote_pdf(enquiry_id: int, db: Session = Depends(get_db)):
         logger.warning(f"PDF generation failed: Enquiry {enquiry_id} not found")
         raise HTTPException(status_code=404, detail="Enquiry not found")
 
-    # Fetch Latest Quote for this Enquiry
-    quote = db.query(Quote).filter(Quote.enquiry_id == enquiry_id).order_by(Quote.created_at.desc()).first()
+    # Fetch latest quote with containers/charges eager-loaded
+    quote = (
+        db.query(Quote)
+        .options(joinedload(Quote.containers).joinedload(QuoteContainer.charges))
+        .filter(Quote.enquiry_id == enquiry_id)
+        .order_by(Quote.created_at.desc())
+        .first()
+    )
     
     # Create PDF buffer
     buffer = io.BytesIO()

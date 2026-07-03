@@ -334,6 +334,15 @@ async function recordInvoice() {
         const data = await response.json();
 
         if (response.ok) {
+            const hasIrn = !!(invoiceData.irn && String(invoiceData.irn).trim());
+            const hasInvoiceNo = !!(invoiceData.invoice_number && String(invoiceData.invoice_number).trim());
+            if (typeof notifyFinanceParentRefresh === 'function') {
+                notifyFinanceParentRefresh({
+                    close: true,
+                    section: 'invoices',
+                    moveToCompleted: hasIrn && hasInvoiceNo,
+                });
+            }
             if (typeof showModal === 'function') {
                 showModal('Success', 'Invoice recorded successfully!', 'success');
             } else {

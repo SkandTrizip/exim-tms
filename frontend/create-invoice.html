@@ -6,8 +6,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create Invoice - Exim TMS</title>
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/action-modal.css">
     <link rel="stylesheet" href="css/modal.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        (function () {
+            if (new URLSearchParams(location.search).get('embedded') === '1') {
+                document.documentElement.classList.add('embedded-mode');
+            }
+        })();
+    </script>
     <style>
         .invoice-card {
             background: white;
@@ -230,17 +238,18 @@
                     </div>
                 </div>
 
-                <div
+                <div class="form-actions form-actions-bar"
                     style="background: #f8fafc; padding: 24px; border-top: 1px solid var(--border-light); display: flex; gap: 16px; justify-content: flex-end;">
-                    <button class="btn btn-secondary" onclick="window.location.href='/#finance-invoices'">Back
-                        to Finance</button>
+                    <button type="button" class="btn btn-secondary" onclick="goBack()">
+                        <i class="fas fa-arrow-left"></i> Back to Finance
+                    </button>
                     <button class="btn btn-primary" onclick="confirmRecordInvoice()"
                         style="background-color: var(--navy-600);">
                         <i class="fas fa-save"></i> Record Invoice
                     </button>
 
                     <!-- Split Download PDF dropdown -->
-                    <div style="position: relative; display: inline-flex;" id="pdfDropdownWrap">
+                    <div class="pdf-dropdown-wrap" style="position: relative; display: inline-flex;" id="pdfDropdownWrap">
                         <button class="btn btn-primary" onclick="generateInvoice('draft')"
                             style="border-radius: 6px 0 0 6px; padding: 10px 14px;">
                             <i class="fas fa-file-pdf"></i> Download PDF

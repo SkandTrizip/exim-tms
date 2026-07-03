@@ -5,6 +5,7 @@ from backend.database import get_db
 from backend.models.enquiry import Enquiry
 from backend.models.quote import Quote
 from backend.models.document import ShipmentDocument
+from backend.services.analytics_service import get_dashboard_analytics
 from backend.utils.logger import logger
 
 router = APIRouter()
@@ -20,7 +21,7 @@ def _count_or_zero(db, label: str, query_fn):
 
 
 @router.get("/stats")
-async def get_dashboard_stats(db: Session = Depends(get_db)):
+def get_dashboard_stats(db: Session = Depends(get_db)):
     """
     Get dashboard statistics:
     1. Total Enquiry
@@ -112,3 +113,23 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         "payments_made": payments_made,
         "received_payments": received_payments
     }
+
+
+@router.get("/analytics")
+def get_dashboard_analytics_endpoint(db: Session = Depends(get_db)):
+    """Cost, revenue, margin and per-enquiry economics for valid enquiries (master number assigned)."""
+    try:
+        return get_dashboard_analytics(db)
+    except Exception as e:
+        logger.error(f"Dashboard analytics failed: {e}")
+        db.rollback()
+        return {
+            "summary": {
+                "valid_enquiries": 0,
+                "total_cost_inr": 0,
+                "total_revenue_inr": 0,
+                "capture_inr": 0,
+                "margin_pct": None,
+            },
+            "enquiries": [],
+        }

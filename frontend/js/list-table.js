@@ -10,19 +10,16 @@
     /** Percent widths per table — must sum to 100 */
     const TABLE_PROFILES = {
         trackingDataTable: {
-            details: 15, type: 7, client: 22, location: 17, required: 11, status: 19, action: 9
+            details: 20, client: 24, location: 20, required: 12, status: 16, action: 8
         },
         quotesDataTable: {
-            details: 13, type: 6, client: 17, location: 13, required: 9, line: 7, total: 9, status: 11, action: 5
+            details: 15, client: 20, location: 15, required: 11, line: 11, total: 11, status: 12, action: 5
         },
         enquiriesDataTable: {
-            details: 13, type: 6, client: 17, location: 13, commodity: 9, container: 7, required: 9, status: 11, action: 5
+            details: 20, client: 24, location: 20, required: 12, status: 16, action: 8
         },
         financeDataTable: {
-            details: 13, type: 6, client: 17, location: 13, commodity: 9, container: 7, required: 9, status: 11, action: 5
-        },
-        financeReceivedDataTable: {
-            details: 13, type: 6, client: 17, location: 13, commodity: 9, container: 7, required: 9, status: 11, action: 5
+            details: 20, client: 24, location: 20, required: 12, status: 16, action: 8
         },
         mastersClientsDataTable: {
             code: 12, status: 12, company: 24, branch: 18, phone: 12, location: 16, action: 6
@@ -33,8 +30,7 @@
     };
 
     const FALLBACK_PCT = {
-        details: 14, type: 6, client: 18, commodity: 9, location: 13, container: 7,
-        required: 9, line: 7, total: 8, status: 11, action: 5,
+        details: 18, client: 22, location: 18, required: 12, line: 10, total: 10, status: 14, action: 6,
         code: 10, company: 20, branch: 14, phone: 10, name: 18, contact: 14
     };
 

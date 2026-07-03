@@ -50,7 +50,7 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
                         setattr(status, field, datetime.strptime(date_str, "%d %b %y, %H:%M"))
                     elif item_data.get('checked'):
                         setattr(status, field, datetime.now())
-                except:
+                except (ValueError, TypeError):
                     # Fallback to current time if parsing fails
                     setattr(status, field, datetime.now())
             else:
@@ -87,7 +87,7 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
             try:
                 # Expecting YYYY-MM-DD from HTML date input
                 setattr(status, field, datetime.strptime(status_data[field], "%Y-%m-%d"))
-            except:
+            except (ValueError, TypeError):
                 pass
     
     db.commit()

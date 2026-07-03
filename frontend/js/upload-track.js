@@ -4,7 +4,15 @@
 
 let currentEnquiryData = null;
 let currentPricingData = null;
+let currentFinalQuoteData = null;
 let uploadedFiles = {};
+
+function syncPricingDataToWindow(quote) {
+    currentPricingData = quote;
+    window.currentPricingData = quote;
+}
+
+window.currentPricingData = null;
 
 // ==========================================
 // Initialization
@@ -18,6 +26,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     await loadEnquiryData();
     // Run after enquiry + documents load so BL View link and checklist stay in sync
     await loadChecklistState();
+    hideEmbeddedDrawerBackButtons();
 
     // Attach autosave to metadata fields
     const metadataFields = [
@@ -54,7 +63,7 @@ async function loadEnquiryData() {
         }
 
         if (storedPricing) {
-            currentPricingData = JSON.parse(storedPricing);
+            syncPricingDataToWindow(JSON.parse(storedPricing));
             populateInvoiceInfo();
         }
 
@@ -76,6 +85,7 @@ async function fetchEnquiryById(enquiryId) {
 
             // Fetch associated pricing data
             await fetchPricingData(enquiryId);
+            await fetchFinalQuoteData();
 
             // Fetch associated documents
             await fetchUploadedDocuments(enquiryId);
@@ -94,7 +104,7 @@ async function fetchEnquiryById(enquiryId) {
             }
 
             if (storedPricing) {
-                currentPricingData = JSON.parse(storedPricing);
+                syncPricingDataToWindow(JSON.parse(storedPricing));
                 populateInvoiceInfo();
             }
 
@@ -115,7 +125,7 @@ async function fetchEnquiryById(enquiryId) {
         }
 
         if (storedPricing) {
-            currentPricingData = JSON.parse(storedPricing);
+            syncPricingDataToWindow(JSON.parse(storedPricing));
             populateInvoiceInfo();
         }
 
@@ -136,8 +146,9 @@ async function fetchPricingData(enquiryId) {
             if (pricingList && pricingList.length > 0) {
                 // Find the quote that was actually accepted
                 const acceptedQuote = pricingList.find(q => q.status === 'accepted') || pricingList[0];
-                currentPricingData = acceptedQuote;
+                syncPricingDataToWindow(acceptedQuote);
                 populateInvoiceInfo();
+                updateUpdateQuoteRowVisibility();
             }
         } else {
             console.warn('No pricing data found for this enquiry');
@@ -315,6 +326,9 @@ function updateGenerateHblRowVisibility() {
     const siChecked = !!document.getElementById('status_si_submitted')?.checked;
     const hblRequired = !!currentEnquiryData?.hbl_required;
     row.style.display = siChecked && hblRequired ? 'table-row' : 'none';
+    if (typeof updateUpdateQuoteRowVisibility === 'function') {
+        updateUpdateQuoteRowVisibility();
+    }
 }
 
 function openGenerateHblFromTracking() {
@@ -335,6 +349,56 @@ function openGenerateHblFromTracking() {
     const target = window.parent !== window ? window.parent : window;
     target.location.href = url;
 }
+
+/**
+ * Fetch final quote (post-SI revisions) for the accepted source quote.
+ */
+async function fetchFinalQuoteData() {
+    if (!currentPricingData?.id || currentPricingData.status !== 'accepted') {
+        currentFinalQuoteData = null;
+        return;
+    }
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/quotes/${currentPricingData.id}/final`);
+        if (response.ok) {
+            const data = await response.json();
+            currentFinalQuoteData = data || null;
+        } else {
+            currentFinalQuoteData = null;
+        }
+    } catch (error) {
+        console.error('Error fetching final quote:', error);
+        currentFinalQuoteData = null;
+    }
+    refreshQuoteSnapshotDisplays();
+}
+
+function refreshQuoteSnapshotDisplays() {
+    if (!currentPricingData) return;
+    const setInr = (id, amount) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = amount != null ? `₹${amount.toLocaleString()}` : '—';
+    };
+
+    const initialInr = currentPricingData.final_quote_inr != null
+        ? Math.round(currentPricingData.final_quote_inr)
+        : (currentPricingData.total_origin_charges_inr
+            ? Math.round(currentPricingData.total_origin_charges_inr)
+            : null);
+
+    const finalInr = currentFinalQuoteData?.final_quote_inr != null
+        ? Math.round(currentFinalQuoteData.final_quote_inr)
+        : initialInr;
+
+    setInr('display_initial_quote', initialInr);
+    setInr('display_final_quote', finalInr);
+}
+
+window.onFinalQuoteSaved = function (finalQuote) {
+    currentFinalQuoteData = finalQuote;
+    refreshQuoteSnapshotDisplays();
+};
 
 /**
  * Populate Invoice Summary section
@@ -378,9 +442,7 @@ function populateInvoiceInfo() {
         setTextContent('display_dest_charges', `$${currentPricingData.total_destination_charges_usd.toLocaleString()}`);
     }
 
-    if (currentPricingData.final_quote_inr) {
-        setTextContent('display_final_quote', `₹${currentPricingData.final_quote_inr.toLocaleString()}`);
-    }
+    refreshQuoteSnapshotDisplays();
 
     console.log('✅ Invoice information populated');
 }
@@ -852,6 +914,7 @@ function handleFileUpload(input, displayId) {
         }
 
         updateGenerateHblRowVisibility();
+        updateUpdateQuoteRowVisibility();
 
         // Display filename with icon and size
         const fileSize = (file.size / 1024).toFixed(2); // KB
@@ -1015,22 +1078,8 @@ async function saveTracking() {
 }
 
 // ==========================================
-// Navigation
+// Additional Charges & Payments Modal Logic
 // ==========================================
-
-/**
- * Navigate back to the previous page
- */
-function goBack() {
-    // Once in Stage 3 (Upload & Track), we don't allow going back to the pricing calculator 
-    // as the quote is already finalized and locked.
-    window.location.href = '/#dashboard';
-}
-
-
-/**
- * Additional Charges & Payments Modal Logic
- */
 function openAdditionalChargeModal() {
     document.getElementById('additionalChargeModal').style.display = 'block';
     // Set default date to today
@@ -1090,6 +1139,11 @@ async function fetchAdditionalPayments(enquiryId) {
             list.innerHTML = '';
 
             payments.forEach(p => {
+                const utrDisplay = (Array.isArray(p.utr_number) ? p.utr_number : (p.utr_number ? [p.utr_number] : []))
+                    .filter(Boolean)
+                    .join(', ') || '—';
+                const dates = Array.isArray(p.payment_date) ? p.payment_date : (p.payment_date ? [p.payment_date] : []);
+                const lastDate = dates.length ? dates[dates.length - 1] : null;
                 const card = document.createElement('div');
                 card.style.cssText = 'background: white; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);';
                 card.innerHTML = `
@@ -1100,10 +1154,10 @@ async function fetchAdditionalPayments(enquiryId) {
                     <div style="font-size: 13px; font-weight: 700; color: var(--navy-800); margin-bottom: 8px;">${p.description || 'Shipping Line Payment'}</div>
                     <div style="display: grid; grid-template-columns: 1fr; gap: 4px; font-size: 11px; color: var(--text-secondary);">
                         <div style="display: flex; justify-content: space-between;">
-                            <span>UTR:</span> <span style="font-weight: 600; color: var(--navy-700);">${p.utr_number}</span>
+                            <span>UTR:</span> <span style="font-weight: 600; color: var(--navy-700);">${utrDisplay}</span>
                         </div>
                         <div style="display: flex; justify-content: space-between;">
-                            <span>Date:</span> <span style="font-weight: 600;">${new Date(p.payment_date).toLocaleDateString()}</span>
+                            <span>Date:</span> <span style="font-weight: 600;">${lastDate ? new Date(lastDate).toLocaleDateString() : '—'}</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 4px; border-top: 1px dashed #e2e8f0;">
                             <span>Amount:</span> <span style="font-weight: 800; color: var(--primary); font-size: 12px;">₹${p.amount.toLocaleString()}</span>
@@ -1202,3 +1256,11 @@ async function saveAdditionalInvoiceDetails() {
         showModal('Error', 'Failed to save additional invoice details', 'error');
     }
 }
+
+window.addEventListener('message', (event) => {
+    if (event.data?.type === 'final-quote-saved' && event.data.finalQuote) {
+        if (typeof window.onFinalQuoteSaved === 'function') {
+            window.onFinalQuoteSaved(event.data.finalQuote);
+        }
+    }
+});

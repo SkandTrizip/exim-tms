@@ -63,6 +63,21 @@ const ACTION_MODAL_COPY = {
         title: 'Create New Sale',
         subtitle: 'Enter basic shipment details to start the workflow',
         primary: null
+    },
+    'finance-payment': {
+        title: 'Payment to Shipping Line',
+        subtitle: 'Record payment against shipping line charges',
+        primary: null
+    },
+    'finance-invoice': {
+        title: 'Create Invoice',
+        subtitle: 'Raise client invoice for this shipment',
+        primary: null
+    },
+    'finance-received': {
+        title: 'Record Client Payment',
+        subtitle: 'Record payment received against this invoice',
+        primary: null
     }
 };
 
@@ -389,6 +404,24 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
         return;
     }
 
+    if (mode === 'finance-payment' && enquiryId) {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = renderIframeSection(`/finance-details?enquiry_id=${enquiryId}&embedded=1`);
+        return;
+    }
+
+    if (mode === 'finance-invoice' && enquiryId) {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = renderIframeSection(`/create-invoice?enquiry_id=${enquiryId}&embedded=1`);
+        return;
+    }
+
+    if (mode === 'finance-received' && enquiryId) {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = renderIframeSection(`/record-payment?invoice_id=${enquiryId}&embedded=1`);
+        return;
+    }
+
     bodyEl.className = 'action-modal-body';
     bodyEl.innerHTML = '<div class="action-modal-loading">Loading…</div>';
 
@@ -404,11 +437,16 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
         }
 
         if (mode === 'edit-quotes' || mode === 'confirm-quote' || mode === 'view-quotes') {
-            const modeMap = { 'edit-quotes': 'edit', 'confirm-quote': 'confirm', 'view-quotes': 'view' };
             const quotesRes = await fetch(`${CONFIG.API_URL}/api/quotes/enquiry/${enquiryId}`);
             if (loadId !== actionModalLoadId) return;
             const quotes = quotesRes.ok ? await quotesRes.json() : [];
-            const iframeSrc = `/pricing?enquiry_id=${enquiryId}&mode=${modeMap[mode]}&embedded=1`;
+            const hasAccepted = quotes.some((q) => String(q.status || '').toLowerCase() === 'accepted');
+            let effectiveMode = mode;
+            if (hasAccepted && mode !== 'view-quotes') {
+                effectiveMode = 'view-quotes';
+            }
+            const modeMap = { 'edit-quotes': 'edit', 'confirm-quote': 'confirm', 'view-quotes': 'view' };
+            const iframeSrc = `/pricing?enquiry_id=${enquiryId}&mode=${modeMap[effectiveMode]}&embedded=1`;
             bodyEl.innerHTML = `${renderShipmentClientSection(enq)}${renderQuoteSummarySection(quotes)}${renderIframeSection(iframeSrc)}`;
             return;
         }
@@ -426,6 +464,11 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
     }
 };
 
+function closestFromEventTarget(target, selector) {
+    const el = target instanceof Element ? target : target?.parentElement;
+    return el?.closest?.(selector) ?? null;
+}
+
 function initActionsMenus() {
     if (document.body.dataset.actionsMenuBound) return;
     document.body.dataset.actionsMenuBound = '1';
@@ -435,7 +478,7 @@ function initActionsMenus() {
     };
 
     document.addEventListener('click', (e) => {
-        const actionBtn = e.target.closest('.actions-dropdown .row-actions-btn, .actions-dropdown .actions-btn');
+        const actionBtn = closestFromEventTarget(e.target, '.actions-dropdown .row-actions-btn, .actions-dropdown .actions-btn');
         if (actionBtn) {
             e.preventDefault();
             e.stopPropagation();
@@ -455,7 +498,7 @@ function initActionsMenus() {
             return;
         }
 
-        if (!e.target.closest('.actions-dropdown') && !e.target.closest('.actions-menu.actions-menu-floating')) {
+        if (!closestFromEventTarget(e.target, '.actions-dropdown') && !closestFromEventTarget(e.target, '.actions-menu.actions-menu-floating')) {
             closeAllActionsMenus();
         }
     });
@@ -472,7 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.addEventListener('mouseenter', (e) => {
-        const dropdown = e.target.closest('.actions-dropdown');
+        const dropdown = closestFromEventTarget(e.target, '.actions-dropdown');
         if (dropdown) dropdown.classList.remove('actions-menu-dismissed');
     }, true);
 
@@ -489,6 +532,30 @@ document.addEventListener('DOMContentLoaded', () => {
             else if (typeof updateAllEnquiriesTable === 'function') updateAllEnquiriesTable(currentAllEnquiriesFilter);
             if (typeof updateDashboardTable === 'function') updateDashboardTable();
             if (typeof refreshBulkStatusCache === 'function') refreshBulkStatusCache();
+            return;
+        }
+        if (event.data.type === 'finance-saved') {
+            const refresh = async () => {
+                if (typeof window.applyFinanceSavedRefresh === 'function') {
+                    await window.applyFinanceSavedRefresh({
+                        section: event.data.section,
+                        moveToCompleted: event.data.moveToCompleted,
+                    });
+                }
+            };
+            refresh();
+            if (event.data.close) closeActionModal();
+            return;
+        }
+        if (event.data.type === 'open-update-quote') {
+            if (typeof window.openUpdateQuoteModalFromHost === 'function') {
+                window.openUpdateQuoteModalFromHost(event.data);
+            }
+            return;
+        }
+        if (event.data.type === 'uq-modal-open') {
+            /* Legacy — update quote modal is parent-hosted now. */
+            return;
         }
     });
 });

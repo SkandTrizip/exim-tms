@@ -332,6 +332,268 @@
     font-size: 12px;
 }
 
+/* ---------- Business analytics (executive KPI row) ---------- */
+.biz-analytics {
+    margin-bottom: 16px;
+}
+
+.biz-kpi-row {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.biz-kpi-card {
+    background: #fff;
+    border: 1px solid var(--border-light);
+    border-radius: 16px;
+    padding: 14px 14px 12px;
+    box-shadow: 0 8px 24px rgba(10, 22, 40, 0.05);
+    display: flex;
+    flex-direction: column;
+    min-height: 108px;
+    position: relative;
+    overflow: hidden;
+}
+
+.biz-kpi-card__top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.biz-kpi-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: grid;
+    place-items: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.biz-kpi-icon--blue { background: #dbeafe; color: #1d4ed8; }
+.biz-kpi-icon--sky { background: #e0f2fe; color: #0369a1; }
+.biz-kpi-icon--amber { background: #ffedd5; color: #c2410c; }
+.biz-kpi-icon--green { background: #dcfce7; color: #15803d; }
+
+.biz-kpi-badge {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.biz-kpi-badge--blue { background: #eff6ff; color: #1d4ed8; }
+.biz-kpi-badge--green { background: #ecfdf5; color: #047857; }
+
+.biz-kpi-meta-pill {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+}
+
+.biz-kpi-trend-badge {
+    font-size: 11px;
+    font-weight: 800;
+    padding: 3px 8px;
+    border-radius: 8px;
+}
+
+.biz-kpi-trend-badge.positive { background: #ecfdf5; color: #047857; }
+.biz-kpi-trend-badge.negative { background: #fef2f2; color: #b91c1c; }
+
+.biz-kpi-card__label {
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.biz-kpi-card__label--center { text-align: center; }
+
+.biz-kpi-card__value {
+    margin-top: 4px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 26px;
+    font-weight: 900;
+    letter-spacing: -0.03em;
+    color: var(--navy-900);
+    line-height: 1.05;
+}
+
+.biz-kpi-card__value--center { text-align: center; font-size: 24px; }
+
+.biz-kpi-card__value.positive { color: #047857; }
+.biz-kpi-card__value.negative { color: #b91c1c; }
+
+.biz-kpi-card--gauge {
+    align-items: center;
+    text-align: center;
+    min-height: 148px;
+}
+
+.biz-kpi-gauge-wrap {
+    width: 88px;
+    height: 88px;
+    margin: 0 auto 4px;
+    position: relative;
+}
+
+.biz-kpi-gauge-wrap svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.biz-kpi-gauge-icon {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: #94a3b8;
+    font-size: 14px;
+    pointer-events: none;
+}
+
+.biz-analytics-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.biz-view-details {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--navy-800);
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: var(--shadow-xs);
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.biz-view-details:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+}
+
+.biz-view-details:focus-visible {
+    outline: 2px solid var(--navy-600);
+    outline-offset: 2px;
+}
+
+.biz-view-details[aria-expanded="true"] .biz-view-details__icon {
+    transform: rotate(180deg);
+}
+
+.biz-view-details__icon {
+    font-size: 11px;
+    transition: transform 0.2s ease;
+}
+
+.biz-records-badge {
+    font-size: 11px;
+    font-weight: 800;
+    color: #6d28d9;
+    background: #f3e8ff;
+    border-radius: 999px;
+    padding: 5px 10px;
+}
+
+.analytics-details-panel {
+    margin-bottom: 16px;
+}
+
+.analytics-details-panel[hidden] {
+    display: none !important;
+}
+
+.analytics-details-panel .analytics-table-container {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+    overflow-x: auto;
+    box-shadow: var(--shadow-sm);
+}
+
+.analytics-table-topbar {
+    margin-top: 0;
+    margin-bottom: 8px;
+}
+
+.analytics-table-container {
+    margin-bottom: 0;
+}
+
+.analytics-economics-table th.num,
+.analytics-economics-table td.num {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.analytics-economics-table a.table-link {
+    color: var(--navy-800);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.analytics-economics-table a.table-link:hover {
+    text-decoration: underline;
+}
+
+.analytics-loading-row td,
+.analytics-empty-row td {
+    text-align: center;
+    padding: 24px 12px;
+    color: var(--text-tertiary);
+    font-weight: 600;
+}
+
+@media (max-width: 1280px) {
+    .biz-kpi-row {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .biz-kpi-card--gauge {
+        grid-column: span 1;
+    }
+}
+
+@media (max-width: 900px) {
+    .biz-kpi-row {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .biz-kpi-card__value {
+        font-size: 22px;
+    }
+}
+
+@media (max-width: 560px) {
+    .biz-kpi-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .biz-view-details__icon {
+        transition: none;
+    }
+}
+
 /* ---------- Section cards ---------- */
 .section-card {
     background: rgba(255, 255, 255, 0.92);
@@ -627,7 +889,7 @@
 .table-tools {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 12px;
     padding: 10px 16px 12px;
 }
@@ -819,6 +1081,64 @@
     font-size: 22px;
 }
 
+/* Finance pending / completed sub-tabs */
+.finance-completion-tabs {
+    display: flex;
+    gap: 8px;
+    margin: 0 0 16px;
+    padding: 4px;
+    background: rgba(249, 250, 251, 0.95);
+    border: 1px solid rgba(17, 24, 39, 0.08);
+    border-radius: 10px;
+    width: fit-content;
+    max-width: 100%;
+}
+
+.finance-completion-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.finance-completion-tab:hover {
+    background: rgba(255, 255, 255, 0.85);
+    color: var(--navy-800);
+}
+
+.finance-completion-tab.active {
+    background: #fff;
+    color: var(--navy-900);
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
+.finance-completion-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.06);
+    font-size: 11px;
+    font-weight: 800;
+    line-height: 1;
+}
+
+.finance-completion-tab.active .finance-completion-count {
+    background: rgba(37, 99, 235, 0.12);
+    color: #1d4ed8;
+}
+
 /* ---------- Rich list table rows ---------- */
 .list-table {
     margin-top: 0;
@@ -881,6 +1201,45 @@
 
 .list-table tbody tr.list-row:hover td[data-col="action"] {
     background: rgba(249, 250, 251, 0.98);
+}
+
+/* Finance row action buttons (Pay, Invoice, Record) need more room than the ⋮ menu */
+.list-table-card.has-row-action-btns .list-table thead th[data-col="action"],
+.list-table-card.has-row-action-btns .list-table tbody td[data-col="action"] {
+    width: 96px;
+    min-width: 88px;
+    max-width: 112px;
+    padding: 8px 6px;
+    text-align: center;
+    overflow: visible;
+}
+
+.list-table-card.has-row-action-btns .finance-row-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    max-width: 100%;
+    min-height: 32px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 700;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+.list-table-card.has-row-action-btns .finance-row-action-btn i {
+    font-size: 11px;
+    flex-shrink: 0;
+}
+
+.list-table-card.has-row-action-btns .finance-row-action-btn:disabled {
+    font-size: 10px;
+    padding: 0 6px;
+    white-space: normal;
+    line-height: 1.25;
+    min-height: 36px;
 }
 
 .list-table thead th.col-resizable-th {

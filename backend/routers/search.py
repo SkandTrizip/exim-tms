@@ -11,7 +11,7 @@ router = APIRouter(prefix="/search", tags=["Global Search"])
 
 
 @router.get("", response_model=SearchResponse)
-async def search_shipments(
+def search_shipments(
     q: str = Query(..., min_length=3, description="Search text (min 3 characters)"),
     scope: Optional[List[str]] = Query(None, description="Filter scopes: all, enquiry, client, shipping_line, mbl, invoice, document"),
     limit: int = Query(25, ge=1, le=100),
@@ -28,7 +28,7 @@ async def search_shipments(
 
 
 @router.get("/shipment/{enquiry_id}", response_model=ShipmentDetailResponse)
-async def shipment_detail(enquiry_id: int, db: Session = Depends(get_db)):
+def shipment_detail(enquiry_id: int, db: Session = Depends(get_db)):
     detail = get_shipment_detail(db, enquiry_id)
     if not detail:
         raise HTTPException(status_code=404, detail="Shipment not found")

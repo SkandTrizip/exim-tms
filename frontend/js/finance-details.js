@@ -194,6 +194,19 @@ async function fetchFinanceStatus() {
     }
 }
 
+function formatPaymentDates(value) {
+    const dates = Array.isArray(value) ? value : (value ? [value] : []);
+    const lastDate = dates.length ? dates[dates.length - 1] : null;
+    return lastDate
+        ? new Date(lastDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+        : '—';
+}
+
+function formatUtrNumbers(value) {
+    const utrs = Array.isArray(value) ? value : (value ? [value] : []);
+    return utrs.filter(Boolean).join(', ') || '—';
+}
+
 function populatePaymentsTable(payments) {
     const tbody = document.getElementById('paymentsTableBody');
     const totalEl = document.getElementById('totalPaymentsAmount');
@@ -219,8 +232,8 @@ function populatePaymentsTable(payments) {
                 </span>
             </td>
             <td style="padding: 12px; color: var(--navy-700);">${p.description || 'Main Payment'}</td>
-            <td style="padding: 12px; font-family: monospace; font-weight: 600;">${p.utr_number}</td>
-            <td style="padding: 12px;">${new Date(p.payment_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+            <td style="padding: 12px; font-family: monospace; font-weight: 600;">${formatUtrNumbers(p.utr_number)}</td>
+            <td style="padding: 12px;">${formatPaymentDates(p.payment_date)}</td>
             <td style="padding: 12px; text-align: right; font-weight: 700; color: var(--navy-800);">₹${p.amount.toLocaleString()}</td>
         `;
         tbody.appendChild(row);
@@ -292,6 +305,7 @@ async function submitQuickPayment() {
 
             // Refresh table
             await fetchFinanceStatus();
+            if (typeof notifyFinanceParentRefresh === 'function') notifyFinanceParentRefresh({ section: 'payments', moveToCompleted: true });
         } else {
             const err = await res.json();
             alert('Error: ' + (err.detail || 'Failed to save record'));
@@ -335,6 +349,7 @@ async function submitFinancialPayment() {
             closeAdditionalChargeModal();
             // Refresh table
             await fetchFinanceStatus();
+            if (typeof notifyFinanceParentRefresh === 'function') notifyFinanceParentRefresh({ section: 'payments', moveToCompleted: true });
         } else {
             const err = await res.json();
             alert('Error: ' + (err.detail || 'Failed to save'));

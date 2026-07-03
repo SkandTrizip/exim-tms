@@ -271,8 +271,20 @@
         }
     }
 
+    function isEmbeddedDrawerPage() {
+        return (
+            new URLSearchParams(window.location.search).get('embedded') === '1' ||
+            document.documentElement.classList.contains('embedded-mode') ||
+            document.body.classList.contains('embedded-mode')
+        );
+    }
+
     function initGlobalSearch() {
         if (window.location.pathname.includes('/login')) return;
+        if (isEmbeddedDrawerPage()) {
+            document.querySelector('.global-search-floating')?.remove();
+            return;
+        }
         ensureSearchShell();
         bindEvents();
         updateGlobalSearchVisibility();

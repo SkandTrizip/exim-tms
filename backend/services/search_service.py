@@ -10,6 +10,7 @@ from backend.models.enquiry import Enquiry
 from backend.models.invoice import Invoice
 from backend.models.quote import Quote
 from backend.models.shipment_status import ShipmentStatus
+from backend.models.finance import ShippingPayment
 from backend.schemas.search import (
     SearchResultItem,
     ShipmentDetailResponse,
@@ -17,6 +18,7 @@ from backend.schemas.search import (
     ShipmentInvoiceItem,
     ShipmentQuoteSummary,
     ShipmentStatusDetail,
+    ShippingPaymentItem,
 )
 
 
@@ -281,6 +283,12 @@ def get_shipment_detail(db: Session, enquiry_id: int) -> ShipmentDetailResponse 
         .order_by(Invoice.id.desc())
         .all()
     )
+    shipping_payments = (
+        db.query(ShippingPayment)
+        .filter(ShippingPayment.enquiry_id == enquiry_id)
+        .order_by(ShippingPayment.created_at.desc().nullslast(), ShippingPayment.id.desc())
+        .all()
+    )
 
     accepted = _accepted_quote(quotes)
     return ShipmentDetailResponse(
@@ -290,4 +298,5 @@ def get_shipment_detail(db: Session, enquiry_id: int) -> ShipmentDetailResponse 
         accepted_quote=_quote_summary(accepted),
         documents=[ShipmentDocumentItem.model_validate(doc) for doc in documents],
         invoices=[ShipmentInvoiceItem.model_validate(inv) for inv in invoices],
+        shipping_payments=[ShippingPaymentItem.model_validate(p) for p in shipping_payments],
     )

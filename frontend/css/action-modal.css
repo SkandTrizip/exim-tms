@@ -482,16 +482,76 @@ body.embedded-mode .action-modal-footer {
     display: none !important;
 }
 
+html.embedded-mode .form-actions,
+body.embedded-mode .form-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 10px;
+    padding-top: 16px;
+    padding-bottom: 20px;
+    margin-top: 20px;
+}
+
+html.embedded-mode .form-actions .btn,
+body.embedded-mode .form-actions .btn {
+    flex: 0 1 auto;
+    max-width: 100%;
+}
+
+html.embedded-mode .form-actions-bar,
+body.embedded-mode .form-actions-bar {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+html.embedded-mode .form-actions-bar .pdf-dropdown-wrap,
+body.embedded-mode .form-actions-bar .pdf-dropdown-wrap {
+    flex: 1 1 100%;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 10px;
+}
+
+html.embedded-mode .embedded-form-grid-2,
+body.embedded-mode .embedded-form-grid-2 {
+    grid-template-columns: 1fr !important;
+}
+
+html.embedded-mode .global-search-floating,
+body.embedded-mode .global-search-floating {
+    display: none !important;
+}
+
 /* Back to Dashboard — not needed inside drawer (parent has Cancel/close) */
 html.embedded-mode .step-actions .btn-secondary[onclick*="location.href"],
 body.embedded-mode .step-actions .btn-secondary[onclick*="location.href"],
 html.embedded-mode .form-actions .btn-secondary[onclick*="dashboard"],
 html.embedded-mode .form-actions .btn-secondary[onclick*="goBack"],
-html.embedded-mode .form-actions .btn-secondary[onclick*="location.href='/"],
+html.embedded-mode .form-actions .btn-secondary[onclick*="location.href"],
 html.embedded-mode .form-actions .btn-secondary[onclick*='location.href="/'],
+html.embedded-mode .form-actions .btn-secondary[onclick*="location.href='/"],
+html.embedded-mode .form-actions .btn-secondary[onclick*="location.href=\"/"],
 body.embedded-mode .form-actions .btn-secondary[onclick*="dashboard"],
 body.embedded-mode .form-actions .btn-secondary[onclick*="goBack"],
+body.embedded-mode .form-actions .btn-secondary[onclick*="location.href"],
+body.embedded-mode .form-actions .btn-secondary[onclick*='location.href="/'],
 body.embedded-mode .form-actions .btn-secondary[onclick*="location.href='/"],
-body.embedded-mode .form-actions .btn-secondary[onclick*='location.href="/'] {
+body.embedded-mode .form-actions .btn-secondary[onclick*="location.href=\"/"],
+html.embedded-mode #quoteConfirmationPage .pricing-card-header button,
+body.embedded-mode #quoteConfirmationPage .pricing-card-header button,
+html.embedded-mode #postConfirmEditDetailsBtn,
+body.embedded-mode #postConfirmEditDetailsBtn,
+html.embedded-mode #postConfirmGoTrackingBtn,
+body.embedded-mode #postConfirmGoTrackingBtn,
+html.embedded-mode #postConfirmViewBreakdownBtn,
+body.embedded-mode #postConfirmViewBreakdownBtn,
+html.embedded-mode .page-header .btn-secondary[onclick*="history"],
+html.embedded-mode .page-header a.btn-secondary[href="/"],
+html.embedded-mode .page-header a.btn-secondary[href="/#dashboard"],
+body.embedded-mode .page-header .btn-secondary[onclick*="history"],
+body.embedded-mode .page-header a.btn-secondary[href="/"],
+body.embedded-mode .page-header a.btn-secondary[href="/#dashboard"] {
     display: none !important;
 }

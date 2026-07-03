@@ -32,8 +32,17 @@ def create_enquiry_logic(db: Session, data: dict):
     logger.info(f"Created new enquiry: {new_enquiry.enquiry_number} (ID: {new_enquiry.id})")
     return new_enquiry
 
-def get_all_enquiries(db: Session):
-    return db.query(Enquiry).order_by(Enquiry.id.desc()).all()
+def get_all_enquiries(db: Session, skip: int = 0, limit: int = 10_000):
+    """List enquiries with bounded pagination (newest first)."""
+    safe_limit = max(1, min(limit, 10_000))
+    safe_skip = max(0, skip)
+    return (
+        db.query(Enquiry)
+        .order_by(Enquiry.id.desc())
+        .offset(safe_skip)
+        .limit(safe_limit)
+        .all()
+    )
 
 def get_enquiry_by_id(db: Session, enquiry_id: int):
     return db.query(Enquiry).filter(Enquiry.id == enquiry_id).first()

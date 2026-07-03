@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Float, Date
+from sqlalchemy.dialects.postgresql import ARRAY
 from backend.database import Base
 import datetime
 
@@ -7,8 +8,10 @@ class ShippingPayment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     enquiry_id = Column(Integer, ForeignKey("enquiries.id", ondelete="CASCADE"))
-    utr_number = Column(String, index=True)
-    payment_date = Column(Date)
+    # Postgres: text[] (supports multiple UTRs per payment row)
+    utr_number = Column(ARRAY(String))
+    # Postgres: date[] (supports multiple payment dates per UTR row)
+    payment_date = Column(ARRAY(Date))
     amount = Column(Float)
     currency = Column(String, default="INR")
     description = Column(String, nullable=True)

@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         initEmbeddedStepToggles();
     }
+    hideEmbeddedDrawerBackButtons();
 });
 
 function setEmbeddedPanelVisible(n) {

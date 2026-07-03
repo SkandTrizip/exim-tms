@@ -20,11 +20,11 @@ from backend.models.user import User
 router = APIRouter()
 
 @router.post("/", response_model=Enquiry)
-async def create_enquiry(enquiry_data: EnquiryCreate, db: Session = Depends(get_db)):
+def create_enquiry(enquiry_data: EnquiryCreate, db: Session = Depends(get_db)):
     return create_enquiry_logic(db, enquiry_data.model_dump())
 
 @router.put("/{enquiry_id}", response_model=Enquiry)
-async def update_enquiry(enquiry_id: int, enquiry_data: EnquiryCreate, db: Session = Depends(get_db)):
+def update_enquiry(enquiry_id: int, enquiry_data: EnquiryCreate, db: Session = Depends(get_db)):
     logger.info(f"Received update request for enquiry {enquiry_id}")
     updated = update_enquiry_logic(db, enquiry_id, enquiry_data.model_dump())
     if not updated:
@@ -33,12 +33,16 @@ async def update_enquiry(enquiry_id: int, enquiry_data: EnquiryCreate, db: Sessi
     return updated
 
 @router.get("/", response_model=list[Enquiry])
-async def list_enquiries(db: Session = Depends(get_db)):
-    return get_all_enquiries(db)
+def list_enquiries(
+    skip: int = 0,
+    limit: int = 10_000,
+    db: Session = Depends(get_db),
+):
+    return get_all_enquiries(db, skip=skip, limit=limit)
 
 
 @router.get("/next-number")
-async def next_enquiry_number_endpoint(
+def next_enquiry_number_endpoint(
     year: Optional[int] = None,
     month: Optional[int] = None,
     db: Session = Depends(get_db),
@@ -53,7 +57,7 @@ async def next_enquiry_number_endpoint(
 
 
 @router.get("/hbl-pending")
-async def get_hbl_pending(db: Session = Depends(get_db)):
+def get_hbl_pending(db: Session = Depends(get_db)):
     """Enquiries where HBL is required and SI has been submitted."""
     from backend.models.enquiry import Enquiry as EnquiryModel
     from backend.models.shipment_status import ShipmentStatus
@@ -92,7 +96,7 @@ async def get_hbl_pending(db: Session = Depends(get_db)):
 
 
 @router.get("/lookup-hbl/{enquiry_number:path}")
-async def lookup_hbl_by_number(enquiry_number: str, db: Session = Depends(get_db)):
+def lookup_hbl_by_number(enquiry_number: str, db: Session = Depends(get_db)):
     """Find an HBL-required enquiry by shipment / job number and open its document."""
     from backend.models.enquiry import Enquiry as EnquiryModel
     from backend.models.shipment_status import ShipmentStatus
@@ -121,7 +125,7 @@ async def lookup_hbl_by_number(enquiry_number: str, db: Session = Depends(get_db
 
 
 @router.get("/hbl-document/{enquiry_id}")
-async def get_hbl_document_data(enquiry_id: int, db: Session = Depends(get_db)):
+def get_hbl_document_data(enquiry_id: int, db: Session = Depends(get_db)):
     """Full data needed to render an HBL / MTD document."""
     from backend.models.enquiry import Enquiry as EnquiryModel
     from backend.models.shipment_status import ShipmentStatus
@@ -220,7 +224,7 @@ async def get_hbl_document_data(enquiry_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/hbl-document/{enquiry_id}/snapshot")
-async def get_hbl_document_snapshot(enquiry_id: int, db: Session = Depends(get_db)):
+def get_hbl_document_snapshot(enquiry_id: int, db: Session = Depends(get_db)):
     """Return the last saved HBL/MTD editable snapshot for this enquiry (server-side)."""
     from backend.models.enquiry import Enquiry as EnquiryModel
 
@@ -241,7 +245,7 @@ async def get_hbl_document_snapshot(enquiry_id: int, db: Session = Depends(get_d
 
 
 @router.put("/hbl-document/{enquiry_id}/snapshot")
-async def save_hbl_document_snapshot(
+def save_hbl_document_snapshot(
     enquiry_id: int,
     payload: dict = Body(...),
     db: Session = Depends(get_db),
@@ -275,13 +279,13 @@ async def save_hbl_document_snapshot(
 
 
 @router.get("/{enquiry_id}", response_model=Enquiry)
-async def get_enquiry(enquiry_id: int, db: Session = Depends(get_db)):
+def get_enquiry(enquiry_id: int, db: Session = Depends(get_db)):
     enquiry = get_enquiry_by_id(db, enquiry_id)
     if not enquiry:
         raise HTTPException(status_code=404, detail="Enquiry not found")
     return enquiry
 @router.patch("/{enquiry_id}/hbl-fields")
-async def update_hbl_fields(enquiry_id: int, payload: dict, db: Session = Depends(get_db)):
+def update_hbl_fields(enquiry_id: int, payload: dict, db: Session = Depends(get_db)):
     """Update only HBL-related fields on a confirmed enquiry."""
     from backend.models.enquiry import Enquiry as EnquiryModel
     allowed = {
@@ -300,14 +304,14 @@ async def update_hbl_fields(enquiry_id: int, payload: dict, db: Session = Depend
     return {"status": "ok", "id": enq.id}
 
 @router.patch("/{enquiry_id}/stage", response_model=Enquiry)
-async def update_enquiry_stage(enquiry_id: int, stage: int, db: Session = Depends(get_db)):
+def update_enquiry_stage(enquiry_id: int, stage: int, db: Session = Depends(get_db)):
     updated = update_enquiry_logic(db, enquiry_id, {"stage": stage})
     if not updated:
         raise HTTPException(status_code=404, detail="Enquiry not found")
     return updated
 
 @router.patch("/{enquiry_id}/void", response_model=Enquiry)
-async def void_enquiry(
+def void_enquiry(
     enquiry_id: int,
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin)

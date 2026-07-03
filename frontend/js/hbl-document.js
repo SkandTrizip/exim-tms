@@ -117,26 +117,6 @@ function prepareDocumentForSave() {
     splitAllCargoFields();
 }
 
-async function updateSavedDraftNotice(cached) {
-    const wrap = document.getElementById('savedDraftNotice');
-    const text = document.getElementById('savedDraftNoticeText');
-    if (!wrap || !text || !currentEnquiryId) return;
-    try {
-        const d = cached || await fetchSavedSnapshot();
-        if (!d || !d.snapshot) {
-            wrap.classList.remove('visible');
-            return;
-        }
-        const when = d.saved_at ? new Date(d.saved_at).toLocaleString() : '';
-        text.textContent = when
-            ? `Last saved on ${when}. Use Restore if you want to undo recent edits.`
-            : 'A previously saved copy is available for this enquiry.';
-        wrap.classList.add('visible');
-    } catch {
-        wrap.classList.remove('visible');
-    }
-}
-
 function flashSaveButton() {
     const btn = document.getElementById('saveLocalBtn');
     if (!btn) return;
@@ -158,10 +138,6 @@ async function saveDocumentToServer(options = {}) {
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const saved = await res.json();
-        await updateSavedDraftNotice({
-            snapshot,
-            saved_at: saved.saved_at || snapshot.savedAt,
-        });
         if (!silent) flashSaveButton();
         return true;
     } catch (e) {
@@ -171,21 +147,24 @@ async function saveDocumentToServer(options = {}) {
     }
 }
 
-async function openPreviouslySaved() {
-    if (!currentEnquiryId) return;
-    try {
-        const d = await fetchSavedSnapshot();
-        if (!d || !d.snapshot) {
-            alert('No saved HBL found for this enquiry.');
-            return;
-        }
-        applySnapshot(d.snapshot);
-        await updateSavedDraftNotice(d);
-        flashSaveButton();
-    } catch (e) {
-        console.error(e);
-        alert('Could not read saved data from server.');
-    }
+function setReadOnlySavedView() {
+    // No edit/save/restore on this page: show the saved snapshot only.
+    isEditing = false;
+    document.body.classList.remove('edit-mode');
+
+    document.querySelectorAll('.editable').forEach((el) => {
+        el.removeAttribute('contenteditable');
+    });
+
+    const idsToHide = ['editBtn', 'saveLocalBtn', 'viewDraftBtn'];
+    idsToHide.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.hidden = true;
+        el.setAttribute('aria-hidden', 'true');
+        el.style.display = 'none';
+        el.tabIndex = -1;
+    });
 }
 
 function applyDraftPrefixVisibility() {
@@ -292,6 +271,13 @@ function setCargoCellPlainText(el, text) {
     el.textContent = next;
 }
 
+// #hblCargoPage1Box .cargo-preview-inner has 0 padding on screen but gets
+// `padding: 2px 4px !important` under @media print (see hbl-document.html). The split
+// point is only ever computed on screen, so without reserving this margin here, text
+// that just fits on screen gets clipped once print padding shrinks its real box.
+const HBL_CARGO_PRINT_PAD_X = 8;
+const HBL_CARGO_PRINT_PAD_Y = 4;
+
 function measureCargoCellInnerBox(cellEl) {
     if (!cellEl) return { width: 80, height: 58 };
     const cs = window.getComputedStyle(cellEl);
@@ -299,8 +285,8 @@ function measureCargoCellInnerBox(cellEl) {
     const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
     const borderY = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
     return {
-        width: Math.max(20, cellEl.clientWidth - padX),
-        height: Math.max(12, cellEl.clientHeight - padY - borderY),
+        width: Math.max(20, cellEl.clientWidth - padX - HBL_CARGO_PRINT_PAD_X),
+        height: Math.max(12, cellEl.clientHeight - padY - borderY - HBL_CARGO_PRINT_PAD_Y),
         style: cs
     };
 }
@@ -380,8 +366,12 @@ function splitCargoTextForPreview(text, previewCellEl) {
 function joinCargoHeadTail(head, tail, splitAtLineBoundary) {
     const h = normalizeCargoText(head);
     const t = normalizeCargoText(tail);
-    if (!h) return t;
-    if (!t) return h;
+    // Empty cells hold a lone " " placeholder which normalizes to " " (truthy) —
+    // treat whitespace-only head/tail as empty or a stray blank line leaks into the join.
+    const hEmpty = h.trim() === '';
+    const tEmpty = t.trim() === '';
+    if (hEmpty) return tEmpty ? '' : t;
+    if (tEmpty) return h;
     if (!splitAtLineBoundary) return h + t;
     if (h.endsWith('\n') || t.startsWith('\n')) return h + t;
     return `${h}\n${t}`;
@@ -439,21 +429,35 @@ function updateCargoOverflowState() {
     }
 }
 
+/**
+ * Re-splitting a cargo field can flip on `has-cargo-overflow`, which shrinks the
+ * page-1 row height (to make room for the "Contd." note) for every column at once.
+ * That shrink can push previously-fitting columns into overflow too, so once it
+ * happens we must re-run the split against the corrected height — otherwise the
+ * page-1/page-2 boundary is computed against a row height that no longer applies.
+ */
+function applyCargoSplitsWithOverflowCorrection(fullTextByPreviewId) {
+    const applyPass = () => {
+        HBL_CARGO_PREVIEW_MAP.forEach(([page2Id, previewId]) => {
+            setCargoSplit(page2Id, previewId, fullTextByPreviewId[previewId] || '');
+        });
+    };
+    applyPass();
+    updateCargoOverflowState();
+    if (document.getElementById('hblCargoPage1Box')?.classList.contains('has-cargo-overflow')) {
+        applyPass();
+        updateCargoOverflowState();
+    }
+}
+
 function splitAllCargoFields() {
     if (hblCargoSyncLock) return;
     hblCargoSyncLock = true;
-    const runSplit = () => {
-        HBL_CARGO_PREVIEW_MAP.forEach(([page2Id, previewId]) => {
-            const full = getCargoFullText(page2Id, previewId);
-            setCargoSplit(page2Id, previewId, full);
-        });
-    };
-    runSplit();
-    updateCargoOverflowState();
-    if (document.getElementById('hblCargoPage1Box')?.classList.contains('has-cargo-overflow')) {
-        runSplit();
-        updateCargoOverflowState();
-    }
+    const fullTextByPreviewId = {};
+    HBL_CARGO_PREVIEW_MAP.forEach(([page2Id, previewId]) => {
+        fullTextByPreviewId[previewId] = getCargoFullText(page2Id, previewId);
+    });
+    applyCargoSplitsWithOverflowCorrection(fullTextByPreviewId);
     hblCargoSyncLock = false;
 }
 
@@ -480,13 +484,12 @@ function finishEditingWithoutResplit() {
 function splitCargoFromStoredFull() {
     if (hblCargoSyncLock) return;
     hblCargoSyncLock = true;
+    const fullTextByPreviewId = {};
     HBL_CARGO_PREVIEW_MAP.forEach(([page2Id, previewId]) => {
         const page2 = document.getElementById(page2Id);
-        if (!page2) return;
-        const full = getCargoCellRawText(page2);
-        setCargoSplit(page2Id, previewId, full);
+        fullTextByPreviewId[previewId] = page2 ? getCargoCellRawText(page2) : '';
     });
-    updateCargoOverflowState();
+    applyCargoSplitsWithOverflowCorrection(fullTextByPreviewId);
     hblCargoSyncLock = false;
 }
 
@@ -499,6 +502,9 @@ function flushPreviewCargo(previewId) {
     if (!preview || !editor || !page2) return;
 
     hblCargoSyncLock = true;
+    const box = document.getElementById('hblCargoPage1Box');
+    const hadOverflow = !!box?.classList.contains('has-cargo-overflow');
+
     const rawHead = getCargoCellRawText(editor);
     let tail = getCargoCellRawText(page2);
     const full = joinCargoHeadTail(rawHead, tail, preview.dataset.cargoSplitAtLine !== '0');
@@ -512,6 +518,21 @@ function flushPreviewCargo(previewId) {
     preview.dataset.shownLen = String(head.length);
     preview.dataset.cargoSplitAtLine = splitAtLineBoundary ? '1' : '0';
     updateCargoOverflowState();
+
+    // All 5 cargo columns share one row height, so the instant any column starts (or
+    // stops) overflowing onto page 2, the "Contd." note eats into every column's box —
+    // even ones nobody just edited. Re-split every column now against the corrected
+    // height; otherwise the other columns sit visually clipped until the next full
+    // resplit (Done Editing / Save), which is what makes text look like it "jumps" to
+    // page 2 only after saving.
+    const nowOverflow = !!box?.classList.contains('has-cargo-overflow');
+    if (nowOverflow !== hadOverflow) {
+        const fullTextByPreviewId = {};
+        HBL_CARGO_PREVIEW_MAP.forEach(([pid2, pvid]) => {
+            fullTextByPreviewId[pvid] = getCargoFullText(pid2, pvid);
+        });
+        applyCargoSplitsWithOverflowCorrection(fullTextByPreviewId);
+    }
     hblCargoSyncLock = false;
 }
 
@@ -712,17 +733,16 @@ document.addEventListener('DOMContentLoaded', async function () {
 
 async function loadDocument(id) {
     try {
-        const [docRes, saved] = await Promise.all([
-            fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${id}`),
-            fetchSavedSnapshot(id),
-        ]);
-        if (!docRes.ok) throw new Error(`HTTP ${docRes.status}`);
-        const d = await docRes.json();
-        populateDocument(d);
-        if (saved?.snapshot) {
-            applySnapshot(saved.snapshot);
+        const saved = await fetchSavedSnapshot(id);
+        if (!saved?.snapshot) {
+            alert('No saved HBL found for this enquiry.');
+            window.history.back();
+            return;
         }
-        await updateSavedDraftNotice(saved?.snapshot ? saved : null);
+
+        // Render strictly the saved snapshot, not the auto-populated enquiry defaults.
+        applySnapshot(saved.snapshot);
+        setReadOnlySavedView();
     } catch (err) {
         console.error('Failed to load HBL document data:', err);
         alert('Could not load document data. Please try again.');

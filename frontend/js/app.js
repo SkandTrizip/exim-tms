@@ -22,20 +22,29 @@ document.addEventListener('DOMContentLoaded', async function () {
         refreshBtn.addEventListener('click', async () => {
             refreshBtn.disabled = true;
             try {
-                await Promise.all([fetchDashboardStats(), fetchAllEnquiries()]);
+                await Promise.all([fetchDashboardStats(), fetchDashboardAnalytics(), fetchAllEnquiries()]);
             } finally {
                 refreshBtn.disabled = false;
             }
         });
     }
 
+    const analyticsDetailsBtn = document.getElementById('analyticsViewDetailsBtn');
+    const analyticsDetailsPanel = document.getElementById('analyticsDetailsPanel');
+    if (analyticsDetailsBtn && analyticsDetailsPanel) {
+        analyticsDetailsBtn.addEventListener('click', () => {
+            const expanded = analyticsDetailsBtn.getAttribute('aria-expanded') === 'true';
+            analyticsDetailsBtn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+            analyticsDetailsPanel.hidden = expanded;
+        });
+    }
+
     // Run stats and enquiry fetch in parallel — stats show immediately, tables fill in alongside
     await Promise.all([
         fetchDashboardStats(),
+        fetchDashboardAnalytics(),
         fetchAllEnquiries()
     ]);
-
-    document.getElementById('financeView')?.addEventListener('click', handleFinanceReceivedClick);
 
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.rail-group')) {
@@ -52,39 +61,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     initFinanceListUI();
     initQuotesListUI();
     initStatusSections();
+    initFinanceCompletionTabs();
 });
-
-/** Document type labels — aligned with finance-details.js */
-const FINANCE_DOC_TYPE_LABELS = {
-    bol: 'Bill of Lading',
-    commercialInvoice: 'Commercial Invoice',
-    packingList: 'Packing List',
-    shippingInvoice: 'Shipping Invoice',
-    shippingBill: 'Shipping Bill',
-    originCert: 'Certificate of Origin',
-    customsDeclaration: 'Customs Declaration',
-    insuranceCert: 'Insurance Certificate',
-    clientConfirm: 'Client Confirmation',
-    booking: 'Booking Confirmation',
-    draftSi: 'Draft SI',
-    si: 'Shipping Instruction',
-    additionalInvoice: 'Additional Invoice'
-};
-
-async function fetchDocumentsMapForEnquiries(enquiryIds) {
-    const map = {};
-    await Promise.all(
-        enquiryIds.map(async (id) => {
-            try {
-                const r = await fetch(`${CONFIG.API_URL}/api/tracking/enquiry/${id}`);
-                map[id] = r.ok ? await r.json() : [];
-            } catch {
-                map[id] = [];
-            }
-        })
-    );
-    return map;
-}
 
 function escapeHtml(s) {
     if (s == null || s === '') return '';
@@ -103,6 +81,7 @@ function escapeAttr(s) {
 
 let cachedBulkStatus = {};
 let financeReceivedCount = 0;
+let currentFinanceCompletionTab = 'pending';
 
 const STATUS_SECTION_LABELS = {
     sales: {
@@ -202,45 +181,145 @@ function renderListTableRow(e, status = null, options = {}) {
                     <span class="cell-urgency ${urgency.className}">${urgency.text}</span>
                 </div>
             </td>
-            <td data-col="type"><span class="cell-pill cell-pill-blue">${escapeHtml(getShipmentTypeShort(e))}</span></td>
             <td data-col="client" class="cell-upper">${escapeHtml(e.client_name || '—')}</td>
-            <td data-col="commodity" class="cell-upper">${escapeHtml(e.commodity || '—')}</td>
             <td data-col="location">
                 <div class="cell-location">
                     <span class="cell-location-origin">${escapeHtml(truncateText(e.origin, 30))}</span>
                     <span class="cell-location-arrow">→ ${escapeHtml(truncateText(e.destination, 30))}</span>
                 </div>
             </td>
-            <td data-col="container" class="cell-muted">${escapeHtml(e.container_type || '—')}</td>
             <td data-col="required" class="cell-muted">${required}</td>
             <td data-col="status">${statusHtml}</td>
             <td data-col="action">${actionHtml || renderRowActionsMenu(e, extraActionsHtml, quoteStatus)}</td>
         </tr>`;
 }
 
-function renderFinanceActionCell(e, subView) {
+function renderFinanceActionCell(e, subView, completionTab = 'pending') {
+    const isCompleted = completionTab === 'completed';
     if (subView === 'payments') {
-        return e.payment_done
-            ? `<button class="btn btn-secondary table-tool-btn" type="button" onclick="window.location.href='/finance-details?enquiry_id=${e.id}'"><i class="fas fa-check-circle"></i> View Payment</button>`
-            : `<button class="btn btn-primary table-tool-btn" type="button" onclick="window.location.href='/finance-details?enquiry_id=${e.id}'"><i class="fas fa-money-bill-wave"></i> Make Payment</button>`;
+        return (e.payment_done || isCompleted)
+            ? renderFinanceDrawerActionBtn('finance-payment', e.id, { primary: false, icon: 'check-circle', label: 'View', title: 'View payment' })
+            : renderFinanceDrawerActionBtn('finance-payment', e.id, { icon: 'money-bill-wave', label: 'Pay', title: 'Make payment to shipping line' });
     }
     if (subView === 'invoices') {
+        if (isCompleted || e.invoice_complete) {
+            return renderFinanceDrawerActionBtn('finance-invoice', e.id, { primary: false, icon: 'check-circle', label: 'View', title: 'View recorded invoice' });
+        }
         return e.bl_received
-            ? `<button class="btn btn-primary table-tool-btn" type="button" onclick="window.location.href='/create-invoice?enquiry_id=${e.id}'"><i class="fas fa-file-invoice"></i> Create Invoice</button>`
-            : `<button class="btn btn-secondary table-tool-btn" type="button" disabled title="Wait for BL Received status"><i class="fas fa-clock"></i> Awaiting BL</button>`;
+            ? renderFinanceDrawerActionBtn('finance-invoice', e.id, { icon: 'file-invoice', label: 'Invoice', title: 'Create client invoice' })
+            : `<button class="btn btn-secondary table-tool-btn finance-row-action-btn" type="button" disabled title="Wait for BL Received status"><i class="fas fa-clock"></i> Awaiting BL</button>`;
     }
-    return `<button class="btn btn-primary table-tool-btn" type="button" onclick="recordAmountForEnquiry(${e.id})"><i class="fas fa-coins"></i> Record Amount</button>`;
+    return renderFinanceDrawerActionBtn('finance-payment', e.id, { icon: 'coins', label: 'Record', title: 'Record client payment' });
 }
 
-function financeStatusBadge(e, subView) {
+function renderFinanceDrawerActionBtn(mode, id, { primary = true, icon, label, title } = {}) {
+    const btnClass = primary ? 'btn-primary' : 'btn-secondary';
+    return `<button type="button" class="btn ${btnClass} table-tool-btn finance-row-action-btn" onclick="openActionModal('${mode}', ${id})" title="${escapeAttr(title || label)}"><i class="fas fa-${icon}"></i> ${escapeHtml(label)}</button>`;
+}
+
+function updateFinanceTableChrome(subView) {
+    const title = document.querySelector('#financeTableWrap .table-head-title');
+    const sub = document.querySelector('#financeTableWrap .table-head-sub');
+    const requiredHeader = document.querySelector('#financeDataTable th[data-col="required"]');
+    const wrap = document.getElementById('financeTableWrap');
+
+    if (subView === 'received') {
+        if (title) title.textContent = 'Payments Received';
+        if (sub) sub.textContent = 'Record client payments against raised invoices';
+        if (requiredHeader) requiredHeader.textContent = 'Due On';
+        wrap?.classList.add('has-row-action-btns');
+        return;
+    }
+
+    if (title) title.textContent = 'Finance Details';
+    if (sub) sub.textContent = 'Payments, invoices and receipts';
+    if (requiredHeader) requiredHeader.textContent = 'Required On';
+    wrap?.classList.add('has-row-action-btns');
+}
+
+function renderFinanceReceivedInvoiceRow(inv) {
+    const paid = !!inv.is_paid;
+    const statusHtml = paid
+        ? '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> PAID</span>'
+        : '<span class="badge badge-pending"><i class="fas fa-clock"></i> AWAITING PAYMENT</span>';
+    const required = inv.payment_due_date ? formatEnquiryDateTime(inv.payment_due_date) : '—';
+    const invoiceNo = escapeHtml(inv.invoice_number || '—');
+    const actionHtml = paid
+        ? renderFinanceDrawerActionBtn('finance-received', inv.id, { primary: false, icon: 'check-circle', label: 'View', title: 'View payment receipt' })
+        : renderFinanceDrawerActionBtn('finance-received', inv.id, { icon: 'money-bill-wave', label: 'Record', title: 'Record client payment' });
+
+    return `
+        <tr class="list-row">
+            <td data-col="details">
+                <div class="cell-enquiry">
+                    <a class="cell-enquiry-id" href="#" onclick="openActionModal('view-sale', ${inv.enquiry_id || 0}); return false;">${escapeHtml(inv.enquiry_number || '—')}</a>
+                    <div class="cell-enquiry-meta">Invoice ${invoiceNo}</div>
+                </div>
+            </td>
+            <td data-col="client" class="cell-upper">${escapeHtml(inv.client_name || '—')}</td>
+            <td data-col="location">
+                <div class="cell-location">
+                    <span class="cell-location-origin">${escapeHtml(truncateText(inv.origin, 30))}</span>
+                    <span class="cell-location-arrow">→ ${escapeHtml(truncateText(inv.destination, 30))}</span>
+                </div>
+            </td>
+            <td data-col="required" class="cell-muted">${required}</td>
+            <td data-col="status">${statusHtml}</td>
+            <td data-col="action">${actionHtml}</td>
+        </tr>`;
+}
+
+async function renderFinanceReceivedTable(invoices) {
+    const tbody = document.getElementById('financeTable');
+    if (!tbody) return;
+
+    updateFinanceTableChrome('received');
+    updateFinanceStats();
+    financeReceivedCount = (invoices || []).filter((inv) => !inv.is_paid).length;
+    updateFinanceCompletionCounts();
+    updateStatusSectionCounts();
+
+    const showCompleted = currentFinanceCompletionTab === 'completed';
+    const filtered = (invoices || []).filter((inv) => showCompleted ? !!inv.is_paid : !inv.is_paid);
+
+    if (!filtered.length) {
+        const emptyMsg = showCompleted
+            ? 'No completed client payments yet.'
+            : 'No pending client payments. Save an invoice from <strong>Create Invoice</strong> first.';
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">${emptyMsg}</td></tr>`;
+        renderPagination('financePagination', 0, 1, 'changeFinancePage');
+        updateTableRecordsCount('financeTable', 'financeRecordsCount');
+        return;
+    }
+
+    const page = paginationState.finance.currentPage;
+    const total = filtered.length;
+    const startIdx = (page - 1) * PAGE_SIZE;
+    const slice = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+
+    tbody.innerHTML = slice.map((inv) => renderFinanceReceivedInvoiceRow(inv)).join('');
+
+    renderPagination('financePagination', total, page, 'changeFinancePage');
+    applyTableSearchFilter('financeTable', document.getElementById('financeSearchInput'));
+    updateTableRecordsCount('financeTable', 'financeRecordsCount');
+    if (typeof initListTableColumnResize === 'function') {
+        initListTableColumnResize(document.getElementById('financeDataTable'));
+    }
+}
+
+function financeStatusBadge(e, subView, completionTab = 'pending') {
+    const isCompleted = completionTab === 'completed';
     if (subView === 'payments') {
-        return e.payment_done
+        return (e.payment_done || isCompleted)
             ? '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> Payment Done</span>'
             : '<span class="badge badge-pending"><i class="fas fa-clock"></i> Payment Pending</span>';
     }
     if (subView === 'invoices') {
+        if (isCompleted || e.invoice_complete) {
+            return '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> Invoice Complete</span>';
+        }
         return e.bl_received
-            ? '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> BL Received</span>'
+            ? '<span class="badge badge-pending"><i class="fas fa-clock"></i> IRN / Invoice Pending</span>'
             : '<span class="badge badge-pending"><i class="fas fa-clock"></i> Awaiting BL</span>';
     }
     return e.bl_received
@@ -299,21 +378,106 @@ function countTrackingSection(section) {
     }).length;
 }
 
+function isShippingLinePaymentDone(status) {
+    if (!status) return false;
+    return !!(status.pay_line || status.shipping_payment_done);
+}
+
+function isInvoiceCreateCompleted(invoice) {
+    if (!invoice) return false;
+    const invoiceNumber = (invoice.invoice_number || '').trim();
+    const irn = (invoice.irn || '').trim();
+    return !!(invoiceNumber && irn);
+}
+
+async function fetchFinanceInvoicesCache() {
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/invoice/list`);
+        if (!res.ok) return window._financeInvoiceByEnquiry || {};
+        const payload = await res.json();
+        if (!Array.isArray(payload)) return window._financeInvoiceByEnquiry || {};
+        window._financeInvoicesList = payload;
+        const byEnquiry = {};
+        for (const inv of payload) {
+            if (inv.enquiry_id != null) byEnquiry[inv.enquiry_id] = inv;
+        }
+        window._financeInvoiceByEnquiry = byEnquiry;
+        return byEnquiry;
+    } catch (e) {
+        console.error('fetchFinanceInvoicesCache:', e);
+        return window._financeInvoiceByEnquiry || {};
+    }
+}
+
+function getInvoiceForEnquiry(enquiryId) {
+    return (window._financeInvoiceByEnquiry || {})[enquiryId] || null;
+}
+
 function countFinanceSection(section) {
+    return countFinanceCompletion(section, 'pending');
+}
+
+function countFinanceCompletion(section, completionTab) {
     const ops = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
+    const showCompleted = completionTab === 'completed';
+
     if (section === 'payments') {
         return ops.filter((e) => {
             const s = cachedBulkStatus[e.id];
-            return s && s.shipping_invoice && !s.pay_line;
+            if (!s || !s.shipping_invoice) return false;
+            const done = isShippingLinePaymentDone(s);
+            return showCompleted ? done : !done;
         }).length;
     }
     if (section === 'invoices') {
         return ops.filter((e) => {
             const s = cachedBulkStatus[e.id];
-            return s && s.shipping_invoice && s.bl_received && !s.inv_raised;
+            if (!s || !s.shipping_invoice || !s.bl_received) return false;
+            const done = isInvoiceCreateCompleted(getInvoiceForEnquiry(e.id));
+            return showCompleted ? done : !done;
         }).length;
     }
-    return financeReceivedCount;
+    if (section === 'received') {
+        // Pending count for main card comes from financeReceivedCount (invoice list).
+        if (!window._financeReceivedInvoices) return showCompleted ? 0 : financeReceivedCount;
+        return window._financeReceivedInvoices.filter((inv) => showCompleted ? !!inv.is_paid : !inv.is_paid).length;
+    }
+    return 0;
+}
+
+function updateFinanceCompletionCounts() {
+    const tabs = document.getElementById('financeCompletionTabs');
+    if (!tabs || !currentFinanceSubView) return;
+    const pendingEl = tabs.querySelector('[data-completion-count="pending"]');
+    const completedEl = tabs.querySelector('[data-completion-count="completed"]');
+    if (pendingEl) pendingEl.textContent = countFinanceCompletion(currentFinanceSubView, 'pending');
+    if (completedEl) completedEl.textContent = countFinanceCompletion(currentFinanceSubView, 'completed');
+}
+
+function setFinanceCompletionTab(tab) {
+    currentFinanceCompletionTab = tab === 'completed' ? 'completed' : 'pending';
+    const tabs = document.getElementById('financeCompletionTabs');
+    if (tabs) {
+        tabs.querySelectorAll('.finance-completion-tab').forEach((btn) => {
+            const active = btn.dataset.completion === currentFinanceCompletionTab;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+    }
+    updateFinanceCompletionCounts();
+}
+
+function initFinanceCompletionTabs() {
+    const tabs = document.getElementById('financeCompletionTabs');
+    if (!tabs || tabs.dataset.bound) return;
+    tabs.dataset.bound = '1';
+    tabs.querySelectorAll('.finance-completion-tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            setFinanceCompletionTab(btn.dataset.completion);
+            paginationState.finance.currentPage = 1;
+            updateFinanceTable(currentFinanceSubView);
+        });
+    });
 }
 
 function updateStatusSectionCounts() {
@@ -366,6 +530,8 @@ function initStatusSections() {
                 updateTrackingTable(section);
             } else if (view === 'finance') {
                 paginationState.finance.currentPage = 1;
+                currentFinanceCompletionTab = 'pending';
+                setFinanceCompletionTab('pending');
                 const hash = section === 'payments' ? '#finance-payments'
                     : section === 'invoices' ? '#finance-invoices'
                         : '#finance-received';
@@ -487,237 +653,6 @@ function exportVisibleTableToCsv(tableId, tbodyId, filenamePrefix) {
     URL.revokeObjectURL(url);
 }
 
-/** Value for <input type="date"> — never throws */
-function safeDateInputValue(val) {
-    const fallback = () => new Date().toISOString().split('T')[0];
-    if (val == null || val === '') return fallback();
-    if (typeof val === 'string') {
-        const head = val.split('T')[0];
-        if (/^\d{4}-\d{2}-\d{2}$/.test(head)) return head;
-        const d = new Date(val);
-        return Number.isNaN(d.getTime()) ? fallback() : d.toISOString().split('T')[0];
-    }
-    const d = new Date(val);
-    return Number.isNaN(d.getTime()) ? fallback() : d.toISOString().split('T')[0];
-}
-
-function renderFinanceReceivedDocCards(documents) {
-    if (!documents || documents.length === 0) {
-        return '<p style="margin:0; color: var(--text-tertiary); font-size: 13px;">No documents uploaded for this sale yet. Upload from Tracking.</p>';
-    }
-    return `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px;">
-        ${documents.map((doc) => {
-        const filename = (doc.file_path || '').split(/[/\\]/).pop();
-        const fileUrl = `${CONFIG.API_URL}/uploads/${encodeURIComponent(filename)}`;
-        const label = FINANCE_DOC_TYPE_LABELS[doc.document_type] || doc.document_type;
-        return `
-            <div style="padding: 10px; background: var(--gray-50); border: 1px solid var(--border-light); border-radius: 8px; display: flex; align-items: center; gap: 10px;">
-                <div style="width: 32px; height: 32px; background: white; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: var(--primary);">
-                    <i class="fas fa-file-alt"></i>
-                </div>
-                <div style="flex: 1; min-width: 0;">
-                    <div style="font-size: 10px; color: var(--text-tertiary); text-transform: uppercase;">${escapeHtml(label)}</div>
-                    <div style="font-size: 12px; font-weight: 600; color: var(--navy-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${escapeHtml(doc.file_name)}">${escapeHtml(doc.file_name)}</div>
-                </div>
-                <a href="${fileUrl}" target="_blank" rel="noopener" class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; flex-shrink: 0;"><i class="fas fa-eye"></i></a>
-            </div>`;
-    }).join('')}
-    </div>`;
-}
-
-function financeReceivedDetailInner(inv, docs, eid) {
-    const invDate = inv.invoice_date ? new Date(inv.invoice_date).toLocaleDateString() : '—';
-    const dueDate = inv.payment_due_date ? new Date(inv.payment_due_date).toLocaleDateString() : '—';
-    const payDateVal = safeDateInputValue(inv.payment_date);
-    return `
-        <div style="padding: 16px 20px; background: var(--gray-50); border-top: 1px solid var(--border-light);">
-            <div style="display: flex; flex-wrap: wrap; gap: 12px 24px; margin-bottom: 14px; font-size: 12px; color: var(--text-secondary);">
-                <span><strong style="color: var(--text-tertiary);">Invoice</strong> ${escapeHtml(inv.invoice_number || '—')}</span>
-                <span><strong style="color: var(--text-tertiary);">Invoice date</strong> ${invDate}</span>
-                <span><strong style="color: var(--text-tertiary);">Due</strong> ${dueDate}</span>
-            </div>
-            <div style="margin-bottom: 16px;">
-                <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 8px;">Related documents</div>
-                ${renderFinanceReceivedDocCards(docs)}
-                ${eid ? `<div style="margin-top: 10px;"><a href="/upload-track?enquiry_id=${eid}" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px;"><i class="fas fa-upload"></i> Tracking</a></div>` : ''}
-            </div>
-            <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 10px;">Payment received</div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; align-items: end;">
-                <div class="form-group" style="margin: 0;">
-                    <label style="font-size: 11px; font-weight: 600; color: var(--text-tertiary);">Type</label>
-                    <select class="form-control fr-pay-type" style="padding: 8px; font-size: 13px;">
-                        <option value="NEFT" ${inv.payment_type === 'NEFT' || !inv.payment_type ? 'selected' : ''}>NEFT</option>
-                        <option value="RTGS" ${inv.payment_type === 'RTGS' ? 'selected' : ''}>RTGS</option>
-                        <option value="IMPS" ${inv.payment_type === 'IMPS' ? 'selected' : ''}>IMPS</option>
-                        <option value="Cheque" ${inv.payment_type === 'Cheque' ? 'selected' : ''}>Cheque</option>
-                        <option value="Cash" ${inv.payment_type === 'Cash' ? 'selected' : ''}>Cash</option>
-                        <option value="UPI" ${inv.payment_type === 'UPI' ? 'selected' : ''}>UPI</option>
-                    </select>
-                </div>
-                <div class="form-group" style="margin: 0;">
-                    <label style="font-size: 11px; font-weight: 600; color: var(--text-tertiary);">Received date</label>
-                    <input type="date" class="form-control fr-pay-date" value="${payDateVal}" style="padding: 8px; font-size: 13px;">
-                </div>
-                <div class="form-group" style="margin: 0;">
-                    <label style="font-size: 11px; font-weight: 600; color: var(--text-tertiary);">UTR / reference</label>
-                    <input type="text" class="form-control fr-pay-ref" placeholder="Reference" value="${escapeAttr(inv.payment_reference || '')}" style="padding: 8px; font-size: 13px;">
-                </div>
-                <div class="form-group" style="margin: 0;">
-                    <label style="font-size: 11px; font-weight: 600; color: var(--text-tertiary);">Amount (INR)</label>
-                    <input type="number" class="form-control fr-pay-amt" placeholder="0" min="0" step="0.01" value="${inv.received_amount != null && inv.received_amount !== '' ? escapeHtml(String(inv.received_amount)) : ''}" style="padding: 8px; font-size: 13px;">
-                </div>
-                <div style="display: flex; gap: 8px; flex-wrap: wrap; align-items: center;">
-                    <button type="button" class="btn btn-primary fr-save-pay" data-invoice-id="${inv.id}" style="padding: 10px 16px; font-size: 13px;">
-                        <i class="fas fa-coins"></i> Save payment
-                    </button>
-                </div>
-            </div>
-        </div>`;
-}
-
-async function renderFinanceReceivedView(invoices) {
-    const container = document.getElementById('financeReceivedSections');
-    if (!container) return;
-
-    updateFinanceStats();
-    financeReceivedCount = (invoices || []).filter((inv) => !inv.is_paid).length;
-    updateStatusSectionCounts();
-
-    if (!invoices || invoices.length === 0) {
-        container.innerHTML = `
-            <div class="table-container table-card" style="padding: 48px; text-align: center;">
-                <p style="color: var(--text-secondary); margin: 0;">No invoices recorded in the database yet. Save an invoice from <strong>Create Client Invoice</strong> first.</p>
-            </div>`;
-        renderPagination('financePagination', 0, 1, 'changeFinancePage');
-        updateTableRecordsCount('financeReceivedTableBody', 'financeRecordsCount');
-        return;
-    }
-
-    const page = paginationState.finance.currentPage;
-    const total = invoices.length;
-    const startIdx = (page - 1) * PAGE_SIZE;
-    const slice = invoices.slice(startIdx, startIdx + PAGE_SIZE);
-
-    const enquiryIds = [...new Set(slice.map((i) => i.enquiry_id).filter(Boolean))];
-    const docsMap = await fetchDocumentsMapForEnquiries(enquiryIds);
-
-    const bodyRows = slice.map((inv) => {
-        const eid = inv.enquiry_id;
-        const docs = eid ? docsMap[eid] || [] : [];
-        const paid = !!inv.is_paid;
-        const statusHtml = paid
-            ? '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> PAID</span>'
-            : '<span class="badge badge-pending"><i class="fas fa-clock"></i> AWAITING PAYMENT</span>';
-
-        const rowEnquiry = {
-            id: eid || 0,
-            enquiry_number: inv.enquiry_number || '—',
-            created_at: inv.invoice_date,
-            stuffing_date: inv.payment_due_date,
-            shipment_type: 'INVOICE',
-            client_name: inv.client_name,
-            commodity: inv.invoice_number,
-            origin: inv.origin,
-            destination: inv.destination,
-            container_type: '—',
-            is_void: false
-        };
-
-        const actionHtml = `<button type="button" class="btn btn-primary table-tool-btn" onclick="toggleFinanceReceivedDetail(${inv.id})"><i class="fas fa-money-bill-wave"></i> Record Amount</button>`;
-
-        return `
-            ${renderListTableRow(rowEnquiry, null, { statusHtml, actionHtml })}
-            <tr class="fr-detail-row" id="fr-detail-${inv.id}" style="display: none;">
-                <td colspan="9" style="padding: 0; vertical-align: top;">
-                    ${financeReceivedDetailInner(inv, docs, eid)}
-                </td>
-            </tr>`;
-    }).join('');
-
-    container.innerHTML = `
-        <div class="table-head">
-            <div class="table-head-left">
-                <div class="table-head-title">Payments Received</div>
-                <div class="table-head-sub">Record client payments against raised invoices</div>
-            </div>
-            <div class="table-head-right">
-                <div class="records-pill">
-                    <i class="fas fa-list"></i>
-                    <span id="financeRecordsCount">${slice.length}</span> records
-                </div>
-            </div>
-        </div>
-        <div class="list-table-scroll">
-        <table class="data-table list-table" id="financeReceivedDataTable">
-            <thead>
-                <tr>
-                    <th data-col="details">Enquiry Details</th>
-                    <th data-col="type">Enquiry Type</th>
-                    <th data-col="client">Client Name</th>
-                    <th data-col="commodity">Invoice #</th>
-                    <th data-col="location">Location</th>
-                    <th data-col="container">Container</th>
-                    <th data-col="required">Due On</th>
-                    <th data-col="status">Finance Status</th>
-                    <th data-col="action">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="financeReceivedTableBody">${bodyRows}</tbody>
-        </table>
-        </div>`;
-
-    renderPagination('financePagination', total, page, 'changeFinancePage');
-    if (typeof initListTableColumnResize === 'function') {
-        initListTableColumnResize(document.getElementById('financeReceivedDataTable'));
-    }
-}
-
-window.toggleFinanceReceivedDetail = function (invoiceId) {
-    const row = document.getElementById(`fr-detail-${invoiceId}`);
-    if (!row) return;
-    const open = row.style.display !== 'none';
-    row.style.display = open ? 'none' : 'table-row';
-};
-
-async function handleFinanceReceivedClick(ev) {
-    const btn = ev.target.closest('.fr-save-pay');
-    if (!btn || currentFinanceSubView !== 'received') return;
-
-    const invoiceId = btn.dataset.invoiceId;
-    const detailRow = btn.closest('tr.fr-detail-row');
-    if (!invoiceId || !detailRow) return;
-
-    const payment_date = detailRow.querySelector('.fr-pay-date')?.value;
-    const payment_type = detailRow.querySelector('.fr-pay-type')?.value;
-    const payment_reference = (detailRow.querySelector('.fr-pay-ref')?.value || '').trim();
-    const received_amount = parseFloat(detailRow.querySelector('.fr-pay-amt')?.value);
-
-    if (!payment_date || !payment_reference || Number.isNaN(received_amount) || received_amount <= 0) {
-        showModal('Missing details', 'Please enter received date, UTR/reference, and a positive amount.', 'warning');
-        return;
-    }
-
-    const payload = { payment_date, payment_type, payment_reference, received_amount };
-
-    try {
-        const response = await fetch(`${CONFIG.API_URL}/api/invoice/payment/${invoiceId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        if (response.ok) {
-            showModal('Saved', 'Payment details recorded successfully.', 'success');
-            await updateFinanceTable('received');
-            await fetchDashboardStats();
-        } else {
-            const err = await response.json().catch(() => ({}));
-            showModal('Error', err.detail || 'Failed to save payment', 'error');
-        }
-    } catch (e) {
-        showModal('Error', e.message || 'Network error', 'error');
-    }
-}
-
 async function fetchDashboardStats() {
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/dashboard/stats`);
@@ -747,6 +682,135 @@ async function fetchDashboardStats() {
         updateStatusSectionCounts();
     } catch (error) {
         console.error('Error fetching dashboard stats:', error);
+    }
+}
+
+function formatInrAmount(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '—';
+    return `₹${Math.round(n).toLocaleString('en-IN')}`;
+}
+
+function formatInrLakhs(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '—';
+    const abs = Math.abs(n);
+    if (abs >= 100000) {
+        return `₹${(n / 100000).toFixed(2)} L`;
+    }
+    if (abs >= 1000) {
+        return `₹${(n / 1000).toFixed(2)} K`;
+    }
+    return formatInrAmount(n);
+}
+
+function formatMarginPct(value, digits = 1) {
+    if (value == null || !Number.isFinite(Number(value))) return '—';
+    return `${Number(value).toFixed(digits)}%`;
+}
+
+function analyticsValueClass(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n === 0) return '';
+    return n > 0 ? 'positive' : 'negative';
+}
+
+function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+function buildMarginGaugeSvg(pct) {
+    const p = Math.min(100, Math.max(0, Number(pct) || 0));
+    const r = 34;
+    const c = 2 * Math.PI * r;
+    const offset = c - (p / 100) * c;
+    return `<svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="8" /><circle cx="40" cy="40" r="${r}" fill="none" stroke="#f97316" stroke-width="8" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" stroke-linecap="round" transform="rotate(-90 40 40)" /></svg>`;
+}
+
+function renderAnalyticsSummary(summary) {
+    const total = summary.total_enquiries ?? 0;
+    const marginPct = summary.margin_pct;
+    const marginClass = analyticsValueClass(marginPct);
+
+    setText('analyticsTripsBadge', `${total} Total`);
+    setText('analyticsTripsValue', String(total));
+    setText('analyticsRecordsBadge', `${total} Records`);
+
+    setText('analyticsRevenue', formatInrLakhs(summary.total_revenue_inr));
+    setText('analyticsCost', formatInrLakhs(summary.total_cost_inr));
+    setText('analyticsCostMarginPill', `Net Margin: ${formatMarginPct(marginPct, 1)}`);
+    setText('analyticsCapture', formatInrLakhs(summary.capture_inr));
+
+    const captureEl = document.getElementById('analyticsCapture');
+    if (captureEl) {
+        captureEl.classList.remove('positive', 'negative');
+        if (marginClass) captureEl.classList.add(marginClass);
+    }
+
+    const marginPctText = formatMarginPct(marginPct, 2);
+    setText('analyticsMarginPct', marginPctText);
+
+    const trendBadge = document.getElementById('analyticsMarginTrendBadge');
+    if (trendBadge) {
+        const positive = Number(marginPct) >= 0;
+        trendBadge.textContent = `${positive ? '↗' : '↘'} ${marginPctText}`;
+        trendBadge.classList.toggle('positive', positive);
+        trendBadge.classList.toggle('negative', !positive && marginPct != null);
+    }
+
+    const gaugeWrap = document.getElementById('analyticsMarginGauge');
+    if (gaugeWrap) {
+        const iconHtml = '<div class="biz-kpi-gauge-icon"><i class="fas fa-bullseye"></i></div>';
+        gaugeWrap.innerHTML = buildMarginGaugeSvg(marginPct) + iconHtml;
+    }
+}
+
+async function fetchDashboardAnalytics() {
+    const tbody = document.getElementById('analyticsEnquiryTable');
+    if (tbody) {
+        tbody.innerHTML = '<tr class="analytics-loading-row"><td colspan="8">Loading analytics…</td></tr>';
+    }
+
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/dashboard/analytics`);
+        if (!response.ok) {
+            console.error('Dashboard analytics HTTP error:', response.status, await response.text());
+            if (tbody) {
+                tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="8">Could not load analytics.</td></tr>';
+            }
+            return;
+        }
+
+        const data = await response.json();
+        const summary = data.summary || {};
+        renderAnalyticsSummary(summary);
+
+        if (!tbody) return;
+
+        const rows = Array.isArray(data.enquiries) ? data.enquiries : [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="8">No economics data yet. Add rows to enquiry_economics.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map((row) => `
+                <tr>
+                    <td><a href="#shipment/${row.enquiry_id}" class="table-link">${escapeHtml(row.enquiry_number || '—')}</a></td>
+                    <td>${escapeHtml(row.master_number || '—')}</td>
+                    <td>${escapeHtml(row.client_name || '—')}</td>
+                    <td>${escapeHtml(row.route || '—')}</td>
+                    <td class="num">${formatInrAmount(row.cost_inr)}</td>
+                    <td class="num">${formatInrAmount(row.revenue_inr)}</td>
+                    <td class="num ${analyticsValueClass(row.capture_inr)}">${formatInrAmount(row.capture_inr)}</td>
+                    <td class="num ${analyticsValueClass(row.margin_pct)}">${formatMarginPct(row.margin_pct)}</td>
+                </tr>
+            `).join('');
+    } catch (error) {
+        console.error('Error fetching dashboard analytics:', error);
+        if (tbody) {
+            tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="8">Could not load analytics.</td></tr>';
+        }
     }
 }
 
@@ -897,7 +961,6 @@ async function showFinanceView(subView = null) {
 
     const financeGroup = document.getElementById('financeRailGroup');
     closeOtherRailGroups(financeGroup);
-    if (financeGroup) financeGroup.classList.add('is-open');
 
     const section = subView || currentFinanceSubView || 'payments';
     setActiveStatusSection('finance', section);
@@ -923,6 +986,10 @@ async function showFinanceView(subView = null) {
     }
 
     paginationState.finance.currentPage = 1;
+    setFinanceCompletionTab(currentFinanceCompletionTab);
+    if (section === 'invoices') {
+        await fetchFinanceInvoicesCache();
+    }
     await updateFinanceTable(section);
 }
 
@@ -1113,7 +1180,7 @@ async function updateAllEnquiriesTable(filterType = null) {
     currentAllEnquiriesFilter = filterType;
     const tbody = document.getElementById('allEnquiriesTable');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading...</td></tr>';
 
     let filteredEnquiries = enquiries;
     if (filterType === 'pending_pricing') {
@@ -1125,7 +1192,7 @@ async function updateAllEnquiriesTable(filterType = null) {
     updateStatusSectionCounts();
 
     if (filteredEnquiries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">No records found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
         renderPagination('allEnquiriesPagination', 0, 1, 'changeAllEnquiriesPage');
         updateTableRecordsCount('allEnquiriesTable', 'enquiriesRecordsCount');
         updateViewStatusPill('sales', filterType || 'all');
@@ -1180,7 +1247,6 @@ function renderQuotesListRow(e, quoteInfo = {}) {
                     <span class="cell-urgency ${urgency.className}">${urgency.text}</span>
                 </div>
             </td>
-            <td data-col="type"><span class="cell-pill cell-pill-blue">${escapeHtml(getShipmentTypeShort(e))}</span></td>
             <td data-col="client" class="cell-upper">${escapeHtml(e.client_name || '—')}</td>
             <td data-col="location">
                 <div class="cell-location">
@@ -1212,7 +1278,6 @@ function renderTrackingListRow(e, status = null, extraActionsHtml = '') {
                     <span class="cell-urgency ${urgency.className}">${urgency.text}</span>
                 </div>
             </td>
-            <td data-col="type"><span class="cell-pill cell-pill-blue">${escapeHtml(getShipmentTypeShort(e))}</span></td>
             <td data-col="client" class="cell-upper">${escapeHtml(e.client_name || '—')}</td>
             <td data-col="location">
                 <div class="cell-location">
@@ -1298,13 +1363,13 @@ async function updateQuotesTable() {
     const paginatedEnquiries = pricingEnquiries.slice(startIdx, startIdx + PAGE_SIZE);
 
     if (total === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">No records found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No records found.</td></tr>';
         renderPagination('quotesPagination', 0, 1, 'changeQuotesPage');
         updateTableRecordsCount('quotesTable', 'quotesRecordsCount');
         return;
     }
 
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading...</td></tr>';
 
     const rowsHtml = await Promise.all(paginatedEnquiries.map(async (e) => {
         let quoteInfo = { line: '—', total: '—', status: 'Draft' };
@@ -1339,11 +1404,11 @@ async function updateTrackingTable(filterType = null) {
     currentTrackingFilter = filterType || 'pending_booking';
     const tbody = document.getElementById('trackingTable');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading...</td></tr>';
 
     const trackingEnquiries = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
     if (trackingEnquiries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No records found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
         renderPagination('trackingPagination', 0, 1, 'changeTrackingPage');
         updateTableRecordsCount('trackingTable', 'trackingRecordsCount');
         updateViewStatusPill('tracking', currentTrackingFilter);
@@ -1369,7 +1434,7 @@ async function updateTrackingTable(filterType = null) {
 
     const total = filteredResults.length;
     if (total === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No records found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
         renderPagination('trackingPagination', 0, 1, 'changeTrackingPage');
         updateTableRecordsCount('trackingTable', 'trackingRecordsCount');
         updateViewStatusPill('tracking', currentTrackingFilter);
@@ -1405,11 +1470,13 @@ async function updateFinanceTable(subView = null) {
     updateViewStatusPill('finance', currentFinanceSubView);
 
     if (currentFinanceSubView === 'received') {
-        if (tableWrap) tableWrap.style.display = 'none';
+        if (!tbody) return;
+        if (tableWrap) tableWrap.style.display = 'block';
         if (receivedEl) {
-            receivedEl.style.display = 'block';
-            receivedEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-tertiary);">Loading invoices…</div>';
+            receivedEl.style.display = 'none';
+            receivedEl.innerHTML = '';
         }
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading invoices…</td></tr>';
         try {
             const res = await fetch(`${CONFIG.API_URL}/api/invoice/list`);
             let payload;
@@ -1419,32 +1486,28 @@ async function updateFinanceTable(subView = null) {
                 throw new Error('Server did not return JSON (check API URL / login).');
             }
             if (res.ok && Array.isArray(payload)) {
+                window._financeReceivedInvoices = payload;
                 financeReceivedCount = payload.filter((inv) => !inv.is_paid).length;
                 updateStatusSectionCounts();
+                updateFinanceCompletionCounts();
                 try {
-                    await renderFinanceReceivedView(payload);
+                    await renderFinanceReceivedTable(payload);
                 } catch (re) {
-                    console.error('renderFinanceReceivedView:', re);
-                    if (receivedEl) {
-                        receivedEl.innerHTML = `<div class="table-container" style="padding:32px;text-align:center;color:var(--text-secondary);">Could not render invoice list. ${escapeHtml(re.message || String(re))}</div>`;
-                    }
+                    console.error('renderFinanceReceivedTable:', re);
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">Could not render invoice list. ${escapeHtml(re.message || String(re))}</td></tr>`;
                     renderPagination('financePagination', 0, 1, 'changeFinancePage');
                     updateFinanceStats();
                 }
             } else {
                 const detail = payload && payload.detail != null ? String(payload.detail) : `HTTP ${res.status}`;
-                if (receivedEl) {
-                    receivedEl.innerHTML = `<div class="table-container" style="padding:32px;text-align:center;color:var(--text-secondary);">Could not load invoices. ${escapeHtml(detail)}</div>`;
-                }
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">Could not load invoices. ${escapeHtml(detail)}</td></tr>`;
                 renderPagination('financePagination', 0, 1, 'changeFinancePage');
                 updateFinanceStats();
             }
         } catch (err) {
             console.error('Error fetching invoices:', err);
             const hint = err && err.message ? err.message : String(err);
-            if (receivedEl) {
-                receivedEl.innerHTML = `<div class="table-container" style="padding:32px;text-align:center;color:var(--text-secondary);"><p>Error loading invoices.</p><p style="font-size:13px;margin-top:8px;color:var(--text-tertiary);">${escapeHtml(hint)}</p></div>`;
-            }
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">Error loading invoices. ${escapeHtml(hint)}</td></tr>`;
             renderPagination('financePagination', 0, 1, 'changeFinancePage');
             updateFinanceStats();
         }
@@ -1459,11 +1522,12 @@ async function updateFinanceTable(subView = null) {
         receivedEl.innerHTML = '';
     }
 
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Loading...</td></tr>';
+    updateFinanceTableChrome(currentFinanceSubView);
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading...</td></tr>';
 
     const operationalEnquiries = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
     if (operationalEnquiries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">No records found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
         renderPagination('financePagination', 0, 1, 'changeFinancePage');
         updateFinanceStats();
         updateStatusSectionCounts();
@@ -1471,35 +1535,49 @@ async function updateFinanceTable(subView = null) {
     }
 
     const ids = operationalEnquiries.map((e) => e.id);
-    const bulkStatus = Object.keys(cachedBulkStatus).length
-        ? cachedBulkStatus
-        : await fetchBulkStatus(ids);
-    if (!Object.keys(cachedBulkStatus).length) cachedBulkStatus = bulkStatus;
+    const [bulkStatus] = await Promise.all([
+        fetchBulkStatus(ids),
+        currentFinanceSubView === 'invoices' ? fetchFinanceInvoicesCache() : Promise.resolve(null),
+    ]);
+    cachedBulkStatus = { ...cachedBulkStatus, ...bulkStatus };
 
     const financeEnquiries = operationalEnquiries
         .map((e) => {
             const s = bulkStatus[e.id] || null;
             if (!s || !s.shipping_invoice) return null;
+            const savedInvoice = getInvoiceForEnquiry(e.id);
             return {
                 ...e,
                 bl_received: !!s.bl_received,
-                payment_done: !!s.pay_line,
-                inv_raised: !!s.inv_raised
+                payment_done: isShippingLinePaymentDone(s),
+                invoice_complete: isInvoiceCreateCompleted(savedInvoice),
             };
         })
         .filter(Boolean)
         .filter((e) => {
             const s = bulkStatus[e.id] || null;
-            if (currentFinanceSubView === 'payments') return s && !s.pay_line;
-            if (currentFinanceSubView === 'invoices') return s && s.bl_received && !s.inv_raised;
+            const showCompleted = currentFinanceCompletionTab === 'completed';
+            if (currentFinanceSubView === 'payments') {
+                if (!s) return false;
+                const done = isShippingLinePaymentDone(s);
+                return showCompleted ? done : !done;
+            }
+            if (currentFinanceSubView === 'invoices') {
+                if (!s || !s.bl_received) return false;
+                return showCompleted ? e.invoice_complete : !e.invoice_complete;
+            }
             return true;
         });
 
     updateStatusSectionCounts();
+    updateFinanceCompletionCounts();
 
     const total = financeEnquiries.length;
     if (total === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">No records found.</td></tr>';
+        const emptyMsg = currentFinanceCompletionTab === 'completed'
+            ? 'No completed records in this section yet.'
+            : 'No pending records found.';
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">${emptyMsg}</td></tr>`;
         renderPagination('financePagination', 0, 1, 'changeFinancePage');
         updateFinanceStats();
         updateTableRecordsCount('financeTable', 'financeRecordsCount');
@@ -1511,8 +1589,8 @@ async function updateFinanceTable(subView = null) {
     const paginatedFinance = financeEnquiries.slice(startIdx, startIdx + PAGE_SIZE);
 
     tbody.innerHTML = paginatedFinance.map((e) => renderListTableRow(e, bulkStatus[e.id] || null, {
-        statusHtml: financeStatusBadge(e, currentFinanceSubView),
-        actionHtml: renderFinanceActionCell(e, currentFinanceSubView)
+        statusHtml: financeStatusBadge(e, currentFinanceSubView, currentFinanceCompletionTab),
+        actionHtml: renderFinanceActionCell(e, currentFinanceSubView, currentFinanceCompletionTab)
     })).join('');
 
     renderPagination('financePagination', total, page, 'changeFinancePage');
@@ -1521,16 +1599,36 @@ async function updateFinanceTable(subView = null) {
     updateFinanceStats();
 }
 
+window.refreshFinanceView = function refreshFinanceView() {
+    return updateFinanceTable(currentFinanceSubView);
+};
+
+window.applyFinanceSavedRefresh = async function applyFinanceSavedRefresh(options = {}) {
+    if (options.section) {
+        currentFinanceSubView = options.section;
+        setActiveStatusSection('finance', options.section);
+    }
+    if (options.moveToCompleted) {
+        currentFinanceCompletionTab = 'completed';
+        setFinanceCompletionTab('completed');
+    }
+    if (typeof refreshBulkStatusCache === 'function') await refreshBulkStatusCache();
+    if (options.section === 'invoices' || currentFinanceSubView === 'invoices') {
+        await fetchFinanceInvoicesCache();
+    }
+    await updateFinanceTable(currentFinanceSubView || 'payments');
+    if (typeof updateFinanceStats === 'function') updateFinanceStats();
+    if (typeof updateStatusSectionCounts === 'function') updateStatusSectionCounts();
+    if (typeof updateFinanceCompletionCounts === 'function') updateFinanceCompletionCounts();
+    if (typeof fetchDashboardStats === 'function') fetchDashboardStats();
+};
+
+window.setFinanceCompletionTab = setFinanceCompletionTab;
+
 async function updateFinanceStats() {
-    const paymentsMade = document.getElementById('financePaymentsMade');
     const invoicesRaised = document.getElementById('financeInvoicesRaised');
     const paymentPending = document.getElementById('paymentPendingCount');
-    const paymentsReceived = document.getElementById('financePaymentsReceived');
-    const financeInline = document.getElementById('financeTotalInline');
-
-    if (paymentsMade) paymentsMade.textContent = '0';
-    if (paymentsReceived) paymentsReceived.textContent = '0';
-    if (financeInline) financeInline.textContent = '0';
+    if (!invoicesRaised && !paymentPending) return;
 
     try {
         const statsRes = await fetch(`${CONFIG.API_URL}/api/dashboard/stats`);
@@ -1538,12 +1636,6 @@ async function updateFinanceStats() {
             const sData = await statsRes.json();
             if (invoicesRaised) invoicesRaised.textContent = sData.invoices_raised || '0';
             if (paymentPending) paymentPending.textContent = sData.payment_pending || '0';
-            if (paymentsMade) paymentsMade.textContent = sData.payments_made || '0';
-            if (paymentsReceived) paymentsReceived.textContent = sData.received_payments || '0';
-            if (financeInline) {
-                const total = (sData.payments_made || 0) + (sData.invoices_raised || 0) + (sData.received_payments || 0);
-                financeInline.textContent = total;
-            }
         }
     } catch (e) {
         console.error(e);
@@ -1551,24 +1643,24 @@ async function updateFinanceStats() {
 }
 
 window.openPaymentModal = function (invoiceId) {
-    window.location.href = `/record-payment?invoice_id=${invoiceId}`;
+    openActionModal('finance-received', invoiceId);
 };
 
-/** Client receipt: open record-payment if this sale has a saved invoice, else Finance Received list */
+/** Client receipt: open record-payment drawer if this sale has a saved invoice, else Finance Received list */
 window.recordAmountForEnquiry = async function (enquiryId) {
     try {
         const res = await fetch(`${CONFIG.API_URL}/api/invoice/details/${enquiryId}`);
         if (res.ok) {
             const inv = await res.json();
             if (inv && inv.id) {
-                window.location.href = `/record-payment?invoice_id=${inv.id}`;
+                openActionModal('finance-received', inv.id);
                 return;
             }
         }
     } catch (err) {
         console.error('recordAmountForEnquiry:', err);
     }
-    window.location.href = '/#finance-received';
+    showFinanceView('received');
 };
 
 /**
@@ -1588,7 +1680,7 @@ function getEnquiryStatusLabel(e, status = null) {
             if (!status.si_submitted) return { label: 'SI to be submitted', color: '#0891b2', bg: '#cffafe' };
             if (!status.bl_received) return { label: 'BL to be received', color: '#b45309', bg: '#fef9c3' };
             if (!status.sob) return { label: 'SOB Remaining', color: '#6d28d9', bg: '#ede9fe' };
-            if (!status.pay_line) return { label: 'Payment Pending at Shipping Line', color: '#dc2626', bg: '#fee2e2' };
+            if (!isShippingLinePaymentDone(status)) return { label: 'Payment Pending at Shipping Line', color: '#dc2626', bg: '#fee2e2' };
             if (!status.inv_raised) return { label: 'Pending Invoices', color: '#b45309', bg: '#fef3c7' };
             if (!status.pay_client) return { label: 'Payment Pending for Client', color: '#0f766e', bg: '#ccfbf1' };
             return { label: 'Completed', color: '#059669', bg: '#d1fae5' };
@@ -1636,24 +1728,31 @@ function renderEnquiryActions(e, quoteStatus = null) {
         </button>
     `;
 
-    // Pricing context
+    // Pricing context — amounts are locked once quote is accepted (stage 3+)
     if (!e.is_void) {
-        if (quoteStatus === 'Draft') {
+        if (e.stage >= 3 || quoteStatus === 'Accepted') {
+            html += `
+                <button class="actions-item" onclick="openActionModal('view-quotes', ${e.id})">
+                    <i class="fas fa-file-invoice-dollar"></i> View Quotes
+                </button>
+            `;
+        } else if (quoteStatus === 'Draft' || !quoteStatus) {
             html += `
                 <button class="actions-item" onclick="openActionModal('edit-quotes', ${e.id})">
                     <i class="fas fa-edit"></i> Edit Quotes
                 </button>
             `;
+            if (e.stage === 2) {
+                html += `
+                    <button class="actions-item confirm-item confirm-action" onclick="openActionModal('confirm-quote', ${e.id})">
+                        <i class="fas fa-check-double"></i> Confirm Quote
+                    </button>
+                `;
+            }
         } else if (e.stage === 2) {
             html += `
                 <button class="actions-item confirm-item confirm-action" onclick="openActionModal('confirm-quote', ${e.id})">
                     <i class="fas fa-check-double"></i> Confirm Quote
-                </button>
-            `;
-        } else if (e.stage >= 3) {
-            html += `
-                <button class="actions-item" onclick="openActionModal('view-quotes', ${e.id})">
-                    <i class="fas fa-file-invoice-dollar"></i> View Quotes
                 </button>
             `;
         }

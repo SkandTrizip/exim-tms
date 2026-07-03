@@ -75,8 +75,17 @@ async function savePayment() {
         });
 
         if (response.ok) {
-            alert('Payment recorded successfully');
-            window.location.href = '/#finance-received';
+            if (typeof notifyFinanceParentRefresh === 'function') {
+                notifyFinanceParentRefresh({ close: true, section: 'received', moveToCompleted: true });
+            }
+            if (typeof showModal === 'function') {
+                showModal('Success', 'Payment recorded successfully', 'success');
+            } else {
+                alert('Payment recorded successfully');
+            }
+            if (!isEmbeddedDrawer()) {
+                window.location.href = '/#finance-received';
+            }
         } else {
             const err = await response.json();
             alert('Error: ' + (err.detail || 'Failed to save payment'));

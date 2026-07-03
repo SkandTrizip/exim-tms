@@ -10,7 +10,7 @@ from backend.utils.logger import logger
 router = APIRouter(prefix="/tracking", tags=["Tracking & Documents"])
 
 @router.post("/")
-async def upload_documents(
+def upload_documents(
     tracking_data: str = Form(...),
     bol: Optional[UploadFile] = File(None),
     bl: Optional[UploadFile] = File(None),
@@ -90,7 +90,7 @@ async def upload_documents(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/status/bulk")
-async def get_status_bulk(ids: str, db: Session = Depends(get_db)):
+def get_status_bulk(ids: str, db: Session = Depends(get_db)):
     """
     Get shipment statuses for multiple enquiries in a single DB call.
     ids: comma-separated list of enquiry IDs, e.g. '1,2,3'
@@ -102,10 +102,20 @@ async def get_status_bulk(ids: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid ids parameter")
 
     from backend.models.shipment_status import ShipmentStatus
+    from backend.models.finance import ShippingPayment
+
     statuses = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id.in_(id_list)).all()
+    payment_rows = (
+        db.query(ShippingPayment.enquiry_id)
+        .filter(ShippingPayment.enquiry_id.in_(id_list))
+        .distinct()
+        .all()
+    )
+    paid_enquiry_ids = {row[0] for row in payment_rows}
 
     result = {}
     for s in statuses:
+        has_payment = s.enquiry_id in paid_enquiry_ids or s.pay_line is not None
         result[s.enquiry_id] = {
             "enquiry_id":       s.enquiry_id,
             "booking_confirmed": s.booking_confirmed,
@@ -116,17 +126,18 @@ async def get_status_bulk(ids: str, db: Session = Depends(get_db)):
             "inv_raised":       s.inv_raised,
             "pay_client":       s.pay_client,
             "shipping_invoice": s.shipping_invoice,
+            "shipping_payment_done": has_payment,
             "master_number":    getattr(s, 'master_number', None),
         }
     return result
 
 @router.get("/status/{enquiry_id}")
-async def get_status(enquiry_id: int, db: Session = Depends(get_db)):
+def get_status(enquiry_id: int, db: Session = Depends(get_db)):
     """Get shipment status checklist for an enquiry"""
     return status_service.get_shipment_status(db, enquiry_id)
 
 @router.post("/status/{enquiry_id}")
-async def update_status(enquiry_id: int, status_data: dict, db: Session = Depends(get_db)):
+def update_status(enquiry_id: int, status_data: dict, db: Session = Depends(get_db)):
     """Update shipment status checklist and metadata for an enquiry"""
     try:
         return status_service.update_shipment_status(db, enquiry_id, status_data)
@@ -135,12 +146,12 @@ async def update_status(enquiry_id: int, status_data: dict, db: Session = Depend
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/enquiry/{enquiry_id}", response_model=List[ShipmentDocument])
-async def get_enquiry_documents(enquiry_id: int, db: Session = Depends(get_db)):
+def get_enquiry_documents(enquiry_id: int, db: Session = Depends(get_db)):
     """Get all documents for a specific enquiry"""
     return document_service.get_documents_by_enquiry(db, enquiry_id)
 
 @router.post("/upload-single")
-async def upload_single_document(
+def upload_single_document(
     enquiry_id: int = Form(...),
     document_type: str = Form(...),
     metadata: Optional[str] = Form(None),

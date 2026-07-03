@@ -73,6 +73,13 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
 
         new_invoice = Invoice(**payload)
         db.add(new_invoice)
+
+        status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == invoice.enquiry_id).first()
+        if not status:
+            status = ShipmentStatus(enquiry_id=invoice.enquiry_id)
+            db.add(status)
+        status.inv_raised = datetime.datetime.now()
+
         db.commit()
         db.refresh(new_invoice)
         logger.info(f"Successfully recorded invoice {invoice.invoice_number} with ID {new_invoice.id}")
@@ -129,6 +136,8 @@ def list_all_invoices(db: Session = Depends(get_db)):
             "payment_reference": inv.payment_reference,
             "received_amount": inv.received_amount,
             "status": inv.status,
+            "irn": inv.irn,
+            "customer_invoice_no": inv.customer_invoice_no,
             "item_type": getattr(inv, "item_type", "all")
         }
         result.append(inv_dict)
@@ -160,7 +169,7 @@ def record_invoice_payment(invoice_id: int, payment: InvoicePayment, db: Session
 
 
 @router.get("/generate/{enquiry_id}")
-async def generate_invoice_pdf(
+def generate_invoice_pdf(
     enquiry_id: int, 
     invoice_number: str,
     invoice_date: str,

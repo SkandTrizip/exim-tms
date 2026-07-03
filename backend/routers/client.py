@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import datetime
 from backend.routers.auth import require_admin, get_current_user
@@ -25,7 +25,11 @@ def get_all_client_masters(db: Session = Depends(get_db)):
     Returns all masters joined with their origin so the frontend can build
     CompanyName_Main / CompanyName_City labels without extra API calls.
     """
-    masters = db.query(ClientMaster).all()
+    masters = (
+        db.query(ClientMaster)
+        .options(joinedload(ClientMaster.origin))
+        .all()
+    )
 
     # For each origin, the branch with the smallest id is treated as "main"
     from collections import defaultdict
@@ -36,7 +40,7 @@ def get_all_client_masters(db: Session = Depends(get_db)):
 
     result = []
     for m in masters:
-        origin = db.query(ClientOrigin).filter(ClientOrigin.id == m.origin_id).first()
+        origin = m.origin
         base_name = origin.unique_client_name if origin else m.client_name
         is_main = (m.id == origin_min_id.get(m.origin_id))
         d = {

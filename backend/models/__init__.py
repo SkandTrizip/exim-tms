@@ -3,6 +3,7 @@
 from backend.models.enquiry import Enquiry
 from backend.models.pricing import Pricing
 from backend.models.quote import Quote, QuoteContainer, QuoteCharge
+from backend.models.final_quote import FinalQuote, FinalQuoteContainer, FinalQuoteCharge
 from backend.models.port import PortCode
 from backend.models.tracking import Tracking
 from backend.models.billing import Billing
@@ -14,6 +15,7 @@ from backend.models.client_origin import ClientOrigin
 from backend.models.finance import ShippingPayment
 from backend.models.invoice import Invoice
 from backend.models.shipping_line import ShippingLine as ShippingLineModel
+from backend.models.enquiry_economics import EnquiryEconomics
 
 __all__ = [
     "Enquiry",
@@ -31,5 +33,6 @@ __all__ = [
     "ClientOrigin",
     "ShippingPayment",
     "Invoice",
-    "ShippingLineModel"
+    "ShippingLineModel",
+    "EnquiryEconomics",
 ]

@@ -6,7 +6,7 @@ class ShipmentStatus(Base):
     __tablename__ = "shipment_statuses"
 
     id = Column(Integer, primary_key=True, index=True)
-    enquiry_id = Column(Integer, ForeignKey("enquiries.id", ondelete="CASCADE"), unique=True)
+    enquiry_id = Column(Integer, ForeignKey("enquiries.id", ondelete="CASCADE"), unique=True, index=True)
     
     # Operational Checklist Milestones
     booking_confirmed = Column(DateTime)

@@ -643,33 +643,11 @@
         .edit-badge { display: none; font-size: 11px; color: #2563eb; font-family: sans-serif; margin-left: 8px; }
         .edit-mode .edit-badge { display: inline; }
 
-        .hbl-saved-notice {
-            max-width: 900px;
-            margin: 0 auto 12px;
-            padding: 12px 14px;
-            background: #fefce8;
-            border: 1px solid #eab308;
-            border-radius: 8px;
-            font-size: 13px;
-            color: #713f12;
-            display: none;
-            align-items: center;
-            justify-content: space-between;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        .hbl-saved-notice.visible { display: flex; }
     </style>
 </head>
 
 <body>
     <div class="mtd-page">
-        <div id="savedDraftNotice" class="hbl-saved-notice no-print" role="status">
-            <span id="savedDraftNoticeText"></span>
-            <button type="button" class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openPreviouslySaved()">
-                <i class="fas fa-undo"></i> Restore last saved
-            </button>
-        </div>
         <!-- Action Buttons -->
         <div class="mtd-actions no-print">
             <button class="btn btn-secondary" onclick="window.history.back()" style="padding: 8px 16px; font-size: 13px;">
@@ -981,7 +959,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
-    <script src="js/hbl-document.js?v=46"></script>
+    <script src="js/hbl-document.js?v=47"></script>
 </body>
 
 </html>

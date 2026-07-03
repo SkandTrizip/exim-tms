@@ -8,6 +8,8 @@
     <link href="css/styles.css" rel="stylesheet">
     <link href="css/dashboard.css" rel="stylesheet">
     <link href="css/action-modal.css" rel="stylesheet">
+    <link href="css/update-quote-modal.css" rel="stylesheet">
+    <link href="css/quote-remarks.css" rel="stylesheet">
     <link href="css/masters.css" rel="stylesheet">
     <link href="css/global-search.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
@@ -90,6 +92,93 @@
                                 <button class="btn btn-secondary page-refresh" id="refreshDashboardBtn" type="button" title="Refresh">
                                     <i class="fas fa-rotate-right"></i> Refresh
                                 </button>
+                            </div>
+                        </div>
+
+                        <section class="biz-analytics" aria-label="Business analytics">
+                            <div class="biz-kpi-row">
+                                <article class="biz-kpi-card biz-kpi-card--trips">
+                                    <div class="biz-kpi-card__top">
+                                        <div class="biz-kpi-icon biz-kpi-icon--blue" aria-hidden="true"><i class="fas fa-truck"></i></div>
+                                        <span class="biz-kpi-badge biz-kpi-badge--blue" id="analyticsTripsBadge">— Total</span>
+                                    </div>
+                                    <div class="biz-kpi-card__label">Trips</div>
+                                    <div class="biz-kpi-card__value" id="analyticsTripsValue">—</div>
+                                </article>
+
+                                <article class="biz-kpi-card biz-kpi-card--revenue">
+                                    <div class="biz-kpi-card__top">
+                                        <div class="biz-kpi-icon biz-kpi-icon--sky" aria-hidden="true"><i class="fas fa-indian-rupee-sign"></i></div>
+                                        <span class="biz-kpi-badge biz-kpi-badge--green">Net Yield</span>
+                                    </div>
+                                    <div class="biz-kpi-card__label">Net Revenue</div>
+                                    <div class="biz-kpi-card__value" id="analyticsRevenue">—</div>
+                                </article>
+
+                                <article class="biz-kpi-card biz-kpi-card--cost">
+                                    <div class="biz-kpi-card__top">
+                                        <div class="biz-kpi-icon biz-kpi-icon--amber" aria-hidden="true"><i class="fas fa-wallet"></i></div>
+                                        <span class="biz-kpi-meta-pill" id="analyticsCostMarginPill">Net Margin: —</span>
+                                    </div>
+                                    <div class="biz-kpi-card__label">Net Freight Cost</div>
+                                    <div class="biz-kpi-card__value" id="analyticsCost">—</div>
+                                </article>
+
+                                <article class="biz-kpi-card biz-kpi-card--margin">
+                                    <div class="biz-kpi-card__top">
+                                        <div class="biz-kpi-icon biz-kpi-icon--green" aria-hidden="true"><i class="fas fa-chart-line"></i></div>
+                                        <span class="biz-kpi-trend-badge positive" id="analyticsMarginTrendBadge">↗ —</span>
+                                    </div>
+                                    <div class="biz-kpi-card__label">Absolute Margin</div>
+                                    <div class="biz-kpi-card__value positive" id="analyticsCapture">—</div>
+                                </article>
+
+                                <article class="biz-kpi-card biz-kpi-card--gauge">
+                                    <div class="biz-kpi-gauge-wrap" id="analyticsMarginGauge" aria-hidden="true">
+                                        <div class="biz-kpi-gauge-icon"><i class="fas fa-bullseye"></i></div>
+                                    </div>
+                                    <div class="biz-kpi-card__label biz-kpi-card__label--center">Net Margin %</div>
+                                    <div class="biz-kpi-card__value biz-kpi-card__value--center" id="analyticsMarginPct">—</div>
+                                </article>
+                            </div>
+
+                            <div class="biz-analytics-toolbar">
+                                <button type="button" class="biz-view-details" id="analyticsViewDetailsBtn" aria-expanded="false" aria-controls="analyticsDetailsPanel">
+                                    <i class="fas fa-chevron-down biz-view-details__icon" aria-hidden="true"></i>
+                                    View Details
+                                </button>
+                                <span class="biz-records-badge" id="analyticsRecordsBadge">— Records</span>
+                            </div>
+                        </section>
+
+                        <div id="analyticsDetailsPanel" class="analytics-details-panel" hidden>
+                            <div class="table-topbar analytics-table-topbar">
+                                <div>
+                                    <h2 class="table-title">Enquiry Economics</h2>
+                                    <div class="table-subtitle">Cost and revenue per enquiry</div>
+                                </div>
+                            </div>
+
+                            <div class="table-container analytics-table-container">
+                                <table class="data-table analytics-economics-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Sale #</th>
+                                            <th>Master #</th>
+                                            <th>Client</th>
+                                            <th>Route</th>
+                                            <th class="num">Cost</th>
+                                            <th class="num">Revenue</th>
+                                            <th class="num">Capture</th>
+                                            <th class="num">Margin %</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="analyticsEnquiryTable">
+                                        <tr class="analytics-loading-row">
+                                            <td colspan="8">Loading analytics…</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 
@@ -285,12 +374,6 @@
                             </div>
 
                             <div class="table-tools">
-                                <div class="table-tools-left">
-                                    <div class="table-search">
-                                        <i class="fas fa-magnifying-glass"></i>
-                                        <input id="enquiriesSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
-                                    </div>
-                                </div>
                                 <div class="table-tools-right">
                                     <button class="btn btn-secondary table-tool-btn" id="enquiriesExportBtn" type="button">
                                         <i class="fas fa-arrow-up-from-bracket"></i> Export Data
@@ -302,11 +385,8 @@
                                         </button>
                                         <div class="table-dropdown-menu" id="enquiriesColumnsMenu" role="menu" aria-label="Toggle columns">
                                             <label class="dropdown-item"><input type="checkbox" data-col="details" checked> Enquiry Details</label>
-                                            <label class="dropdown-item"><input type="checkbox" data-col="type" checked> Enquiry Type</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="client" checked> Client Name</label>
-                                            <label class="dropdown-item"><input type="checkbox" data-col="commodity" checked> Commodity</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="location" checked> Location</label>
-                                            <label class="dropdown-item"><input type="checkbox" data-col="container" checked> Container</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="required" checked> Required On</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="status" checked> Status</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="action" checked> Actions</label>
@@ -320,11 +400,8 @@
                                 <thead>
                                     <tr>
                                         <th data-col="details">Enquiry Details</th>
-                                        <th data-col="type">Enquiry Type</th>
                                         <th data-col="client">Client Name</th>
-                                        <th data-col="commodity">Commodity</th>
                                         <th data-col="location">Location</th>
-                                        <th data-col="container">Container</th>
                                         <th data-col="required">Required On</th>
                                         <th data-col="status">Status</th>
                                         <th data-col="action">Actions</th>
@@ -365,12 +442,6 @@
                             </div>
 
                             <div class="table-tools">
-                                <div class="table-tools-left">
-                                    <div class="table-search">
-                                        <i class="fas fa-magnifying-glass"></i>
-                                        <input id="quotesSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
-                                    </div>
-                                </div>
                                 <div class="table-tools-right">
                                     <button class="btn btn-secondary table-tool-btn" id="quotesExportBtn" type="button">
                                         <i class="fas fa-arrow-up-from-bracket"></i> Export Data
@@ -381,7 +452,6 @@
                                         </button>
                                         <div class="table-dropdown-menu" id="quotesColumnsMenu" role="menu" aria-label="Toggle columns">
                                             <label class="dropdown-item"><input type="checkbox" data-col="details" checked> Enquiry Details</label>
-                                            <label class="dropdown-item"><input type="checkbox" data-col="type" checked> Enquiry Type</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="client" checked> Client Name</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="location" checked> Location</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="required" checked> Required On</label>
@@ -399,7 +469,6 @@
                                 <thead>
                                     <tr>
                                         <th data-col="details">Enquiry Details</th>
-                                        <th data-col="type">Enquiry Type</th>
                                         <th data-col="client">Client Name</th>
                                         <th data-col="location">Location</th>
                                         <th data-col="required">Required On</th>
@@ -475,12 +544,6 @@
                             </div>
 
                             <div class="table-tools">
-                                <div class="table-tools-left">
-                                    <div class="table-search">
-                                        <i class="fas fa-magnifying-glass"></i>
-                                        <input id="trackingSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
-                                    </div>
-                                </div>
                                 <div class="table-tools-right">
                                     <button class="btn btn-secondary table-tool-btn" id="trackingExportBtn" type="button">
                                         <i class="fas fa-arrow-up-from-bracket"></i> Export Data
@@ -491,7 +554,6 @@
                                         </button>
                                         <div class="table-dropdown-menu" id="trackingColumnsMenu" role="menu" aria-label="Toggle columns">
                                             <label class="dropdown-item"><input type="checkbox" data-col="details" checked> Enquiry Details</label>
-                                            <label class="dropdown-item"><input type="checkbox" data-col="type" checked> Enquiry Type</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="client" checked> Client Name</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="location" checked> Location</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="required" checked> Required On</label>
@@ -507,7 +569,6 @@
                                 <thead>
                                     <tr>
                                         <th data-col="details">Enquiry Details</th>
-                                        <th data-col="type">Enquiry Type</th>
                                         <th data-col="client">Client Name</th>
                                         <th data-col="location">Location</th>
                                         <th data-col="required">Required On</th>
@@ -555,43 +616,18 @@
                             </button>
                         </div>
 
-                        <section class="section-card">
-                            <div class="section-header">
-                                <div class="section-title">
-                                    <div class="section-icon ops"><i class="fas fa-wallet"></i></div>
-                                    <div>
-                                        <div class="section-name">Finance snapshot</div>
-                                        <div class="section-desc">Quick totals for the current period</div>
-                                    </div>
-                                </div>
-                                <div class="section-total">
-                                    <div class="section-total-value" id="financeTotalInline">0</div>
-                                </div>
-                            </div>
-                            <div class="section-grid section-grid-3">
-                                <div class="kpi-card kpi-static" role="group" aria-label="Payments made">
-                                    <div class="kpi-top">
-                                        <div class="kpi-label">Payments Made</div>
-                                        <span class="kpi-pill">Finance</span>
-                                    </div>
-                                    <div class="kpi-value" id="financePaymentsMade">0</div>
-                                </div>
-                                <div class="kpi-card kpi-static" role="group" aria-label="Invoices raised">
-                                    <div class="kpi-top">
-                                        <div class="kpi-label">Invoices Raised</div>
-                                        <span class="kpi-pill">Finance</span>
-                                    </div>
-                                    <div class="kpi-value" id="financeInvoicesRaised">0</div>
-                                </div>
-                                <div class="kpi-card kpi-static" role="group" aria-label="Payments received">
-                                    <div class="kpi-top">
-                                        <div class="kpi-label">Payments Received</div>
-                                        <span class="kpi-pill">Finance</span>
-                                    </div>
-                                    <div class="kpi-value" id="financePaymentsReceived">0</div>
-                                </div>
-                            </div>
-                        </section>
+                        <div class="finance-completion-tabs" id="financeCompletionTabs" role="tablist" aria-label="Finance pending and completed">
+                            <button type="button" class="finance-completion-tab active" data-completion="pending" role="tab" aria-selected="true">
+                                <i class="fas fa-clock" aria-hidden="true"></i>
+                                Pending
+                                <span class="finance-completion-count" data-completion-count="pending">0</span>
+                            </button>
+                            <button type="button" class="finance-completion-tab" data-completion="completed" role="tab" aria-selected="false">
+                                <i class="fas fa-check-circle" aria-hidden="true"></i>
+                                Completed
+                                <span class="finance-completion-count" data-completion-count="completed">0</span>
+                            </button>
+                        </div>
 
                         <div id="financeTableWrap" class="table-container table-card list-table-card">
                             <div class="table-head">
@@ -612,12 +648,6 @@
                             </div>
 
                             <div class="table-tools">
-                                <div class="table-tools-left">
-                                    <div class="table-search">
-                                        <i class="fas fa-magnifying-glass"></i>
-                                        <input id="financeSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
-                                    </div>
-                                </div>
                                 <div class="table-tools-right">
                                     <button class="btn btn-secondary table-tool-btn" id="financeExportBtn" type="button">
                                         <i class="fas fa-arrow-up-from-bracket"></i> Export Data
@@ -628,11 +658,8 @@
                                         </button>
                                         <div class="table-dropdown-menu" id="financeColumnsMenu" role="menu" aria-label="Toggle columns">
                                             <label class="dropdown-item"><input type="checkbox" data-col="details" checked> Enquiry Details</label>
-                                            <label class="dropdown-item"><input type="checkbox" data-col="type" checked> Enquiry Type</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="client" checked> Client Name</label>
-                                            <label class="dropdown-item"><input type="checkbox" data-col="commodity" checked> Commodity</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="location" checked> Location</label>
-                                            <label class="dropdown-item"><input type="checkbox" data-col="container" checked> Container</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="required" checked> Required On</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="status" checked> Finance Status</label>
                                             <label class="dropdown-item"><input type="checkbox" data-col="action" checked> Actions</label>
@@ -646,11 +673,8 @@
                                 <thead>
                                     <tr>
                                         <th data-col="details">Enquiry Details</th>
-                                        <th data-col="type">Enquiry Type</th>
                                         <th data-col="client">Client Name</th>
-                                        <th data-col="commodity">Commodity</th>
                                         <th data-col="location">Location</th>
-                                        <th data-col="container">Container</th>
                                         <th data-col="required">Required On</th>
                                         <th data-col="status">Finance Status</th>
                                         <th data-col="action">Actions</th>
@@ -743,12 +767,6 @@
 
                         <div class="table-container table-card list-table-card" id="mastersClientsTableCard">
                             <div class="table-tools">
-                                <div class="table-tools-left">
-                                    <div class="table-search">
-                                        <i class="fas fa-magnifying-glass"></i>
-                                        <input id="mastersClientsSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
-                                    </div>
-                                </div>
                                 <div class="table-tools-right">
                                     <button class="btn btn-secondary table-tool-btn" id="mastersClientsExportBtn" type="button">
                                         <i class="fas fa-arrow-up-from-bracket"></i> Export Data
@@ -817,12 +835,6 @@
 
                         <div class="table-container table-card list-table-card" id="mastersShippingTableCard">
                             <div class="table-tools">
-                                <div class="table-tools-left">
-                                    <div class="table-search">
-                                        <i class="fas fa-magnifying-glass"></i>
-                                        <input id="mastersShippingSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
-                                    </div>
-                                </div>
                                 <div class="table-tools-right">
                                     <button class="btn btn-secondary table-tool-btn" id="mastersShippingExportBtn" type="button">
                                         <i class="fas fa-arrow-up-from-bracket"></i> Export Data
@@ -878,6 +890,8 @@
     <script src="js/list-table.js"></script>
     <script src="js/global-search.js"></script>
     <script src="js/shipment-detail.js"></script>
+    <script src="js/quote-remarks.js"></script>
+    <script src="js/update-quote-modal.js"></script>
     <script src="js/action-modal.js"></script>
     <script src="js/masters.js"></script>
     <script src="js/app.js"></script>

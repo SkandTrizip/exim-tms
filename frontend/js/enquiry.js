@@ -33,6 +33,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     } else {
         await generateEnquiryNumber();
     }
+    hideEmbeddedDrawerBackButtons();
 });
 
 /**
@@ -951,8 +952,4 @@ async function saveHblFields() {
         console.error('Error updating HBL fields:', error);
         showModal('Connection Error', 'Failed to connect to server', 'error');
     }
-}
-
-function goBack() {
-    window.location.href = '/#dashboard';
 }

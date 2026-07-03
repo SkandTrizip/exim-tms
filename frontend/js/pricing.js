@@ -136,6 +136,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         await fetchQuotesForEnquiry(enquiryId);
         await fetchExchangeRate();
 
+        const hasAcceptedQuote = pricingQuotes.some(isQuoteAcceptedStatus);
+
+        // Once confirmed, pricing is permanently read-only in Quotes & Pricing.
+        if (hasAcceptedQuote && pricingPageMode !== 'view') {
+            pricingPageMode = 'view';
+        }
+
         if (pricingPageMode === 'confirm') {
             initConfirmMode();
         } else if (pricingPageMode === 'view') {
@@ -168,12 +175,52 @@ document.addEventListener('DOMContentLoaded', async function () {
         ) {
             setTimeout(() => applyPricingSheetSavedLock(), 620);
         }
+        hideEmbeddedDrawerBackButtons();
+        applyLockedQuoteViewChrome();
     }
 });
 
+function applyLockedQuoteViewChrome() {
+    const pg = document.getElementById('quoteConfirmationPage');
+    if (!pg) return;
+
+    // Legacy / cached markup — remove edit affordances on confirmed quote
+    pg.querySelector('#postConfirmEditDetailsBtn')?.remove();
+    pg.querySelectorAll('.pricing-card-header button').forEach((btn) => {
+        btn.remove();
+    });
+
+    const embedded = typeof isEmbeddedDrawer === 'function' && isEmbeddedDrawer();
+    const viewOnly = pricingPageMode === 'view' || embedded;
+
+    if (viewOnly) {
+        pg.querySelectorAll('#postConfirmGoTrackingBtn, #postConfirmViewBreakdownBtn').forEach((btn) => {
+            btn.style.display = 'none';
+        });
+        const footer = pg.querySelector('.pricing-card-body > div:last-of-type');
+        if (footer && footer.querySelector('#postConfirmGoTrackingBtn, #postConfirmViewBreakdownBtn')) {
+            const visible = footer.querySelectorAll('button:not([style*="display: none"])');
+            if (visible.length === 0) footer.style.display = 'none';
+        }
+    }
+
+    if (embedded) {
+        const hint = document.getElementById('confirmPricingHint');
+        if (hint) {
+            hint.innerHTML =
+                '<i class="fas fa-info-circle" style="margin-right: 8px; color: var(--navy-400);"></i>' +
+                'This quote is confirmed and locked. Rate changes after SI submission are done from ' +
+                '<strong>Tracking → Update Quote</strong>.';
+        }
+    }
+}
+
 function initViewMode() {
     console.log('👁️ Entering View-Only Mode');
+    const formActions = document.querySelector('.form-actions');
+    if (formActions) formActions.style.display = 'none';
     initPricingTable(false, true); // forceView = true (unused in table; kept for future)
+    applyLockedQuoteViewChrome();
 
     // Disable all inputs after a short delay to ensure dynamic content is loaded
     setTimeout(() => {
@@ -192,11 +239,11 @@ function initViewMode() {
             }
         });
 
-        // Hide calculator/quote tabs actions — not post-confirm actions on #quoteConfirmationPage
         document.querySelectorAll('.btn-add, .btn-remove, .btn-primary, .tab-actions').forEach(el => {
             if (el.closest('#quoteConfirmationPage')) return;
             el.style.display = 'none';
         });
+        applyLockedQuoteViewChrome();
     }, 500);
 }
 
@@ -429,10 +476,9 @@ function initPricingTable(forceEdit = false, forceView = false) {
 
         const confirmedIdx = pricingQuotes.findIndex(isQuoteAcceptedStatus);
 
-        // Locked summary sheet: accepted quote exists and user isn’t forcing edit —
-        // except `mode=confirm`, where they must still tweak shipping/client rates before client sign-off.
+        // Locked summary sheet: accepted quote exists — always read-only here.
         const useLockedSummary =
-            confirmedIdx !== -1 && !forceEdit && pricingPageMode !== 'confirm';
+            confirmedIdx !== -1 && !forceEdit;
 
         if (useLockedSummary) {
             activeQuoteIndex = confirmedIdx;
@@ -444,6 +490,11 @@ function initPricingTable(forceEdit = false, forceView = false) {
 
             renderConfirmedTable(pricingQuotes[confirmedIdx]);
 
+            const formActions = document.querySelector('.form-actions');
+            if (formActions) formActions.style.display = 'none';
+
+            applyLockedQuoteViewChrome();
+
             // Sync action button
             const btn = document.getElementById('confirmQuoteBtn');
             if (btn) {
@@ -452,20 +503,6 @@ function initPricingTable(forceEdit = false, forceView = false) {
                 btn.disabled = true;
             }
         } else {
-            const openCalculator =
-                forceEdit || (pricingPageMode === 'confirm' && confirmedIdx !== -1);
-            // Load the accepted quote whenever we’re deliberately opening the calculator for it.
-            if (openCalculator && confirmedIdx !== -1) {
-                activeQuoteIndex = confirmedIdx;
-            }
-
-            if (openCalculator) {
-                const calc = document.getElementById('calculatorSection');
-                const conf = document.getElementById('quoteConfirmationPage');
-                if (calc) calc.style.display = 'block';
-                if (conf) conf.style.display = 'none';
-            }
-
             loadQuote(activeQuoteIndex);
         }
     }
@@ -834,9 +871,8 @@ async function savePricingData(silent = false) {
 
 function syncPostConfirmChromeAfterQuoteSave() {
     const pg = document.getElementById('quoteConfirmationPage');
-    const btn = document.getElementById('postConfirmEditDetailsBtn');
     const hint = document.getElementById('confirmPricingHint');
-    if (!pg || !btn) return;
+    if (!pg) return;
     let confirmPageVisible = false;
     try {
         confirmPageVisible = window.getComputedStyle(pg).display !== 'none';
@@ -844,7 +880,6 @@ function syncPostConfirmChromeAfterQuoteSave() {
         confirmPageVisible = pg.style.display === 'block';
     }
     if (!confirmPageVisible) return;
-    btn.style.display = 'none';
     if (hint) {
         hint.innerHTML =
             '<i class="fas fa-info-circle" style="margin-right: 8px; color: var(--navy-400);"></i>' +
@@ -944,50 +979,71 @@ function getQuoteSummary(quote) {
 
 async function finalizeSelectedQuote(idx) {
     const quote = pricingQuotes[idx];
-    activeQuoteIndex = idx; // Switch to the selected one for rendering
+    activeQuoteIndex = idx;
 
     closeModal();
 
-    showModal('Confirm Selection', `Are you sure you want to finalize <strong>${quote.name}</strong> (${quote.line})? This will lock the pricing sheet.`, 'warning', async () => {
-        try {
-            console.log('Finalizing quote:', quote);
-            await savePricingData(true);
-            console.log('Post-save quote ID:', quote.id);
-
-            // Update backend status to accepted
-            if (quote.id) {
-                const statusRes = await fetch(`${CONFIG.API_URL}/api/quotes/${quote.id}/status?status=accepted`, {
-                    method: 'PATCH'
-                });
-                if (!statusRes.ok) console.error('Failed to update quote status:', await statusRes.text());
-                else {
-                    quote.status = 'accepted';
-                    console.log('✅ Quote status updated to accepted');
+    showQuoteRemarksModal({
+        title: 'Remarks before finalizing quote',
+        confirmLabel: 'Continue',
+        onConfirm: (remarks) => {
+            showModal(
+                'Confirm Selection',
+                `Are you sure you want to finalize <strong>${quote.name}</strong> (${quote.line})? This will lock the pricing sheet.`,
+                'warning',
+                async () => {
+                    await executeFinalizeQuote(quote, remarks);
                 }
-            }
-
-            // Update enquiry stage to 3 (Upload & Track)
-            const stageRes = await fetch(`${CONFIG.API_URL}/api/enquiry/${currentEnquiry.id}/stage?stage=3`, {
-                method: 'PATCH'
-            });
-            if (!stageRes.ok) console.error('Failed to update enquiry stage:', await stageRes.text());
-            else console.log('✅ Enquiry stage updated to 3');
-
-
-
-            // Update UI
-            document.getElementById('calculatorSection').style.display = 'none';
-            document.getElementById('quoteConfirmationPage').style.display = 'block';
-
-            renderConfirmedTable(quote);
-
-            clearPricingSavedLock();
-
-            showPostConfirmOptions(quote);
-        } catch (e) {
-            showModal('Error', 'Failed to lock quote: ' + e.message, 'error');
-        }
+            );
+        },
     });
+}
+
+async function executeFinalizeQuote(quote, remarks) {
+    try {
+        console.log('Finalizing quote:', quote);
+        await savePricingData(true);
+        console.log('Post-save quote ID:', quote.id);
+
+        if (quote.id) {
+            const statusRes = await fetch(
+                `${CONFIG.API_URL}/api/quotes/${quote.id}/status?status=accepted`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        remarks_reason: remarks.remarks_reason,
+                        remarks_other: remarks.remarks_other,
+                    }),
+                }
+            );
+            if (!statusRes.ok) {
+                const err = await statusRes.json().catch(() => ({}));
+                throw new Error(err.detail || 'Failed to update quote status');
+            }
+            quote.status = 'accepted';
+            quote.accepted_remarks_reason = remarks.remarks_reason;
+            quote.accepted_remarks_other = remarks.remarks_other;
+            console.log('✅ Quote status updated to accepted');
+        }
+
+        const stageRes = await fetch(`${CONFIG.API_URL}/api/enquiry/${currentEnquiry.id}/stage?stage=3`, {
+            method: 'PATCH',
+        });
+        if (!stageRes.ok) console.error('Failed to update enquiry stage:', await stageRes.text());
+        else console.log('✅ Enquiry stage updated to 3');
+
+        document.getElementById('calculatorSection').style.display = 'none';
+        document.getElementById('quoteConfirmationPage').style.display = 'block';
+
+        renderConfirmedTable(quote, remarks);
+
+        clearPricingSavedLock();
+
+        showPostConfirmOptions(quote);
+    } catch (e) {
+        showModal('Error', 'Failed to lock quote: ' + e.message, 'error');
+    }
 }
 
 function showPostConfirmOptions(quote) {
@@ -1001,9 +1057,6 @@ function showPostConfirmOptions(quote) {
                 <strong>${quoteName}</strong> (${lineName}) is confirmed. What would you like to do next?
             </div>
             <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-end;">
-                <button class="btn btn-secondary" onclick="postConfirmEditDetails(${enquiryId})" style="padding: 10px 14px;">
-                    <i class="fas fa-pen"></i> Edit details
-                </button>
                 <button class="btn btn-primary" onclick="postConfirmViewBreakdown()" style="padding: 10px 14px; background: #2563eb; border: none;">
                     <i class="fas fa-list"></i> Final rate breakdown
                 </button>
@@ -1015,12 +1068,6 @@ function showPostConfirmOptions(quote) {
     `;
 
     showModal('Quote Confirmed', message, 'success');
-}
-
-function postConfirmEditDetails(enquiryId) {
-    if (!enquiryId) return;
-    closeModal();
-    window.location.href = `/pricing?enquiry_id=${enquiryId}&mode=edit`;
 }
 
 function postConfirmViewBreakdown() {
@@ -1040,20 +1087,12 @@ function postConfirmGoTracking(enquiryId) {
 }
 
 /** Inline onclick uses a legacy scope; expose handlers on window for modal HTML + consistency */
-window.postConfirmEditDetails = postConfirmEditDetails;
 window.postConfirmViewBreakdown = postConfirmViewBreakdown;
 window.postConfirmGoTracking = postConfirmGoTracking;
 
 function bindQuoteConfirmationActions() {
-    const editBtn = document.getElementById('postConfirmEditDetailsBtn');
     const breakdownBtn = document.getElementById('postConfirmViewBreakdownBtn');
     const trackingBtn = document.getElementById('postConfirmGoTrackingBtn');
-    if (editBtn) {
-        editBtn.addEventListener('click', () => {
-            const id = currentEnquiry?.id;
-            if (id) postConfirmEditDetails(id);
-        });
-    }
     if (breakdownBtn) {
         breakdownBtn.addEventListener('click', () => postConfirmViewBreakdown());
     }
@@ -1065,12 +1104,23 @@ function bindQuoteConfirmationActions() {
     }
 }
 
-function renderConfirmedTable(quote) {
+function renderConfirmedTable(quote, remarks = null) {
     const container = document.getElementById('confirmationDocumentTable');
     if (!container) return;
 
     const summary = getQuoteSummary(quote);
-    let html = `
+    const remarkLabel = remarks?.remarks_label
+        || (quote.accepted_remarks_reason ? getQuoteRemarkLabel(quote.accepted_remarks_reason) : '');
+    const remarkOther = remarks?.remarks_other || quote.accepted_remarks_other;
+    const remarksHtml = remarkLabel ? `
+        <div style="background:#f8fafc; border:1px solid var(--border-light); border-radius:10px; padding:14px 16px; margin-bottom:20px;">
+            <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-tertiary); margin-bottom:6px;">Finalization remarks</div>
+            <div style="font-size:14px; font-weight:600; color:var(--navy-800);">${escapeHtml(remarkLabel)}</div>
+            ${remarkOther ? `<div style="font-size:13px; color:var(--text-secondary); margin-top:6px;">${escapeHtml(remarkOther)}</div>` : ''}
+        </div>
+    ` : '';
+
+    let html = remarksHtml + `
         <div style="background: white; padding: 20px; border: 1px solid var(--border-medium); border-radius: 12px; margin-bottom: 24px;">
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: left;">
                 <div>
@@ -1158,10 +1208,6 @@ function renderConfirmedTable(quote) {
     `;
     container.innerHTML = html;
     document.getElementById('confirmedQuoteNumber').textContent = `Ref: ${quote.quote_number || 'QT-' + Math.floor(1000 + Math.random() * 9000)}`;
-}
-
-function goBack() {
-    window.location.href = '/#dashboard';
 }
 
 async function generatePDF() {

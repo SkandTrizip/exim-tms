@@ -7,8 +7,9 @@
     }
 
     function formatDate(value) {
-        if (!value) return '—';
-        const date = new Date(value);
+        const raw = Array.isArray(value) ? (value.length ? value[value.length - 1] : null) : value;
+        if (!raw) return '—';
+        const date = new Date(raw);
         if (Number.isNaN(date.getTime())) return '—';
         const pad = (n) => String(n).padStart(2, '0');
         return `${pad(date.getDate())}-${pad(date.getMonth() + 1)}-${date.getFullYear()}`;
@@ -114,6 +115,44 @@
             </table>`;
     }
 
+    function formatUtrNumbers(value) {
+        const utrs = Array.isArray(value) ? value : (value ? [value] : []);
+        return utrs.filter(Boolean).join(', ') || '—';
+    }
+
+    function renderShippingPayments(payments) {
+        if (!payments || payments.length === 0) {
+            return '<p style="margin:0;color:var(--text-tertiary);font-weight:600;">No shipping line payments recorded.</p>';
+        }
+
+        const rows = payments.map((p) => `
+            <tr>
+                <td>${escapeHtml(p.payment_type || '—')}</td>
+                <td style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-weight: 700;">
+                    ${escapeHtml(formatUtrNumbers(p.utr_number))}
+                </td>
+                <td>${formatDate(p.payment_date)}</td>
+                <td style="text-align:right;font-weight:700;">
+                    ${p.amount != null ? `₹${Number(p.amount).toLocaleString()}` : '—'}
+                </td>
+                <td>${escapeHtml(p.description || '—')}</td>
+            </tr>`).join('');
+
+        return `
+            <table class="shipment-mini-table">
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>UTR</th>
+                        <th>Date</th>
+                        <th style="text-align:right;">Amount</th>
+                        <th>Description</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+    }
+
     function renderShipmentDetail(payload) {
         const enquiry = payload.enquiry || {};
         const status = payload.status || {};
@@ -204,6 +243,11 @@
                 <section class="shipment-detail-card">
                     <div class="shipment-detail-card-head"><h2>Invoices</h2></div>
                     <div class="shipment-detail-card-body">${renderInvoices(payload.invoices)}</div>
+                </section>
+
+                <section class="shipment-detail-card full-width">
+                    <div class="shipment-detail-card-head"><h2>Shipping line payments</h2></div>
+                    <div class="shipment-detail-card-body">${renderShippingPayments(payload.shipping_payments)}</div>
                 </section>
 
                 <section class="shipment-detail-card">

@@ -12,6 +12,8 @@ from backend.routers import enquiry, pricing, workflow, port, exchange_rate, quo
 from backend.models.user import User
 from backend.models.invoice import Invoice
 from backend.models.finance import ShippingPayment
+from backend.models.final_quote import FinalQuote, FinalQuoteContainer, FinalQuoteCharge
+from backend.models.enquiry_economics import EnquiryEconomics
 from backend.config import get_frontend_config, UPLOAD_DIR, API_URL, ADMIN_USERS
 from backend.utils.logger import logger
 import json
@@ -35,6 +37,12 @@ _column_migrations = [
     ("enquiries", "hbl_document_saved_at", "TIMESTAMP"),
     ("shipment_statuses", "container_number", "VARCHAR"),
     ("invoices", "customer_invoice_no", "VARCHAR"),
+    ("quotes", "initial_quote_snapshot", "TEXT"),
+    ("quotes", "final_quote_snapshot", "TEXT"),
+    ("quotes", "accepted_remarks_reason", "VARCHAR"),
+    ("quotes", "accepted_remarks_other", "TEXT"),
+    ("final_quotes", "revision_remarks_reason", "VARCHAR"),
+    ("final_quotes", "revision_remarks_other", "TEXT"),
 ]
 with engine.connect() as _conn:
     _inspector = inspect(engine)
@@ -48,6 +56,22 @@ with engine.connect() as _conn:
                 # If multiple workers start at once, or the inspector is stale,
                 # the column may already exist; don't crash the app.
                 logger.info(f"Column already exists (race): {_table}.{_col}")
+    _conn.commit()
+
+_index_migrations = [
+    ("quotes", "idx_quotes_status", "status"),
+    ("quotes", "idx_quotes_enquiry_id", "enquiry_id"),
+    ("shipment_statuses", "idx_shipment_statuses_enquiry_id", "enquiry_id"),
+]
+with engine.connect() as _conn:
+    for _table, _index_name, _column in _index_migrations:
+        try:
+            _conn.execute(
+                text(f'CREATE INDEX IF NOT EXISTS {_index_name} ON {_table} ("{_column}")')
+            )
+            logger.info(f"Ensured index {_index_name} on {_table}.{_column}")
+        except ProgrammingError:
+            logger.info(f"Index already exists or skipped: {_index_name}")
     _conn.commit()
 
 app = FastAPI(
@@ -205,38 +229,54 @@ if not os.path.exists(UPLOAD_DIR):
 
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
-# Serve dynamic config
-@app.get("/js/config.js")
-async def serve_config_js():
+_config_js_cache: dict = {"content": None, "expires_at": 0.0}
+_CONFIG_JS_TTL_SECONDS = 300
+
+
+def _build_config_js() -> str:
     from backend.database import SessionLocal
     from backend.models.client_master import ClientMaster
     from backend.models.shipping_line import ShippingLine
-    
+
     config_dict = get_frontend_config()
-    
-    # Get clients and shipping lines from Database
+    db = SessionLocal()
     try:
-        db = SessionLocal()
         db_clients = db.query(ClientMaster.client_name).distinct().all()
         if db_clients:
             config_dict["clients"] = [c[0] for c in db_clients if c[0]]
-        
-        db_shipping_lines = db.query(ShippingLine.shipping_line_name).filter(ShippingLine.status == 'verified').distinct().all()
+
+        db_shipping_lines = (
+            db.query(ShippingLine.shipping_line_name)
+            .filter(ShippingLine.status == "verified")
+            .distinct()
+            .all()
+        )
         if db_shipping_lines:
             config_dict["shippingLines"] = [s[0] for s in db_shipping_lines if s[0]]
-            
-        db.close()
     except Exception as e:
-        logger.error(f"Error fetching data for config.js: {e}")
-        # Keep the hardcoded ones as fallback
+        logger.error("Error fetching data for config.js: %s", e)
+    finally:
+        db.close()
 
-    # Same-origin relative API paths (/api/...) — never inject a different host than the page URL
     api_base_js = json.dumps(API_URL if API_URL else "")
-    js_content = f"""
+    return f"""
 const CONFIG = {json.dumps(config_dict)};
 CONFIG.API_URL = {api_base_js};
 CONFIG.adminUsers = {json.dumps(ADMIN_USERS)};
 """
+
+
+# Serve dynamic config
+@app.get("/js/config.js")
+def serve_config_js():
+    now = time.time()
+    cached = _config_js_cache.get("content")
+    if cached and now < _config_js_cache.get("expires_at", 0):
+        return Response(content=cached, media_type="application/javascript")
+
+    js_content = _build_config_js()
+    _config_js_cache["content"] = js_content
+    _config_js_cache["expires_at"] = now + _CONFIG_JS_TTL_SECONDS
     return Response(content=js_content, media_type="application/javascript")
 
 # Serve explicit frontend pages without .html

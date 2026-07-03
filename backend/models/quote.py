@@ -37,7 +37,12 @@ class Quote(Base):
     final_quote_inr = Column(Float, default=0.0)
     
     # Status and metadata
-    status = Column(String, default="draft")  # draft, sent, accepted, rejected
+    status = Column(String, default="draft", index=True)  # draft, sent, accepted, rejected
+    # Legacy JSON snapshots (optional); initial rates live in quote_containers / quote_charges
+    initial_quote_snapshot = Column(Text, nullable=True)
+    final_quote_snapshot = Column(Text, nullable=True)
+    accepted_remarks_reason = Column(String, nullable=True)
+    accepted_remarks_other = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     

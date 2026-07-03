@@ -57,6 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else if (!embedded) {
         loadShippingLines();
     }
+    hideEmbeddedDrawerBackButtons();
 });
 
 function applyEmbeddedViewMode() {
