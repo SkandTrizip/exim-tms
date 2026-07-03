@@ -8,6 +8,7 @@ from backend.models.final_quote import FinalQuote, FinalQuoteContainer, FinalQuo
 from backend.models.shipment_status import ShipmentStatus
 from backend.schemas.final_quote import FinalQuoteUpdate
 from backend.constants.quote_remarks import validate_quote_remarks
+from backend.services.enquiry_economics_service import sync_enquiry_economics
 from backend.utils.logger import logger
 
 
@@ -115,6 +116,7 @@ def _copy_source_to_final(db: Session, source: Quote) -> FinalQuote:
     db.commit()
     db.refresh(final)
     logger.info(f"Created final quote from source quote ID {source.id}")
+    sync_enquiry_economics(db, source.enquiry_id, commit=True)
     return _load_final_quote(db, final.id)
 
 
@@ -225,4 +227,5 @@ def update_final_revision(db: Session, source_quote_id: int, data: FinalQuoteUpd
     db.commit()
     refreshed = _load_final_quote(db, final.id)
     logger.info(f"Final quote revision saved for source quote ID {source_quote_id}")
+    sync_enquiry_economics(db, source.enquiry_id, commit=True)
     return refreshed

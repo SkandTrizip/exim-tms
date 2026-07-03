@@ -1,4 +1,4 @@
-"""Dashboard analytics from enquiry_economics (user-populated cost/revenue per enquiry)."""
+"""Dashboard analytics from enquiry_economics (synced from final quote + additional invoices)."""
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional

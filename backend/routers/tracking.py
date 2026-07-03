@@ -4,6 +4,7 @@ from typing import List, Optional
 import json
 from backend.database import get_db
 from backend.services import document_service, status_service
+from backend.services.enquiry_economics_service import sync_enquiry_economics
 from backend.schemas.document import ShipmentDocument
 from backend.utils.logger import logger
 
@@ -170,6 +171,8 @@ def upload_single_document(
         doc = document_service.save_document(
             db, file, enquiry_id, None, document_type, metadata_info
         )
+        if document_type == "additionalInvoice":
+            sync_enquiry_economics(db, enquiry_id, commit=True)
         return doc
     except Exception as e:
         logger.error(f"Single document upload failed for enquiry ID {enquiry_id}: {str(e)}")

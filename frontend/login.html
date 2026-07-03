@@ -5,72 +5,88 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login - ATLAS EXIM</title>
-    <link href="css/styles.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="Logipod_Logo.png">
     <link href="css/login.css" rel="stylesheet">
-    <link href="css/modal.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
 
 <body class="login-page">
     <div class="login-layout">
         <div class="login-panel">
-            <div class="login-panel-inner">
-                <a href="/login" class="login-brand" aria-label="ATLAS EXIM home">
-                    <img src="Logipod_Logo.png" alt="Logipod" class="login-brand-logo">
-                </a>
+            <a href="/login" class="login-brand" aria-label="ATLAS EXIM home">
+                <img src="logo.svg" alt="Logipod Atlas" class="login-brand-logo">
+            </a>
 
+            <div class="login-panel-center">
                 <div class="login-form-wrap">
-                    <div class="login-header">
-                        <h1 class="login-title">Login</h1>
-                        <p class="login-subtitle">Enter your credentials to access your dashboard</p>
-                    </div>
-
-                    <form class="login-form" id="loginForm">
-                        <div class="form-group">
-                            <label for="userId">Email <span class="required" aria-hidden="true">*</span></label>
-                            <input type="text" id="userId" name="userId" placeholder="Enter your email" required
-                                autocomplete="username">
+                    <div class="login-form-content">
+                        <div class="login-header">
+                            <h1 class="login-title">Login</h1>
+                            <p class="login-subtitle">Enter your credentials to access your dashboard</p>
                         </div>
 
-                        <div class="form-group">
-                            <label for="password">Password <span class="required" aria-hidden="true">*</span></label>
-                            <div class="password-field">
-                                <input type="password" id="password" name="password" placeholder="Enter your password"
-                                    required autocomplete="current-password">
-                                <button type="button" class="password-toggle" id="passwordToggle"
-                                    aria-label="Show password" aria-pressed="false">
-                                    <i class="fas fa-eye" aria-hidden="true"></i>
-                                </button>
+                        <form class="login-form" id="loginForm" novalidate>
+                            <div class="form-group">
+                                <label for="userId">Email <span class="required" aria-hidden="true">*</span></label>
+                                <input type="email" id="userId" name="userId" placeholder="Enter your email" required
+                                    autocomplete="username">
                             </div>
+
+                            <div class="form-group">
+                                <label for="password">Password <span class="required" aria-hidden="true">*</span></label>
+                                <div class="password-field">
+                                    <input type="password" id="password" name="password"
+                                        placeholder="Enter your password" required autocomplete="current-password">
+                                    <button type="button" class="password-toggle" id="passwordToggle"
+                                        aria-label="Show password" aria-pressed="false">
+                                        <i class="fas fa-eye" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <button type="submit" class="btn-login" id="loginBtn">
+                                <span class="btn-login-text">Enter Atlas</span>
+                                <i class="fas fa-arrow-right btn-login-arrow" aria-hidden="true"></i>
+                            </button>
+
+                            <p class="login-error" id="loginError" role="alert" hidden></p>
+                        </form>
+
+                        <div class="login-legal">
+                            <p>By clicking continue, you agree to our <a href="#">Terms of Service</a> and <a
+                                    href="#">Privacy Policy</a>.</p>
+                            <p class="login-copyright">&copy; 2026 Atlas &bull; All rights reserved.</p>
                         </div>
-
-                        <button type="submit" class="btn btn-primary btn-login">
-                            <span>Enter ATLAS EXIM</span>
-                            <i class="fas fa-arrow-right" aria-hidden="true"></i>
-                        </button>
-                    </form>
-                </div>
-
-                <div class="login-legal">
-                    <p>By clicking continue, you agree to our <a href="#">Terms of Service</a> and <a href="#">Privacy
-                            Policy</a>.</p>
-                    <p class="login-copyright">&copy; 2026 ATLAS EXIM &bull; All rights reserved.</p>
+                    </div>
                 </div>
             </div>
         </div>
 
         <div class="login-hero" aria-hidden="true">
-            <img src="6228112.jpg" alt="" class="login-hero-image">
+            <img src="6228112 (1).jpg" alt="" class="login-hero-image">
         </div>
     </div>
 
     <script src="js/config.js"></script>
-    <script src="js/common.js"></script>
     <script>
         const passwordInput = document.getElementById('password');
         const passwordToggle = document.getElementById('passwordToggle');
+        const loginForm = document.getElementById('loginForm');
+        const loginError = document.getElementById('loginError');
+        const loginBtn = document.getElementById('loginBtn');
+        const btnDefaultHtml = loginBtn.innerHTML;
+
+        function showLoginError(message) {
+            loginError.textContent = message;
+            loginError.hidden = false;
+            loginForm.classList.add('login-form--shake');
+            setTimeout(() => loginForm.classList.remove('login-form--shake'), 250);
+        }
+
+        function clearLoginError() {
+            loginError.textContent = '';
+            loginError.hidden = true;
+        }
 
         passwordToggle.addEventListener('click', function () {
             const isHidden = passwordInput.type === 'password';
@@ -80,44 +96,47 @@
             passwordToggle.querySelector('i').className = isHidden ? 'fas fa-eye-slash' : 'fas fa-eye';
         });
 
-        document.getElementById('loginForm').addEventListener('submit', async function (e) {
+        [passwordInput, document.getElementById('userId')].forEach((input) => {
+            input.addEventListener('input', clearLoginError);
+        });
+
+        loginForm.addEventListener('submit', async function (e) {
             e.preventDefault();
+            clearLoginError();
 
-            const username = document.getElementById('userId').value;
-            const password = document.getElementById('password').value;
+            const username = document.getElementById('userId').value.trim();
+            const password = passwordInput.value;
 
-            const btn = this.querySelector('.btn-login');
-            const originalText = btn.innerHTML;
+            if (!username || !password) {
+                showLoginError('Please enter your email and password.');
+                return;
+            }
 
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Authenticating...';
-            btn.disabled = true;
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i><span>Authenticating...</span>';
 
             try {
                 const response = await fetch(`${CONFIG.API_URL}/api/auth/login-json`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
 
                 if (response.ok) {
                     const data = await response.json();
-
                     localStorage.setItem('isLoggedIn', 'true');
                     localStorage.setItem('user', data.username);
                     localStorage.setItem('token', data.access_token);
-
                     window.location.href = '/';
                 } else {
                     const error = await response.json();
-                    throw new Error(error.detail || 'Authentication failed');
+                    throw new Error(error.detail || 'Login failed. Please try again.');
                 }
             } catch (error) {
                 console.error('Login error:', error);
-                btn.innerHTML = originalText;
-                btn.disabled = false;
-                showModal('Login Failed', error.message || 'Please enter valid credentials', 'error');
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = btnDefaultHtml;
+                showLoginError(error.message || 'Login failed. Please try again.');
             }
         });
     </script>
