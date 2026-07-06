@@ -300,8 +300,7 @@ async function renderFinanceReceivedTable(invoices) {
     tbody.innerHTML = slice.map((inv) => renderFinanceReceivedInvoiceRow(inv)).join('');
 
     renderPagination('financePagination', total, page, 'changeFinancePage');
-    applyTableSearchFilter('financeTable', document.getElementById('financeSearchInput'));
-    updateTableRecordsCount('financeTable', 'financeRecordsCount');
+    afterListTableRender('financeTable', 'financeSearchInput', 'financeRecordsCount');
     if (typeof initListTableColumnResize === 'function') {
         initListTableColumnResize(document.getElementById('financeDataTable'));
     }
@@ -617,6 +616,15 @@ function applyTableSearchFilter(tbodyId, input) {
         const text = (tr.textContent || '').toLowerCase();
         tr.style.display = !q || text.includes(q) ? '' : 'none';
     });
+}
+
+function afterListTableRender(tbodyId, searchInputId, recordsCountId) {
+    const input = searchInputId ? document.getElementById(searchInputId) : null;
+    applyTableSearchFilter(tbodyId, input);
+    if (recordsCountId) updateTableRecordsCount(tbodyId, recordsCountId);
+    if (typeof window.refreshListTableFilters === 'function') {
+        window.refreshListTableFilters(tbodyId);
+    }
 }
 
 function updateTableRecordsCount(tbodyId, countId) {
@@ -1217,8 +1225,7 @@ async function updateAllEnquiriesTable(filterType = null) {
     }).join('');
 
     renderPagination('allEnquiriesPagination', total, page, 'changeAllEnquiriesPage');
-    applyTableSearchFilter('allEnquiriesTable', document.getElementById('enquiriesSearchInput'));
-    updateTableRecordsCount('allEnquiriesTable', 'enquiriesRecordsCount');
+    afterListTableRender('allEnquiriesTable', 'enquiriesSearchInput', 'enquiriesRecordsCount');
     updateViewStatusPill('sales', filterType || 'all');
 }
 
@@ -1397,8 +1404,7 @@ async function updateQuotesTable() {
 
     tbody.innerHTML = rowsHtml.join('');
     renderPagination('quotesPagination', total, page, 'changeQuotesPage');
-    applyTableSearchFilter('quotesTable', document.getElementById('quotesSearchInput'));
-    updateTableRecordsCount('quotesTable', 'quotesRecordsCount');
+    afterListTableRender('quotesTable', 'quotesSearchInput', 'quotesRecordsCount');
 }
 
 
@@ -1459,8 +1465,7 @@ async function updateTrackingTable(filterType = null) {
     }).join('');
 
     renderPagination('trackingPagination', total, page, 'changeTrackingPage');
-    applyTableSearchFilter('trackingTable', document.getElementById('trackingSearchInput'));
-    updateTableRecordsCount('trackingTable', 'trackingRecordsCount');
+    afterListTableRender('trackingTable', 'trackingSearchInput', 'trackingRecordsCount');
     updateViewStatusPill('tracking', currentTrackingFilter);
 }
 
@@ -1598,8 +1603,7 @@ async function updateFinanceTable(subView = null) {
     })).join('');
 
     renderPagination('financePagination', total, page, 'changeFinancePage');
-    applyTableSearchFilter('financeTable', document.getElementById('financeSearchInput'));
-    updateTableRecordsCount('financeTable', 'financeRecordsCount');
+    afterListTableRender('financeTable', 'financeSearchInput', 'financeRecordsCount');
     updateFinanceStats();
 }
 

@@ -9,6 +9,12 @@ function getExchangeRateForCurrency(curr) {
     if (curr === 'INR') return 1;
     return currentExchangeRates[curr] || 1;
 }
+
+function getChargeCurrencies() {
+    return (CONFIG.CHARGE_CURRENCIES && CONFIG.CHARGE_CURRENCIES.length)
+        ? CONFIG.CHARGE_CURRENCIES
+        : ['USD', 'EUR', 'GBP', 'JPY', 'INR'];
+}
 let isConfirmMode = false;  // controls vendor rate column visibility
 /** URL `mode=` so we can keep the calculator open for Confirm Quote flows even after a quote is already accepted */
 let pricingPageMode = '';
@@ -731,7 +737,7 @@ function addPricingRowToTbody(tbody, data = {}) {
     row.innerHTML = `
         <td><input type="text" class="p-desc" value="${data.desc || ''}" oninput="calculatePricingTotal()"></td>
         <td><select class="p-account" onchange="calculatePricingTotal()"><option value="On Your Account" ${data.account === 'On Your Account' ? 'selected' : ''}>On Your Account</option><option value="Consignee Account" ${data.account === 'Consignee Account' ? 'selected' : ''}>Consignee Account</option></select></td>
-        <td><select class="p-curr" onchange="handleCurrencyChange(this)">${CONFIG.CHARGE_CURRENCIES.map(c => `<option value="${c}" ${(data.curr || 'USD') === c ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
+        <td><select class="p-curr" onchange="handleCurrencyChange(this)">${getChargeCurrencies().map(c => `<option value="${c}" ${(data.curr || 'USD') === c ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
         <td><select class="p-on" onchange="handleChargedOnChange(this)"><option value="Per BL" ${data.on === 'Per BL' ? 'selected' : ''}>Per BL</option><option value="Per Container" ${data.on === 'Per Container' ? 'selected' : ''}>Per Container</option></select></td>
         <td><input type="number" class="p-qty" value="${data.on === 'Per BL' ? 1 : (data.qty || defaultQty)}" ${data.on === 'Per BL' ? 'readonly' : ''} min="0" oninput="if(this.value<0)this.value=0; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td><input type="number" class="p-rate" value="${data.rate || ''}" min="0" oninput="if(this.value<0)this.value=0; syncVendorRate(this); calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>

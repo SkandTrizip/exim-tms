@@ -68,6 +68,9 @@ DEFAULT_CHARGES = [
     { "desc": "Seal Charge", "account": "On Your Account", "curr": "INR", "on": "Per Container" },
 ]
 
+# Currencies offered on charge line items; INR is always settlement currency (rate 1).
+CHARGE_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "INR"]
+
 def get_frontend_config() -> dict:
     return {
         "containerTypes": CONTAINER_TYPES,
@@ -78,6 +81,7 @@ def get_frontend_config() -> dict:
         "incoterms": INCOTERMS,
         "shippingLines": SHIPPING_LINES,
         "defaultCharges": DEFAULT_CHARGES,
+        "CHARGE_CURRENCIES": CHARGE_CURRENCIES,
     }
 
 

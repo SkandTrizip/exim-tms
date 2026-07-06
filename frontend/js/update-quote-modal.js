@@ -17,6 +17,12 @@ function getUqExchangeRate(curr) {
     return uqState.exchangeRates[curr] || 1;
 }
 
+function getUqChargeCurrencies() {
+    return (CONFIG.CHARGE_CURRENCIES && CONFIG.CHARGE_CURRENCIES.length)
+        ? CONFIG.CHARGE_CURRENCIES
+        : ['USD', 'EUR', 'GBP', 'JPY', 'INR'];
+}
+
 let uqContext = {
     containerCount: null,
     hostedInParent: false,
@@ -321,7 +327,7 @@ function renderFinalRow(ch, cIdx, rIdx, defaultQty) {
             </td>
             <td>
                 <select class="uq-curr">
-                    ${CONFIG.CHARGE_CURRENCIES.map(c => `<option value="${c}" ${ch.currency === c ? 'selected' : ''}>${c}</option>`).join('')}
+                    ${getUqChargeCurrencies().map(c => `<option value="${c}" ${ch.currency === c ? 'selected' : ''}>${c}</option>`).join('')}
                 </select>
             </td>
             <td>
