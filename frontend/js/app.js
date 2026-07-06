@@ -62,7 +62,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     initQuotesListUI();
     initStatusSections();
     initFinanceCompletionTabs();
-    initTrackingCompletionTabs();
 });
 
 function escapeHtml(s) {
@@ -83,7 +82,6 @@ function escapeAttr(s) {
 let cachedBulkStatus = {};
 let financeReceivedCount = 0;
 let currentFinanceCompletionTab = 'pending';
-let currentTrackingCompletionTab = 'pending';
 
 const TRACKING_MILESTONE_FIELDS = {
     pending_booking: 'booking_confirmed',
@@ -92,17 +90,19 @@ const TRACKING_MILESTONE_FIELDS = {
     pending_sob: 'sob',
 };
 
-const TRACKING_COMPLETED_LABELS = {
-    pending_booking: 'Booking Confirmed',
-    pending_si: 'SI Submitted',
-    pending_bl: 'BL Received',
-    pending_sob: 'SOB Completed',
-};
-
 function isTrackingMilestoneDone(status, field) {
     if (!status || !field) return false;
     const val = status[field];
     return val != null && val !== '' && val !== false;
+}
+
+function matchesTrackingSection(section, status) {
+    if (section === 'completed') {
+        return isTrackingMilestoneDone(status, 'sob');
+    }
+    const field = TRACKING_MILESTONE_FIELDS[section];
+    if (!field) return true;
+    return !isTrackingMilestoneDone(status, field);
 }
 
 const STATUS_SECTION_LABELS = {
@@ -115,7 +115,8 @@ const STATUS_SECTION_LABELS = {
         pending_booking: 'Booking Pending',
         pending_si: 'SI Pending',
         pending_bl: 'BL Pending',
-        pending_sob: 'SOB Remaining'
+        pending_sob: 'SOB Remaining',
+        completed: 'Completed',
     },
     finance: {
         payments: 'Payment to Shipping Line',
@@ -376,10 +377,6 @@ function updateViewStatusPill(view, section) {
     if (!pill) return;
     const labelEl = pill.querySelector('.status-text');
     if (!labelEl) return;
-    if (view === 'tracking' && currentTrackingCompletionTab === 'completed') {
-        labelEl.textContent = TRACKING_COMPLETED_LABELS[section] || section || 'Completed';
-        return;
-    }
     const labels = STATUS_SECTION_LABELS[view] || {};
     labelEl.textContent = labels[section] || section || 'All';
 }
@@ -391,55 +388,12 @@ function countSalesSection(section) {
     return active.length;
 }
 
-function countTrackingCompletion(section, completionTab) {
+function countTrackingSection(section) {
     const ops = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
-    const field = TRACKING_MILESTONE_FIELDS[section];
-    if (!field) return 0;
-    const showCompleted = completionTab === 'completed';
     return ops.filter((e) => {
         const s = cachedBulkStatus[e.id] || null;
-        const done = isTrackingMilestoneDone(s, field);
-        return showCompleted ? done : !done;
+        return matchesTrackingSection(section, s);
     }).length;
-}
-
-function countTrackingSection(section) {
-    return countTrackingCompletion(section, 'pending');
-}
-
-function updateTrackingCompletionCounts() {
-    const tabs = document.getElementById('trackingCompletionTabs');
-    if (!tabs || !currentTrackingFilter) return;
-    const pendingEl = tabs.querySelector('[data-completion-count="pending"]');
-    const completedEl = tabs.querySelector('[data-completion-count="completed"]');
-    if (pendingEl) pendingEl.textContent = countTrackingCompletion(currentTrackingFilter, 'pending');
-    if (completedEl) completedEl.textContent = countTrackingCompletion(currentTrackingFilter, 'completed');
-}
-
-function setTrackingCompletionTab(tab) {
-    currentTrackingCompletionTab = tab === 'completed' ? 'completed' : 'pending';
-    const tabs = document.getElementById('trackingCompletionTabs');
-    if (tabs) {
-        tabs.querySelectorAll('.finance-completion-tab').forEach((btn) => {
-            const active = btn.dataset.completion === currentTrackingCompletionTab;
-            btn.classList.toggle('active', active);
-            btn.setAttribute('aria-selected', active ? 'true' : 'false');
-        });
-    }
-    updateTrackingCompletionCounts();
-}
-
-function initTrackingCompletionTabs() {
-    const tabs = document.getElementById('trackingCompletionTabs');
-    if (!tabs || tabs.dataset.bound) return;
-    tabs.dataset.bound = '1';
-    tabs.querySelectorAll('.finance-completion-tab').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            setTrackingCompletionTab(btn.dataset.completion);
-            paginationState.tracking.currentPage = 1;
-            updateTrackingTable(currentTrackingFilter);
-        });
-    });
 }
 
 function isShippingLinePaymentDone(status) {
@@ -555,7 +509,7 @@ function updateStatusSectionCounts() {
 
     const trackingEl = document.getElementById('trackingStatusSections');
     if (trackingEl) {
-        ['pending_booking', 'pending_si', 'pending_bl', 'pending_sob'].forEach((section) => {
+        ['pending_booking', 'pending_si', 'pending_bl', 'pending_sob', 'completed'].forEach((section) => {
             const span = trackingEl.querySelector(`[data-count="${section}"]`);
             if (span) span.textContent = countTrackingSection(section);
         });
@@ -574,7 +528,6 @@ async function refreshBulkStatusCache() {
     const ids = enquiries.filter((e) => e.stage >= 3 && !e.is_void).map((e) => e.id);
     cachedBulkStatus = ids.length ? await fetchBulkStatus(ids) : {};
     updateStatusSectionCounts();
-    updateTrackingCompletionCounts();
     updateFinanceCompletionCounts();
 }
 
@@ -593,8 +546,7 @@ function initStatusSections() {
                 updateAllEnquiriesTable(filter);
             } else if (view === 'tracking') {
                 paginationState.tracking.currentPage = 1;
-                currentTrackingCompletionTab = 'pending';
-                setTrackingCompletionTab('pending');
+                currentTrackingFilter = section;
                 updateTrackingTable(section);
             } else if (view === 'finance') {
                 paginationState.finance.currentPage = 1;
@@ -1027,24 +979,24 @@ function showTrackingView(filterType = null) {
         if (section === 'pending_si') title.textContent = 'Tracking - Pending SI';
         else if (section === 'pending_bl') title.textContent = 'Tracking - Pending BL';
         else if (section === 'pending_sob') title.textContent = 'Tracking - SOB Remaining';
+        else if (section === 'completed') title.textContent = 'Tracking - Completed';
         else if (section === 'pending_booking') title.textContent = 'Tracking - Booking Pending';
         else title.textContent = 'Tracking & Documents';
     }
 
     paginationState.tracking.currentPage = 1;
-    setTrackingCompletionTab(currentTrackingCompletionTab);
     updateTrackingTable(section);
 }
 
 window.applyTrackingSavedRefresh = async function applyTrackingSavedRefresh(options = {}) {
     if (options.moveToCompleted) {
-        currentTrackingFilter = 'pending_sob';
-        setActiveStatusSection('tracking', 'pending_sob');
-        currentTrackingCompletionTab = 'completed';
-        setTrackingCompletionTab('completed');
+        currentTrackingFilter = 'completed';
+        setActiveStatusSection('tracking', 'completed');
+        const title = document.querySelector('#trackingView .view-h1');
+        if (title) title.textContent = 'Tracking - Completed';
     }
     if (typeof refreshBulkStatusCache === 'function') await refreshBulkStatusCache();
-    await updateTrackingTable(currentTrackingFilter || 'pending_sob');
+    await updateTrackingTable(currentTrackingFilter || 'completed');
     if (typeof updateStatusSectionCounts === 'function') updateStatusSectionCounts();
     if (typeof fetchDashboardStats === 'function') fetchDashboardStats();
 };
@@ -1514,23 +1466,17 @@ async function updateTrackingTable(filterType = null) {
         : await fetchBulkStatus(ids);
     if (!Object.keys(cachedBulkStatus).length) cachedBulkStatus = bulkStatus;
 
-    const showCompleted = currentTrackingCompletionTab === 'completed';
-    const milestoneField = TRACKING_MILESTONE_FIELDS[filterType];
-
     const filteredResults = trackingEnquiries.filter((e) => {
         const s = bulkStatus[e.id] || null;
-        if (!milestoneField) return true;
-        const done = isTrackingMilestoneDone(s, milestoneField);
-        return showCompleted ? done : !done;
+        return matchesTrackingSection(filterType, s);
     });
 
     updateStatusSectionCounts();
-    updateTrackingCompletionCounts();
 
     const total = filteredResults.length;
     if (total === 0) {
-        const emptyMsg = showCompleted
-            ? 'No completed records in this section yet.'
+        const emptyMsg = filterType === 'completed'
+            ? 'No SOB-completed shipments yet.'
             : 'No pending records found.';
         tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">${emptyMsg}</td></tr>`;
         renderPagination('trackingPagination', 0, 1, 'changeTrackingPage');
