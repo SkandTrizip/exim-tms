@@ -177,6 +177,9 @@ function renderClientMastersTable() {
         mastersState.clientsPage = p;
         renderClientMastersTable();
     }, pageSize);
+    if (typeof window.refreshListTableFilters === 'function') {
+        window.refreshListTableFilters('mastersClientsTable');
+    }
 }
 
 function renderShippingLinesTable() {
@@ -222,6 +225,9 @@ function renderShippingLinesTable() {
         mastersState.shippingPage = p;
         renderShippingLinesTable();
     }, pageSize);
+    if (typeof window.refreshListTableFilters === 'function') {
+        window.refreshListTableFilters('mastersShippingTable');
+    }
 }
 
 window.loadMastersClientList = async function loadMastersClientList() {

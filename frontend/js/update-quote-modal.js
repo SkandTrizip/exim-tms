@@ -7,9 +7,15 @@ let uqState = {
     quoteId: null,
     initialQuote: null,
     finalContainers: [],
-    exchangeRate: 86.8,
+    // Fallback cross-rates to INR, used until /api/exchange-rate/rates resolves.
+    exchangeRates: { USD: 86.8, EUR: 94.35, GBP: 109.87, JPY: 0.55 },
     saving: false,
 };
+
+function getUqExchangeRate(curr) {
+    if (curr === 'INR') return 1;
+    return uqState.exchangeRates[curr] || 1;
+}
 
 let uqContext = {
     containerCount: null,
@@ -110,7 +116,7 @@ function calcChargeInr(ch) {
     const ex = parseFloat(ch.exchange_rate ?? ch.ex) || 1;
     const curr = String(ch.currency ?? ch.curr ?? 'INR').toUpperCase();
     const tot = qty * rate;
-    return curr === 'USD' ? tot * ex : tot;
+    return curr !== 'INR' ? tot * ex : tot;
 }
 
 function calcClientInr(ch) {
@@ -121,7 +127,7 @@ function calcClientInr(ch) {
         ? (parseFloat(ch.vendor_rate) || 0)
         : (parseFloat(ch.rate) || 0);
     const tot = qty * vendor;
-    return curr === 'USD' ? tot * ex : tot;
+    return curr !== 'INR' ? tot * ex : tot;
 }
 
 function sumContainersInr(containers, useClient = false) {
@@ -286,7 +292,7 @@ function renderFinalTables() {
                 charged_on: 'Per Container',
                 quantity: defaultQty,
                 rate: 0,
-                exchange_rate: uqState.exchangeRate,
+                exchange_rate: getUqExchangeRate('USD'),
                 vendor_rate: 0,
             });
             renderFinalTables();
@@ -301,7 +307,7 @@ function renderFinalTables() {
 function renderFinalRow(ch, cIdx, rIdx, defaultQty) {
     const on = ch.charged_on || 'Per Container';
     const qty = on === 'Per BL' ? 1 : (ch.quantity ?? defaultQty);
-    const ex = (ch.currency === 'USD') ? (ch.exchange_rate || uqState.exchangeRate) : (ch.exchange_rate || 1);
+    const ex = ch.exchange_rate || getUqExchangeRate(ch.currency);
     const inr = calcChargeInr({ ...ch, quantity: qty, exchange_rate: ex });
     const clientInr = calcClientInr({ ...ch, quantity: qty, exchange_rate: ex });
     return `
@@ -315,8 +321,7 @@ function renderFinalRow(ch, cIdx, rIdx, defaultQty) {
             </td>
             <td>
                 <select class="uq-curr">
-                    <option value="USD" ${ch.currency === 'USD' ? 'selected' : ''}>USD</option>
-                    <option value="INR" ${ch.currency === 'INR' ? 'selected' : ''}>INR</option>
+                    ${CONFIG.CHARGE_CURRENCIES.map(c => `<option value="${c}" ${ch.currency === c ? 'selected' : ''}>${c}</option>`).join('')}
                 </select>
             </td>
             <td>
@@ -365,7 +370,7 @@ function bindFinalRowEvents(host) {
         });
         row.querySelector('.uq-curr')?.addEventListener('change', (e) => {
             const exEl = row.querySelector('.uq-ex');
-            exEl.value = e.target.value === 'USD' ? uqState.exchangeRate : 1;
+            exEl.value = getUqExchangeRate(e.target.value);
             sync();
         });
         row.querySelector('.uq-remove-row')?.addEventListener('click', () => {
@@ -426,10 +431,10 @@ function syncAllFinalRowsFromDom() {
 
 async function fetchExchangeRateForUq() {
     try {
-        const res = await fetch(`${CONFIG.API_URL}/api/exchange-rate/rate`);
+        const res = await fetch(`${CONFIG.API_URL}/api/exchange-rate/rates`);
         if (res.ok) {
             const data = await res.json();
-            if (data?.rate) uqState.exchangeRate = data.rate;
+            if (data && !data.error) Object.assign(uqState.exchangeRates, data);
         }
     } catch (_) { /* keep default */ }
 }

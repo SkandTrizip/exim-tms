@@ -2,7 +2,13 @@
 let currentEnquiry = null;
 let pricingQuotes = [];
 let activeQuoteIndex = 0;
-let currentExchangeRate = 86.8;
+// Fallback cross-rates to INR, used until /api/exchange-rate/rates resolves.
+let currentExchangeRates = { USD: 86.8, EUR: 94.35, GBP: 109.87, JPY: 0.55 };
+
+function getExchangeRateForCurrency(curr) {
+    if (curr === 'INR') return 1;
+    return currentExchangeRates[curr] || 1;
+}
 let isConfirmMode = false;  // controls vendor rate column visibility
 /** URL `mode=` so we can keep the calculator open for Confirm Quote flows even after a quote is already accepted */
 let pricingPageMode = '';
@@ -423,13 +429,13 @@ async function fetchQuotesForEnquiry(enquiryId) {
 
 async function fetchExchangeRate() {
     try {
-        const response = await fetch(`${CONFIG.API_URL}/api/exchange-rate/rate`);
+        const response = await fetch(`${CONFIG.API_URL}/api/exchange-rate/rates`);
         if (response.ok) {
             const data = await response.json();
-            if (data.rate) currentExchangeRate = data.rate;
+            if (data && !data.error) Object.assign(currentExchangeRates, data);
         }
     } catch (e) {
-        console.warn('Using default exchange rate');
+        console.warn('Using default exchange rates');
     }
 }
 
@@ -714,7 +720,7 @@ function removePricingRow(btn) {
 function addPricingRowToTbody(tbody, data = {}) {
     const row = document.createElement('tr');
     const defaultQty = currentEnquiry ? (currentEnquiry.container_count || 1) : 1;
-    const defaultEx = (data.curr === 'USD') ? (data.ex || currentExchangeRate) : (data.ex || 1);
+    const defaultEx = data.ex || getExchangeRateForCurrency(data.curr || 'USD');
     const hasStoredVendor = data.vendor_rate != null && data.vendor_rate !== '';
     const defaultVendorRate = hasStoredVendor ? data.vendor_rate : (data.rate || '');
     const vendorManual = hasStoredVendor && String(data.vendor_rate) !== String(data.rate ?? '') ? 'true' : 'false';
@@ -725,7 +731,7 @@ function addPricingRowToTbody(tbody, data = {}) {
     row.innerHTML = `
         <td><input type="text" class="p-desc" value="${data.desc || ''}" oninput="calculatePricingTotal()"></td>
         <td><select class="p-account" onchange="calculatePricingTotal()"><option value="On Your Account" ${data.account === 'On Your Account' ? 'selected' : ''}>On Your Account</option><option value="Consignee Account" ${data.account === 'Consignee Account' ? 'selected' : ''}>Consignee Account</option></select></td>
-        <td><select class="p-curr" onchange="handleCurrencyChange(this)"><option value="USD" ${data.curr === 'USD' ? 'selected' : ''}>USD</option><option value="INR" ${data.curr === 'INR' ? 'selected' : ''}>INR</option></select></td>
+        <td><select class="p-curr" onchange="handleCurrencyChange(this)">${CONFIG.CHARGE_CURRENCIES.map(c => `<option value="${c}" ${(data.curr || 'USD') === c ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
         <td><select class="p-on" onchange="handleChargedOnChange(this)"><option value="Per BL" ${data.on === 'Per BL' ? 'selected' : ''}>Per BL</option><option value="Per Container" ${data.on === 'Per Container' ? 'selected' : ''}>Per Container</option></select></td>
         <td><input type="number" class="p-qty" value="${data.on === 'Per BL' ? 1 : (data.qty || defaultQty)}" ${data.on === 'Per BL' ? 'readonly' : ''} min="0" oninput="if(this.value<0)this.value=0; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td><input type="number" class="p-rate" value="${data.rate || ''}" min="0" oninput="if(this.value<0)this.value=0; syncVendorRate(this); calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
@@ -760,15 +766,15 @@ function calculatePricingTotal() {
             const vendorEl = row.querySelector('.p-vendor');
             const vendorRate = parseFloat(vendorEl ? vendorEl.value : 0) || 0;
 
-            // INR calculation: USD charges always multiply by exchange rate;
+            // INR calculation: non-INR charges always multiply by exchange rate;
             // INR charges don't need conversion.
-            // Per BL + USD → qty(1) × rate × ex  (exchange rate still applies)
+            // Per BL + non-INR → qty(1) × rate × ex  (exchange rate still applies)
             // Per BL + INR → qty(1) × rate  (no conversion needed)
             const tot = qty * rate;
-            const inr = curr === 'USD' ? tot * ex : tot;
+            const inr = curr !== 'INR' ? tot * ex : tot;
 
             const vendorTot = qty * vendorRate;
-            const vendorInr = curr === 'USD' ? vendorTot * ex : vendorTot;
+            const vendorInr = curr !== 'INR' ? vendorTot * ex : vendorTot;
 
             row.querySelector('.p-inr-val').textContent = '₹' + Math.round(inr).toLocaleString();
 
@@ -789,29 +795,19 @@ function handleChargedOnChange(sel) {
     const ex = row.querySelector('.p-ex');
     if (sel.value === 'Per BL') {
         qty.value = 1; qty.readOnly = true;
-        // For USD+Per BL, keep exchange rate active; for INR reset to 1
-        if (row.querySelector('.p-curr').value !== 'USD') {
-            ex.value = 1;
-        } else {
-            ex.value = currentExchangeRate;
-        }
-        ex.readOnly = false; // Always allow override
     } else {
-        qty.readOnly = false; ex.readOnly = false;
-        ex.value = row.querySelector('.p-curr').value === 'USD' ? currentExchangeRate : 1;
+        qty.readOnly = false;
     }
+    // Exchange rate still applies for Per BL + non-INR; reset to 1 for INR.
+    ex.value = getExchangeRateForCurrency(row.querySelector('.p-curr').value);
+    ex.readOnly = false; // Always allow override
     calculatePricingTotal();
 }
 
 function handleCurrencyChange(sel) {
     const row = sel.closest('tr');
     const ex = row.querySelector('.p-ex');
-    // For Per BL: USD should use exchange rate, INR should be 1
-    if (row.querySelector('.p-on').value === 'Per BL') {
-        ex.value = sel.value === 'USD' ? currentExchangeRate : 1;
-    } else {
-        ex.value = sel.value === 'USD' ? currentExchangeRate : 1;
-    }
+    ex.value = getExchangeRateForCurrency(sel.value);
     calculatePricingTotal();
 }
 
@@ -964,10 +960,10 @@ function getQuoteSummary(quote) {
             const ex = parseFloat(ch.ex) || 1;
             const vendorRate = parseFloat(ch.vendor_rate) || 0;
             const tot = qty * rate;
-            // USD charges always multiply by exchange rate (including Per BL)
-            const inr = ch.curr === 'USD' ? tot * ex : tot;
+            // Non-INR charges always multiply by exchange rate (including Per BL)
+            const inr = ch.curr !== 'INR' ? tot * ex : tot;
             const vendorTot = qty * vendorRate;
-            const vendorInr = ch.curr === 'USD' ? vendorTot * ex : vendorTot;
+            const vendorInr = ch.curr !== 'INR' ? vendorTot * ex : vendorTot;
             if (ch.account === 'On Your Account') {
                 totShippingLine += inr;
                 totVendor += vendorInr;

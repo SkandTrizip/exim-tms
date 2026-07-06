@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from backend.models.invoice import Invoice
 
 INVOICE_PREFIX = "LPE"
-# Continue after last manually issued LPE/26-27/000059
-_FY_SEQUENCE_FLOORS: dict[str, int] = {"26-27": 60}
+# Continue after last manually issued LPE/26-27/000064
+_FY_SEQUENCE_FLOORS: dict[str, int] = {"26-27": 65}
 
 
 def financial_year_label(d: date) -> str:

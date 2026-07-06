@@ -50,7 +50,7 @@ async function fetchEnquiryDetails() {
                                 const qty = ch.quantity || 0;
                                 const ex = ch.exchange_rate || 1;
                                 const vTot = qty * vRate;
-                                const vInr = ch.charged_on === 'Per BL' ? vTot : (ch.currency === 'USD' ? vTot * ex : vTot);
+                                const vInr = ch.charged_on === 'Per BL' ? vTot : (ch.currency !== 'INR' ? vTot * ex : vTot);
                                 vendorTotal += vInr;
                             }
                         });

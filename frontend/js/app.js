@@ -606,6 +606,10 @@ function initListTableUI(config) {
 }
 
 function applyTableSearchFilter(tbodyId, input) {
+    if (typeof window.applyListTableFilters === 'function') {
+        window.applyListTableFilters(tbodyId, input);
+        return;
+    }
     const tbody = document.getElementById(tbodyId);
     if (!tbody || !input) return;
     const q = (input.value || '').trim().toLowerCase();
