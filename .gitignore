@@ -13,3 +13,4 @@ env/
 .cursor/settings.json
 logs/app.log
 .agents/
+.claude/

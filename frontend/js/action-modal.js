@@ -146,10 +146,30 @@ function resetActionsMenuPosition(menu) {
     menu.style.removeProperty('overflow-y');
     menu.style.removeProperty('z-index');
     menu.style.removeProperty('visibility');
+
+    const anchor = menu._actionsMenuAnchor;
+    if (anchor?.parent && menu.parentElement === document.body) {
+        if (anchor.next && anchor.next.parentElement === anchor.parent) {
+            anchor.parent.insertBefore(menu, anchor.next);
+        } else {
+            anchor.parent.appendChild(menu);
+        }
+    }
 }
 
 function positionActionsMenu(menu, btn) {
     if (!menu || !btn) return;
+
+    // Portal to body so scroll containers cannot clip the menu.
+    if (!menu._actionsMenuAnchor) {
+        menu._actionsMenuAnchor = {
+            parent: menu.parentElement,
+            next: menu.nextSibling,
+        };
+    }
+    if (menu.parentElement !== document.body) {
+        document.body.appendChild(menu);
+    }
 
     menu.classList.add('actions-menu-floating');
     menu.style.position = 'fixed';
@@ -157,6 +177,8 @@ function positionActionsMenu(menu, btn) {
     menu.style.display = 'block';
     menu.style.minWidth = '180px';
     menu.style.zIndex = '1200';
+    menu.style.right = 'auto';
+    menu.style.bottom = 'auto';
 
     const rect = btn.getBoundingClientRect();
     const menuWidth = menu.offsetWidth || 180;
@@ -177,7 +199,6 @@ function positionActionsMenu(menu, btn) {
 
     menu.style.top = `${Math.max(margin, top)}px`;
     menu.style.left = `${Math.max(margin, left)}px`;
-    menu.style.right = 'auto';
     menu.style.visibility = '';
 }
 
@@ -198,8 +219,8 @@ window.closeActionModal = function closeActionModal() {
         d.classList.remove('actions-menu-open');
     });
     document.querySelectorAll('.actions-menu').forEach((m) => {
-        m.style.removeProperty('display');
         m.classList.remove('open');
+        resetActionsMenuPosition(m);
     });
 };
 

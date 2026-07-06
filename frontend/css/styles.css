@@ -1547,13 +1547,12 @@ a.job-link:hover {
 
 .actions-menu.actions-menu-floating {
     position: fixed !important;
-    right: auto !important;
-    top: auto !important;
     padding-top: 0;
     margin: 0;
     max-height: min(360px, calc(100vh - 16px));
     overflow-y: auto;
     z-index: 1200;
+    /* top/left are set inline by positionActionsMenu() — do not use top/right:auto !important */
 }
 
 @keyframes fadeInScale {
