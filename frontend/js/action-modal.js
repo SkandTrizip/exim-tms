@@ -568,6 +568,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (event.data.close) closeActionModal();
             return;
         }
+        if (event.data.type === 'tracking-saved') {
+            const refresh = async () => {
+                if (typeof window.applyTrackingSavedRefresh === 'function') {
+                    await window.applyTrackingSavedRefresh({
+                        moveToCompleted: event.data.moveToCompleted,
+                    });
+                }
+            };
+            refresh();
+            return;
+        }
         if (event.data.type === 'open-update-quote') {
             if (typeof window.openUpdateQuoteModalFromHost === 'function') {
                 window.openUpdateQuoteModalFromHost(event.data);

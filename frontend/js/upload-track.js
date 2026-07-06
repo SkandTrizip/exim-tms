@@ -673,6 +673,9 @@ async function saveChecklistState() {
         });
         if (response.ok) {
             console.log('✅ Checklist state synced with backend');
+            if (state.sob?.checked && typeof notifyTrackingParentRefresh === 'function') {
+                notifyTrackingParentRefresh({ moveToCompleted: true });
+            }
         }
     } catch (e) {
         console.error('❌ Failed to sync checklist state with backend:', e);

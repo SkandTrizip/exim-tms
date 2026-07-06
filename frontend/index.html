@@ -538,6 +538,19 @@
                             </button>
                         </div>
 
+                        <div class="finance-completion-tabs" id="trackingCompletionTabs" role="tablist" aria-label="Tracking pending and completed">
+                            <button type="button" class="finance-completion-tab active" data-completion="pending" role="tab" aria-selected="true">
+                                <i class="fas fa-clock" aria-hidden="true"></i>
+                                Pending
+                                <span class="finance-completion-count" data-completion-count="pending">0</span>
+                            </button>
+                            <button type="button" class="finance-completion-tab" data-completion="completed" role="tab" aria-selected="false">
+                                <i class="fas fa-check-circle" aria-hidden="true"></i>
+                                Completed
+                                <span class="finance-completion-count" data-completion-count="completed">0</span>
+                            </button>
+                        </div>
+
                         <div class="table-container table-card list-table-card" id="trackingTableCard">
                             <div class="table-head">
                                 <div class="table-head-left">

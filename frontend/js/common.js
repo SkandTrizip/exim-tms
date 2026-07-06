@@ -173,9 +173,19 @@ function notifyFinanceParentRefresh(options = {}) {
     }, '*');
 }
 
+function notifyTrackingParentRefresh(options = {}) {
+    if (!isEmbeddedDrawer() || !window.parent) return;
+    window.parent.postMessage({
+        type: 'tracking-saved',
+        moveToCompleted: !!options.moveToCompleted,
+    }, '*');
+}
+
+window.notifyFinanceParentRefresh = notifyFinanceParentRefresh;
+window.notifyTrackingParentRefresh = notifyTrackingParentRefresh;
+
 window.isEmbeddedDrawer = isEmbeddedDrawer;
 window.hideEmbeddedDrawerBackButtons = hideEmbeddedDrawerBackButtons;
-window.notifyFinanceParentRefresh = notifyFinanceParentRefresh;
 
 /**
  * Show a custom modal Notification

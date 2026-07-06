@@ -45,9 +45,13 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
                 # Convert date string to datetime if possible, otherwise use current time
                 date_str = item_data.get('date')
                 try:
-                    # Expected format: "18 Feb 2026, 17:46"
                     if date_str and date_str != '-':
-                        setattr(status, field, datetime.strptime(date_str, "%d %b %y, %H:%M"))
+                        if key == 'sob':
+                            # SOB uses HTML date input (YYYY-MM-DD)
+                            setattr(status, field, datetime.strptime(date_str, "%Y-%m-%d"))
+                        else:
+                            # Expected format: "18 Feb 2026, 17:46"
+                            setattr(status, field, datetime.strptime(date_str, "%d %b %y, %H:%M"))
                     elif item_data.get('checked'):
                         setattr(status, field, datetime.now())
                 except (ValueError, TypeError):

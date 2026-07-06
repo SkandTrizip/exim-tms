@@ -62,6 +62,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     initQuotesListUI();
     initStatusSections();
     initFinanceCompletionTabs();
+    initTrackingCompletionTabs();
 });
 
 function escapeHtml(s) {
@@ -82,6 +83,27 @@ function escapeAttr(s) {
 let cachedBulkStatus = {};
 let financeReceivedCount = 0;
 let currentFinanceCompletionTab = 'pending';
+let currentTrackingCompletionTab = 'pending';
+
+const TRACKING_MILESTONE_FIELDS = {
+    pending_booking: 'booking_confirmed',
+    pending_si: 'si_submitted',
+    pending_bl: 'bl_received',
+    pending_sob: 'sob',
+};
+
+const TRACKING_COMPLETED_LABELS = {
+    pending_booking: 'Booking Confirmed',
+    pending_si: 'SI Submitted',
+    pending_bl: 'BL Received',
+    pending_sob: 'SOB Completed',
+};
+
+function isTrackingMilestoneDone(status, field) {
+    if (!status || !field) return false;
+    const val = status[field];
+    return val != null && val !== '' && val !== false;
+}
 
 const STATUS_SECTION_LABELS = {
     sales: {
@@ -354,6 +376,10 @@ function updateViewStatusPill(view, section) {
     if (!pill) return;
     const labelEl = pill.querySelector('.status-text');
     if (!labelEl) return;
+    if (view === 'tracking' && currentTrackingCompletionTab === 'completed') {
+        labelEl.textContent = TRACKING_COMPLETED_LABELS[section] || section || 'Completed';
+        return;
+    }
     const labels = STATUS_SECTION_LABELS[view] || {};
     labelEl.textContent = labels[section] || section || 'All';
 }
@@ -365,16 +391,55 @@ function countSalesSection(section) {
     return active.length;
 }
 
-function countTrackingSection(section) {
+function countTrackingCompletion(section, completionTab) {
     const ops = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
+    const field = TRACKING_MILESTONE_FIELDS[section];
+    if (!field) return 0;
+    const showCompleted = completionTab === 'completed';
     return ops.filter((e) => {
         const s = cachedBulkStatus[e.id] || null;
-        if (section === 'pending_booking') return !(s && s.booking_confirmed);
-        if (section === 'pending_si') return !(s && s.si_submitted);
-        if (section === 'pending_bl') return !(s && s.bl_received);
-        if (section === 'pending_sob') return !(s && s.sob);
-        return true;
+        const done = isTrackingMilestoneDone(s, field);
+        return showCompleted ? done : !done;
     }).length;
+}
+
+function countTrackingSection(section) {
+    return countTrackingCompletion(section, 'pending');
+}
+
+function updateTrackingCompletionCounts() {
+    const tabs = document.getElementById('trackingCompletionTabs');
+    if (!tabs || !currentTrackingFilter) return;
+    const pendingEl = tabs.querySelector('[data-completion-count="pending"]');
+    const completedEl = tabs.querySelector('[data-completion-count="completed"]');
+    if (pendingEl) pendingEl.textContent = countTrackingCompletion(currentTrackingFilter, 'pending');
+    if (completedEl) completedEl.textContent = countTrackingCompletion(currentTrackingFilter, 'completed');
+}
+
+function setTrackingCompletionTab(tab) {
+    currentTrackingCompletionTab = tab === 'completed' ? 'completed' : 'pending';
+    const tabs = document.getElementById('trackingCompletionTabs');
+    if (tabs) {
+        tabs.querySelectorAll('.finance-completion-tab').forEach((btn) => {
+            const active = btn.dataset.completion === currentTrackingCompletionTab;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+    }
+    updateTrackingCompletionCounts();
+}
+
+function initTrackingCompletionTabs() {
+    const tabs = document.getElementById('trackingCompletionTabs');
+    if (!tabs || tabs.dataset.bound) return;
+    tabs.dataset.bound = '1';
+    tabs.querySelectorAll('.finance-completion-tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            setTrackingCompletionTab(btn.dataset.completion);
+            paginationState.tracking.currentPage = 1;
+            updateTrackingTable(currentTrackingFilter);
+        });
+    });
 }
 
 function isShippingLinePaymentDone(status) {
@@ -509,6 +574,8 @@ async function refreshBulkStatusCache() {
     const ids = enquiries.filter((e) => e.stage >= 3 && !e.is_void).map((e) => e.id);
     cachedBulkStatus = ids.length ? await fetchBulkStatus(ids) : {};
     updateStatusSectionCounts();
+    updateTrackingCompletionCounts();
+    updateFinanceCompletionCounts();
 }
 
 function initStatusSections() {
@@ -526,6 +593,8 @@ function initStatusSections() {
                 updateAllEnquiriesTable(filter);
             } else if (view === 'tracking') {
                 paginationState.tracking.currentPage = 1;
+                currentTrackingCompletionTab = 'pending';
+                setTrackingCompletionTab('pending');
                 updateTrackingTable(section);
             } else if (view === 'finance') {
                 paginationState.finance.currentPage = 1;
@@ -963,8 +1032,22 @@ function showTrackingView(filterType = null) {
     }
 
     paginationState.tracking.currentPage = 1;
+    setTrackingCompletionTab(currentTrackingCompletionTab);
     updateTrackingTable(section);
 }
+
+window.applyTrackingSavedRefresh = async function applyTrackingSavedRefresh(options = {}) {
+    if (options.moveToCompleted) {
+        currentTrackingFilter = 'pending_sob';
+        setActiveStatusSection('tracking', 'pending_sob');
+        currentTrackingCompletionTab = 'completed';
+        setTrackingCompletionTab('completed');
+    }
+    if (typeof refreshBulkStatusCache === 'function') await refreshBulkStatusCache();
+    await updateTrackingTable(currentTrackingFilter || 'pending_sob');
+    if (typeof updateStatusSectionCounts === 'function') updateStatusSectionCounts();
+    if (typeof fetchDashboardStats === 'function') fetchDashboardStats();
+};
 
 async function showFinanceView(subView = null) {
     hideAllViews();
@@ -1431,20 +1514,25 @@ async function updateTrackingTable(filterType = null) {
         : await fetchBulkStatus(ids);
     if (!Object.keys(cachedBulkStatus).length) cachedBulkStatus = bulkStatus;
 
+    const showCompleted = currentTrackingCompletionTab === 'completed';
+    const milestoneField = TRACKING_MILESTONE_FIELDS[filterType];
+
     const filteredResults = trackingEnquiries.filter((e) => {
         const s = bulkStatus[e.id] || null;
-        if (filterType === 'pending_si') return !(s && s.si_submitted);
-        if (filterType === 'pending_bl') return !(s && s.bl_received);
-        if (filterType === 'pending_sob') return !(s && s.sob);
-        if (filterType === 'pending_booking') return !(s && s.booking_confirmed);
-        return true;
+        if (!milestoneField) return true;
+        const done = isTrackingMilestoneDone(s, milestoneField);
+        return showCompleted ? done : !done;
     });
 
     updateStatusSectionCounts();
+    updateTrackingCompletionCounts();
 
     const total = filteredResults.length;
     if (total === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
+        const emptyMsg = showCompleted
+            ? 'No completed records in this section yet.'
+            : 'No pending records found.';
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">${emptyMsg}</td></tr>`;
         renderPagination('trackingPagination', 0, 1, 'changeTrackingPage');
         updateTableRecordsCount('trackingTable', 'trackingRecordsCount');
         updateViewStatusPill('tracking', currentTrackingFilter);
