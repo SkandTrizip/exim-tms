@@ -688,7 +688,8 @@ async function persistFinalQuoteRevision(remarks) {
         closeUpdateQuoteModal();
         showModal('Saved', 'Final quote updated successfully.', 'success');
     } catch (err) {
-        showModal('Error', err.message || 'Failed to save final quote.', 'error');
+        // Propagate so the remarks modal can show the error without closing.
+        throw err;
     } finally {
         uqState.saving = false;
         if (saveBtn) {
