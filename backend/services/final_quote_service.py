@@ -109,6 +109,7 @@ def _copy_source_to_final(db: Session, source: Quote) -> FinalQuote:
                 exchange_rate=src_charge.exchange_rate,
                 final_inr_amount=calculated_inr,
                 vendor_rate=src_charge.vendor_rate,
+                vendor_exchange_rate=src_charge.vendor_exchange_rate or src_charge.exchange_rate,
                 charge_sequence=seq,
             )
             db.add(db_charge)
@@ -204,6 +205,7 @@ def update_final_revision(db: Session, source_quote_id: int, data: FinalQuoteUpd
                 exchange_rate=charge_data.exchange_rate,
                 final_inr_amount=calculated_inr,
                 vendor_rate=charge_data.vendor_rate,
+                vendor_exchange_rate=charge_data.vendor_exchange_rate,
                 charge_sequence=seq,
             )
             db.add(db_charge)

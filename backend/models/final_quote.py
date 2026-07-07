@@ -87,6 +87,7 @@ class FinalQuoteCharge(Base):
     exchange_rate = Column(Float, default=1.0)
     final_inr_amount = Column(Float, default=0.0)
     vendor_rate = Column(Float, default=0.0)
+    vendor_exchange_rate = Column(Float, default=1.0)
     charge_sequence = Column(Integer, default=0)
 
     container = relationship("FinalQuoteContainer", back_populates="charges")

@@ -30,9 +30,11 @@ def _quote_to_snapshot_dict(quote: Quote) -> dict:
             rate = ch.rate or 0
             ex = ch.exchange_rate or 1
             curr = (ch.currency or "INR").upper()
-            inr = qty * rate * ex if curr == "USD" else qty * rate
+            inr = qty * rate * ex if curr != "INR" else qty * rate
             vendor = ch.vendor_rate if ch.vendor_rate is not None else ch.rate
-            vendor_inr = qty * (vendor or 0) * ex if curr == "USD" else qty * (vendor or 0)
+            vendor_ex = ch.vendor_exchange_rate if ch.vendor_exchange_rate is not None else ex
+            vendor_tot = qty * (vendor or 0)
+            vendor_inr = vendor_tot * vendor_ex if curr != "INR" else vendor_tot
             charges.append({
                 "charge_description": ch.charge_description,
                 "account_type": ch.account_type,
@@ -42,6 +44,7 @@ def _quote_to_snapshot_dict(quote: Quote) -> dict:
                 "rate": ch.rate,
                 "exchange_rate": ch.exchange_rate,
                 "vendor_rate": ch.vendor_rate,
+                "vendor_exchange_rate": vendor_ex,
                 "shipping_line_inr": round(inr, 2),
                 "client_rate_inr": round(vendor_inr, 2),
             })
@@ -211,6 +214,7 @@ def create_quote(db: Session, quote_data: QuoteCreate) -> Quote:
                 exchange_rate=charge_data.exchange_rate,
                 final_inr_amount=calculated_inr,
                 vendor_rate=charge_data.vendor_rate,
+                vendor_exchange_rate=charge_data.vendor_exchange_rate,
                 charge_sequence=seq          # preserve row order
             )
             db.add(db_charge)
@@ -332,6 +336,7 @@ def update_quote(db: Session, quote_id: int, quote_data: QuoteUpdate) -> Quote:
                     exchange_rate=charge_data.exchange_rate,
                     final_inr_amount=calculated_inr,
                     vendor_rate=charge_data.vendor_rate,
+                    vendor_exchange_rate=charge_data.vendor_exchange_rate,
                     charge_sequence=seq
                 )
                 db.add(db_charge)

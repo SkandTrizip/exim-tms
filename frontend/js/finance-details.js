@@ -48,7 +48,7 @@ async function fetchEnquiryDetails() {
                                 // vendor total: vendor_rate × qty × ex_rate (same formula)
                                 const vRate = ch.vendor_rate || 0;
                                 const qty = ch.quantity || 0;
-                                const ex = ch.exchange_rate || 1;
+                                const ex = ch.vendor_exchange_rate ?? ch.exchange_rate ?? 1;
                                 const vTot = qty * vRate;
                                 const vInr = ch.charged_on === 'Per BL' ? vTot : (ch.currency !== 'INR' ? vTot * ex : vTot);
                                 vendorTotal += vInr;

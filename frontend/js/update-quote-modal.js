@@ -14,7 +14,18 @@ let uqState = {
 
 function getUqExchangeRate(curr) {
     if (curr === 'INR') return 1;
-    return uqState.exchangeRates[curr] || 1;
+    return formatUqExRate(uqState.exchangeRates[curr] || 1);
+}
+
+function formatUqExRate(value) {
+    const n = parseFloat(value);
+    if (!Number.isFinite(n)) return 1;
+    return Math.round(n * 100) / 100;
+}
+
+function displayUqExRate(value) {
+    const n = formatUqExRate(value);
+    return n === 1 ? '1' : n.toFixed(2);
 }
 
 function getUqChargeCurrencies() {
@@ -127,13 +138,13 @@ function calcChargeInr(ch) {
 
 function calcClientInr(ch) {
     const qty = parseFloat(ch.quantity ?? ch.qty) || 0;
-    const ex = parseFloat(ch.exchange_rate ?? ch.ex) || 1;
+    const vendorEx = parseFloat(ch.vendor_exchange_rate ?? ch.exchange_rate ?? ch.ex) || 1;
     const curr = String(ch.currency ?? ch.curr ?? 'INR').toUpperCase();
     const vendor = ch.vendor_rate != null && ch.vendor_rate !== ''
         ? (parseFloat(ch.vendor_rate) || 0)
         : (parseFloat(ch.rate) || 0);
     const tot = qty * vendor;
-    return curr !== 'INR' ? tot * ex : tot;
+    return curr !== 'INR' ? tot * vendorEx : tot;
 }
 
 function sumContainersInr(containers, useClient = false) {
@@ -162,8 +173,9 @@ function mapApiQuoteToContainers(quote) {
                     charged_on: ch.charged_on || 'Per Container',
                     quantity: ch.quantity ?? 1,
                     rate: ch.rate ?? 0,
-                    exchange_rate: ch.exchange_rate ?? 1,
+                    exchange_rate: formatUqExRate(ch.exchange_rate ?? 1),
                     vendor_rate: ch.vendor_rate != null ? ch.vendor_rate : ch.rate ?? 0,
+                    vendor_exchange_rate: formatUqExRate(ch.vendor_exchange_rate ?? ch.exchange_rate ?? 1),
                 })),
         }));
 }
@@ -180,6 +192,7 @@ function mapSnapshotContainersToEditable(snapshot) {
             rate: ch.rate ?? 0,
             exchange_rate: ch.exchange_rate ?? 1,
             vendor_rate: ch.vendor_rate != null ? ch.vendor_rate : ch.rate ?? 0,
+            vendor_exchange_rate: ch.vendor_exchange_rate ?? ch.exchange_rate ?? 1,
         })),
     }));
 }
@@ -220,6 +233,8 @@ function renderInitialTable(containers) {
                         <th>Rate</th>
                         <th>Ex. Rate</th>
                         <th style="text-align:right">Shipping Line (INR)</th>
+                        <th style="text-align:right">Client Rate</th>
+                        <th>Client Ex. Rate</th>
                         <th style="text-align:right">Client Rate (INR)</th>
                     </tr>
                 </thead>
@@ -232,8 +247,10 @@ function renderInitialTable(containers) {
                             <td>${escapeHtml(ch.charged_on || '')}</td>
                             <td>${ch.quantity ?? ''}</td>
                             <td>${ch.rate ?? ''}</td>
-                            <td>${ch.exchange_rate ?? ''}</td>
+                            <td>${displayUqExRate(ch.exchange_rate ?? 1)}</td>
                             <td class="inr-cell">₹${Math.round(ch.shipping_line_inr ?? calcChargeInr(ch)).toLocaleString()}</td>
+                            <td>${ch.vendor_rate ?? ch.rate ?? ''}</td>
+                            <td>${displayUqExRate(ch.vendor_exchange_rate ?? ch.exchange_rate ?? 1)}</td>
                             <td class="inr-cell" style="color:#374151">₹${Math.round(ch.client_rate_inr ?? calcClientInr(ch)).toLocaleString()}</td>
                         </tr>
                     `).join('')}
@@ -270,6 +287,8 @@ function renderFinalTables() {
                         <th>Ex. Rate</th>
                         <th style="text-align:right">Shipping Line (INR)</th>
                         <th style="text-align:right">Client Rate</th>
+                        <th>Client Ex. Rate</th>
+                        <th style="text-align:right">Client Rate (INR)</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -300,6 +319,7 @@ function renderFinalTables() {
                 rate: 0,
                 exchange_rate: getUqExchangeRate('USD'),
                 vendor_rate: 0,
+                vendor_exchange_rate: getUqExchangeRate('USD'),
             });
             renderFinalTables();
             updateFinalTotals();
@@ -313,9 +333,12 @@ function renderFinalTables() {
 function renderFinalRow(ch, cIdx, rIdx, defaultQty) {
     const on = ch.charged_on || 'Per Container';
     const qty = on === 'Per BL' ? 1 : (ch.quantity ?? defaultQty);
-    const ex = ch.exchange_rate || getUqExchangeRate(ch.currency);
+    const curr = String(ch.currency || 'USD').toUpperCase();
+    const ex = formatUqExRate(ch.exchange_rate || getUqExchangeRate(ch.currency));
+    const vendorEx = formatUqExRate(ch.vendor_exchange_rate ?? ch.exchange_rate ?? getUqExchangeRate(ch.currency));
     const inr = calcChargeInr({ ...ch, quantity: qty, exchange_rate: ex });
-    const clientInr = calcClientInr({ ...ch, quantity: qty, exchange_rate: ex });
+    const clientInr = calcClientInr({ ...ch, quantity: qty, vendor_exchange_rate: vendorEx });
+    const exReadonly = curr === 'INR';
     return `
         <tr data-cidx="${cIdx}" data-ridx="${rIdx}">
             <td><input type="text" class="uq-desc" value="${escapeHtml(ch.charge_description || '')}"></td>
@@ -337,10 +360,12 @@ function renderFinalRow(ch, cIdx, rIdx, defaultQty) {
                 </select>
             </td>
             <td><input type="number" class="uq-qty" value="${qty}" min="0" ${on === 'Per BL' ? 'readonly' : ''}></td>
-            <td><input type="number" class="uq-rate" value="${ch.rate ?? ''}" min="0"></td>
-            <td><input type="number" class="uq-ex" value="${ex}" min="0"></td>
+            <td><input type="number" class="uq-rate" value="${ch.rate ?? ''}" min="0" step="any"></td>
+            <td><input type="number" class="uq-ex" value="${displayUqExRate(ex)}" min="0" step="0.01" ${exReadonly ? 'readonly' : ''}></td>
             <td class="inr-cell uq-line-inr">₹${Math.round(inr).toLocaleString()}</td>
-            <td><input type="number" class="uq-vendor" value="${ch.vendor_rate ?? ch.rate ?? ''}" min="0" style="min-width:72px"></td>
+            <td><input type="number" class="uq-vendor" value="${ch.vendor_rate ?? ch.rate ?? ''}" min="0" step="any" style="min-width:72px"></td>
+            <td><input type="number" class="uq-vendor-ex" value="${displayUqExRate(vendorEx)}" min="0" step="0.01" ${exReadonly ? 'readonly' : ''} style="min-width:72px"></td>
+            <td class="inr-cell uq-client-inr" style="color:#374151">₹${Math.round(clientInr).toLocaleString()}</td>
             <td>
                 <button type="button" class="btn-icon-overlay uq-remove-row" title="Remove charge" style="position:static;">
                     <i class="fas fa-trash"></i>
@@ -375,8 +400,18 @@ function bindFinalRowEvents(host) {
             sync();
         });
         row.querySelector('.uq-curr')?.addEventListener('change', (e) => {
+            const nextEx = getUqExchangeRate(e.target.value);
             const exEl = row.querySelector('.uq-ex');
-            exEl.value = getUqExchangeRate(e.target.value);
+            const vendorExEl = row.querySelector('.uq-vendor-ex');
+            const isInr = e.target.value === 'INR';
+            if (exEl) {
+                exEl.value = displayUqExRate(nextEx);
+                exEl.readOnly = isInr;
+            }
+            if (vendorExEl) {
+                vendorExEl.value = displayUqExRate(nextEx);
+                vendorExEl.readOnly = isInr;
+            }
             sync();
         });
         row.querySelector('.uq-remove-row')?.addEventListener('click', () => {
@@ -399,8 +434,9 @@ function syncRowToState(row) {
     ch.charged_on = row.querySelector('.uq-on')?.value || 'Per Container';
     ch.quantity = parseFloat(row.querySelector('.uq-qty')?.value) || 0;
     ch.rate = parseFloat(row.querySelector('.uq-rate')?.value) || 0;
-    ch.exchange_rate = parseFloat(row.querySelector('.uq-ex')?.value) || 1;
+    ch.exchange_rate = formatUqExRate(row.querySelector('.uq-ex')?.value);
     ch.vendor_rate = parseFloat(row.querySelector('.uq-vendor')?.value) || 0;
+    ch.vendor_exchange_rate = formatUqExRate(row.querySelector('.uq-vendor-ex')?.value);
 }
 
 function updateRowInr(row) {
@@ -408,9 +444,10 @@ function updateRowInr(row) {
     const cIdx = parseInt(row.dataset.cidx, 10);
     const rIdx = parseInt(row.dataset.ridx, 10);
     const ch = uqState.finalContainers[cIdx].charges[rIdx];
-    const inr = calcChargeInr(ch);
-    const cell = row.querySelector('.uq-line-inr');
-    if (cell) cell.textContent = '₹' + Math.round(inr).toLocaleString();
+    const lineCell = row.querySelector('.uq-line-inr');
+    const clientCell = row.querySelector('.uq-client-inr');
+    if (lineCell) lineCell.textContent = '₹' + Math.round(calcChargeInr(ch)).toLocaleString();
+    if (clientCell) clientCell.textContent = '₹' + Math.round(calcClientInr(ch)).toLocaleString();
 }
 
 function updateFinalTotals() {
@@ -440,7 +477,11 @@ async function fetchExchangeRateForUq() {
         const res = await fetch(`${CONFIG.API_URL}/api/exchange-rate/rates`);
         if (res.ok) {
             const data = await res.json();
-            if (data && !data.error) Object.assign(uqState.exchangeRates, data);
+            if (data && !data.error) {
+                Object.keys(data).forEach((key) => {
+                    uqState.exchangeRates[key] = formatUqExRate(data[key]);
+                });
+            }
         }
     } catch (_) { /* keep default */ }
 }
@@ -478,7 +519,7 @@ async function openUpdateQuoteModal() {
         return;
     }
 
-    if (typeof isEmbeddedDrawer === 'function' && isEmbeddedDrawer() && window.parent !== window) {
+    if (window.parent !== window) {
         window.parent.postMessage({
             type: 'open-update-quote',
             quote: { id: quote.id, status: quote.status },
@@ -594,8 +635,9 @@ async function persistFinalQuoteRevision(remarks) {
                 charged_on: ch.charged_on,
                 quantity: ch.quantity,
                 rate: ch.rate,
-                exchange_rate: ch.exchange_rate,
+                exchange_rate: formatUqExRate(ch.exchange_rate),
                 vendor_rate: ch.vendor_rate,
+                vendor_exchange_rate: formatUqExRate(ch.vendor_exchange_rate),
             })),
         })),
     };

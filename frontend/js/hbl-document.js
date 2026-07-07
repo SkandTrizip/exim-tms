@@ -740,9 +740,8 @@ async function loadDocument(id) {
             return;
         }
 
-        // Render strictly the saved snapshot, not the auto-populated enquiry defaults.
+        // Render the saved snapshot; keep edit/save available for post-generation revisions.
         applySnapshot(saved.snapshot);
-        setReadOnlySavedView();
     } catch (err) {
         console.error('Failed to load HBL document data:', err);
         alert('Could not load document data. Please try again.');

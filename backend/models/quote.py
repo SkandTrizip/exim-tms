@@ -109,6 +109,8 @@ class QuoteCharge(Base):
     
     # Vendor Rate: what the company charges the client (editable, not fixed)
     vendor_rate = Column(Float, default=0.0)
+    # Exchange rate applied to vendor_rate → client INR (may differ from shipping-line ex. rate)
+    vendor_exchange_rate = Column(Float, default=1.0)
     
     # Sequence for ordering
     charge_sequence = Column(Integer, default=0)

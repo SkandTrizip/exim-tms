@@ -43,6 +43,8 @@ _column_migrations = [
     ("quotes", "accepted_remarks_other", "TEXT"),
     ("final_quotes", "revision_remarks_reason", "VARCHAR"),
     ("final_quotes", "revision_remarks_other", "TEXT"),
+    ("quote_charges", "vendor_exchange_rate", "FLOAT DEFAULT 1.0"),
+    ("final_quote_charges", "vendor_exchange_rate", "FLOAT DEFAULT 1.0"),
 ]
 with engine.connect() as _conn:
     _inspector = inspect(engine)

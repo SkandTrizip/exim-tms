@@ -64,7 +64,7 @@ def _sum_final_quote_economics(final_quote: FinalQuote) -> Tuple[float, float]:
                 charge.quantity,
                 charge.vendor_rate,
                 charge.currency,
-                charge.exchange_rate,
+                charge.vendor_exchange_rate or charge.exchange_rate,
             )
 
     return round(cost, 2), round(revenue, 2)

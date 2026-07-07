@@ -17,6 +17,7 @@ class QuoteChargeBase(BaseModel):
     exchange_rate: float = Field(1.0, ge=0)
     final_inr_amount: float = Field(0.0, ge=0)
     vendor_rate: float = Field(0.0, ge=0)
+    vendor_exchange_rate: float = Field(1.0, ge=0)
     charge_sequence: int = 0
 
 class QuoteChargeCreate(QuoteChargeBase):
