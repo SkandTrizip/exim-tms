@@ -69,6 +69,31 @@
         return Array.isArray(colState.selectedValues);
     }
 
+    function isListTableColumnFilterActive(table) {
+        if (!table) return false;
+        const state = ensureTableState(table);
+        return Object.values(state.columns).some(isColumnFilterActive);
+    }
+
+    function isListTableSearchBypassActive(table) {
+        if (!table) return false;
+        const searchInput = getSearchInputForTable(table);
+        if ((searchInput?.value || '').trim()) return true;
+        return isListTableColumnFilterActive(table);
+    }
+
+    function refreshListTableDataScope(table) {
+        if (!table?.tBodies?.[0]?.id) return;
+        const tbodyId = table.tBodies[0].id;
+        if (tbodyId === 'trackingTable' && typeof window.refreshTrackingTableDataScope === 'function') {
+            window.refreshTrackingTableDataScope();
+            return;
+        }
+        if (tbodyId === 'allEnquiriesTable' && typeof window.refreshSalesTableDataScope === 'function') {
+            window.refreshSalesTableDataScope();
+        }
+    }
+
     function collectUniqueValues(tbody, colKey) {
         const values = new Set();
         getTableRows(tbody).forEach((tr) => {
@@ -404,12 +429,20 @@
             ? new Set(colState.pendingValues)
             : (colState.selectedValues ? new Set(colState.selectedValues) : new Set(allValues));
 
+        const bypassBefore = isListTableSearchBypassActive(table);
+
         if (pending.size === allValues.length && allValues.every((v) => pending.has(v))) {
             colState.selectedValues = null;
         } else {
             colState.selectedValues = [...pending];
         }
         colState.pendingValues = null;
+
+        const bypassAfter = isListTableSearchBypassActive(table);
+        if (bypassBefore !== bypassAfter) {
+            refreshListTableDataScope(table);
+            return;
+        }
 
         applyListTableFilters(tbody.id, getSearchInputForTable(table));
         updateRecordsCountForTable(table);
@@ -422,8 +455,14 @@
 
     function clearColumnFilter(table, colKey) {
         const colState = getColumnState(table, colKey);
+        const bypassBefore = isListTableSearchBypassActive(table);
         colState.selectedValues = null;
         colState.pendingValues = null;
+        const bypassAfter = isListTableSearchBypassActive(table);
+        if (bypassBefore !== bypassAfter) {
+            refreshListTableDataScope(table);
+            return;
+        }
         applyListTableFilters(table.tBodies[0].id, getSearchInputForTable(table));
         updateRecordsCountForTable(table);
         updateFilterIndicators(table);
@@ -552,6 +591,9 @@
     window.initColumnFiltersForTable = initColumnFiltersForTable;
     window.initAllColumnFilters = initAllColumnFilters;
     window.refreshListTableFilters = refreshListTableFilters;
+    window.isListTableColumnFilterActive = isListTableColumnFilterActive;
+    window.isListTableSearchBypassActive = isListTableSearchBypassActive;
+    window.refreshListTableDataScope = refreshListTableDataScope;
 
     document.addEventListener('DOMContentLoaded', () => {
         initAllColumnFilters();

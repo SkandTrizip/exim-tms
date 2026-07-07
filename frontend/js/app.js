@@ -378,7 +378,27 @@ function updateViewStatusPill(view, section) {
     const labelEl = pill.querySelector('.status-text');
     if (!labelEl) return;
     const labels = STATUS_SECTION_LABELS[view] || {};
+    if (view === 'tracking' && shouldBypassTrackingSectionFilter()) {
+        labelEl.textContent = 'All sections (search)';
+        return;
+    }
+    if (view === 'sales' && shouldBypassSalesSectionFilter()) {
+        labelEl.textContent = 'All enquiries (search)';
+        return;
+    }
     labelEl.textContent = labels[section] || section || 'All';
+}
+
+function shouldBypassTrackingSectionFilter() {
+    const table = document.getElementById('trackingDataTable');
+    return typeof window.isListTableSearchBypassActive === 'function'
+        && window.isListTableSearchBypassActive(table);
+}
+
+function shouldBypassSalesSectionFilter() {
+    const table = document.getElementById('enquiriesDataTable');
+    return typeof window.isListTableSearchBypassActive === 'function'
+        && window.isListTableSearchBypassActive(table);
 }
 
 function countSalesSection(section) {
@@ -579,6 +599,21 @@ function initListTableUI(config) {
     if (input && !input.dataset.bound) {
         input.dataset.bound = '1';
         input.addEventListener('input', () => {
+            const table = tableId ? document.getElementById(tableId) : null;
+            const bypassTables = new Set(['trackingDataTable', 'enquiriesDataTable']);
+            if (table && bypassTables.has(table.id)) {
+                clearTimeout(listTableSearchTimers[tbodyId]);
+                listTableSearchTimers[tbodyId] = setTimeout(() => {
+                    if (tbodyId === 'trackingTable') {
+                        paginationState.tracking.currentPage = 1;
+                        updateTrackingTable(currentTrackingFilter);
+                    } else if (tbodyId === 'allEnquiriesTable') {
+                        paginationState.allEnquiries.currentPage = 1;
+                        updateAllEnquiriesTable(currentAllEnquiriesFilter);
+                    }
+                }, LIST_TABLE_SEARCH_DEBOUNCE_MS);
+                return;
+            }
             applyTableSearchFilter(tbodyId, input);
             updateTableRecordsCount(tbodyId, config.recordsCountId);
         });
@@ -1223,6 +1258,19 @@ let currentAllEnquiriesFilter = null;
 let currentTrackingFilter = null;
 let currentFinanceSubView = null;
 
+window.refreshTrackingTableDataScope = function refreshTrackingTableDataScope() {
+    paginationState.tracking.currentPage = 1;
+    updateTrackingTable(currentTrackingFilter);
+};
+
+window.refreshSalesTableDataScope = function refreshSalesTableDataScope() {
+    paginationState.allEnquiries.currentPage = 1;
+    updateAllEnquiriesTable(currentAllEnquiriesFilter);
+};
+
+const LIST_TABLE_SEARCH_DEBOUNCE_MS = 250;
+const listTableSearchTimers = {};
+
 async function updateAllEnquiriesTable(filterType = null) {
     currentAllEnquiriesFilter = filterType;
     const tbody = document.getElementById('allEnquiriesTable');
@@ -1230,10 +1278,15 @@ async function updateAllEnquiriesTable(filterType = null) {
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading...</td></tr>';
 
     let filteredEnquiries = enquiries;
-    if (filterType === 'pending_pricing') {
-        filteredEnquiries = enquiries.filter((e) => !e.is_void && (e.stage || 1) <= 1);
-    } else if (filterType === 'pending_confirmation') {
-        filteredEnquiries = enquiries.filter((e) => !e.is_void && e.stage === 2);
+    if (!shouldBypassSalesSectionFilter()) {
+        if (filterType === 'pending_pricing') {
+            filteredEnquiries = enquiries.filter((e) => !e.is_void && (e.stage || 1) <= 1);
+        } else if (filterType === 'pending_confirmation') {
+            filteredEnquiries = enquiries.filter((e) => !e.is_void && e.stage === 2);
+        }
+    } else if (filterType && filterType !== 'all') {
+        // Keep void rows out when searching across sections.
+        filteredEnquiries = enquiries.filter((e) => !e.is_void);
     }
 
     updateStatusSectionCounts();
@@ -1466,9 +1519,12 @@ async function updateTrackingTable(filterType = null) {
         : await fetchBulkStatus(ids);
     if (!Object.keys(cachedBulkStatus).length) cachedBulkStatus = bulkStatus;
 
+    const sectionKey = shouldBypassTrackingSectionFilter() ? null : (filterType || 'pending_booking');
+
     const filteredResults = trackingEnquiries.filter((e) => {
         const s = bulkStatus[e.id] || null;
-        return matchesTrackingSection(filterType, s);
+        if (!sectionKey) return true;
+        return matchesTrackingSection(sectionKey, s);
     });
 
     updateStatusSectionCounts();

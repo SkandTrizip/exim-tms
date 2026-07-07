@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Response, Query
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models.enquiry import Enquiry
-from backend.models.quote import Quote
 from backend.models.shipment_status import ShipmentStatus
 from backend.models.client_master import ClientMaster
 from backend.models.invoice import Invoice
 from backend.services.invoice_service import allocate_invoice_number, get_next_invoice_number
+from backend.services import invoice_quote_service
 from pydantic import BaseModel
 
 from reportlab.pdfgen import canvas
@@ -26,19 +26,7 @@ from typing import Optional
 
 
 def _client_rate_for_invoice(charge) -> Optional[float]:
-    """
-    Client rate (vendor_rate) only — no shipping-line fallback.
-    Returns None when rate is empty/zero (charge not billed on client invoice).
-    """
-    if charge.vendor_rate is None:
-        return None
-    try:
-        rate = float(charge.vendor_rate)
-    except (TypeError, ValueError):
-        return None
-    if rate <= 0:
-        return None
-    return rate
+    return invoice_quote_service.client_rate_for_invoice(charge)
 
 class InvoiceCreate(BaseModel):
     enquiry_id: int
@@ -131,6 +119,42 @@ def get_invoice_details(enquiry_id: int, db: Session = Depends(get_db)):
         return None
     return invoice
 
+
+@router.get("/rates-preview/{enquiry_id}")
+def get_invoice_rates_preview(enquiry_id: int, db: Session = Depends(get_db)):
+    """Charge lines for create-invoice (final quote preferred)."""
+    containers, source = invoice_quote_service.get_invoice_charge_containers(db, enquiry_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="No quote found for this enquiry")
+
+    lines = []
+    for container in sorted(containers, key=lambda c: c.container_sequence or 0):
+        for charge in sorted(
+            container.charges or [],
+            key=lambda ch: (ch.charge_sequence or 0, ch.id or 0),
+        ):
+            if charge.account_type != "On Your Account":
+                continue
+            vendor_rate = invoice_quote_service.client_rate_for_invoice(charge)
+            if vendor_rate is None:
+                continue
+            curr = (charge.currency or "INR").upper()
+            vendor_ex = invoice_quote_service.client_exchange_rate_for_invoice(charge)
+            lines.append(
+                {
+                    "charge_description": charge.charge_description,
+                    "currency": curr,
+                    "quantity": charge.quantity,
+                    "vendor_rate": vendor_rate,
+                    "vendor_exchange_rate": vendor_ex,
+                }
+            )
+
+    return {
+        "source": source,
+        "lines": lines,
+    }
+
 @router.get("/list")
 def list_all_invoices(db: Session = Depends(get_db)):
     """List all recorded invoices for payment tracking"""
@@ -202,34 +226,29 @@ def generate_invoice_pdf(
     invoice_date: str,
     invoice_type: str = "draft",  # 'draft' or 'tax'
     place_of_supply: str = "06AAFCL3674H1ZE/Gurugram",
-    roe: float = Query(...),
     irn: str = None,
     customer_invoice_no: Optional[str] = None,
     item_type: str = "all",      # 'all', 'main', or 'additional'
     db: Session = Depends(get_db)
 ):
-    # 1. Validate mandatory fields
-    if roe is None or roe <= 0:
-        logger.warning(f"Invoice generation blocked: Exchange Rate (ROE) is mandatory but was not provided or is invalid (enquiry_id={enquiry_id})")
-        raise HTTPException(
-            status_code=422,
-            detail="Exchange Rate (ROE) is mandatory and must be a positive number. Please enter the Exchange Rate before generating the invoice."
-        )
-
-    # 2. Fetch Data
+    # 1. Fetch Data
     logger.info(f"Generating invoice PDF for enquiry ID {enquiry_id}")
     enquiry = db.query(Enquiry).filter(Enquiry.id == enquiry_id).first()
     if not enquiry:
         logger.warning(f"Failed to generate invoice PDF: Enquiry {enquiry_id} not found")
         raise HTTPException(status_code=404, detail="Enquiry not found")
 
-    # Fetch accepted quote or latest quote
-    quote = db.query(Quote).filter(Quote.enquiry_id == enquiry_id, Quote.status == 'accepted').first()
-    if not quote:
-         quote = db.query(Quote).filter(Quote.enquiry_id == enquiry_id).order_by(Quote.created_at.desc()).first()
-    
-    if not quote:
+    # Fetch charge containers — post-SI final quote when present, else accepted quote
+    containers, charge_source = invoice_quote_service.get_invoice_charge_containers(db, enquiry_id)
+    if not charge_source:
         raise HTTPException(status_code=404, detail="No accepted quote found for this enquiry")
+
+    logger.info(
+        "Invoice PDF enquiry_id=%s using charge_source=%s line_containers=%s",
+        enquiry_id,
+        charge_source,
+        len(containers),
+    )
 
     # Fetch Shipment Status for Invoice Details (Invoice No, Date, etc.)
     status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == enquiry_id).first()
@@ -473,12 +492,12 @@ def generate_invoice_pdf(
     # Re-map headers to Paragraphs
     table_data[0] = [Paragraph(h, t_style_header) for h in headers]
 
-    # ROE is validated as mandatory at the start — use it directly
-    current_roe = roe
-    
     if item_type in ["all", "main"]:
-        for container in sorted(quote.containers, key=lambda c: c.container_sequence):
-            for charge in sorted(container.charges, key=lambda ch: (ch.charge_sequence, ch.id)):
+        for container in sorted(containers, key=lambda c: c.container_sequence or 0):
+            for charge in sorted(
+                container.charges or [],
+                key=lambda ch: (ch.charge_sequence or 0, ch.id or 0),
+            ):
                 if charge.account_type != "On Your Account":
                     continue
 
@@ -486,7 +505,7 @@ def generate_invoice_pdf(
                 if vendor_rate_per_unit is None:
                     continue
 
-                desc_lower = charge.charge_description.lower()
+                desc_lower = (charge.charge_description or "").lower()
 
                 # Determine SAC and GST pct
                 sac_code = "996511"  # Default
@@ -509,19 +528,17 @@ def generate_invoice_pdf(
                     gst_pct = 18.0
 
                 qty = charge.quantity
-                curr = charge.currency
+                curr = charge.currency or "INR"
 
                 unit_val = f"{qty:.2f}"
                 rate_val = f"{vendor_rate_per_unit:.2f}"
 
-                # Vendor Total = vendor_rate × qty × ex_rate  (same formula as shipping line)
-                curr_amt = vendor_rate_per_unit * qty
-                if curr == "USD":
-                    roe_display = current_roe
-                    taxable_amt = curr_amt * roe_display
-                else:
-                    roe_display = 1.0
-                    taxable_amt = curr_amt
+                try:
+                    curr_amt, roe_display, taxable_amt = invoice_quote_service.taxable_inr_for_invoice_charge(
+                        charge, vendor_rate_per_unit
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc)) from exc
 
                 igst_amt = taxable_amt * (gst_pct / 100.0)
                 total_inr = taxable_amt + igst_amt
@@ -579,13 +596,8 @@ def generate_invoice_pdf(
                 curr_amt = 0.0
                 
             curr = "INR"
-            
-            if curr == "USD":
-                roe_display = current_roe
-                taxable_amt = curr_amt * roe_display
-            else:
-                roe_display = 1.0
-                taxable_amt = curr_amt
+            roe_display = 1.0
+            taxable_amt = curr_amt
 
             igst_amt = taxable_amt * (gst_pct / 100.0)
             total_inr = taxable_amt + igst_amt

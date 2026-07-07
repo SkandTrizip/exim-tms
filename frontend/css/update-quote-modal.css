@@ -96,7 +96,7 @@ body.embedded-mode.uq-modal-open {
 .update-quote-dialog {
     background: var(--bg-secondary, #fff);
     border-radius: 16px;
-    width: min(1100px, 100%);
+    width: min(1240px, 98vw);
     max-height: min(92vh, 900px);
     display: flex;
     flex-direction: column;
@@ -210,7 +210,40 @@ body.embedded-mode.uq-modal-open {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
+    table-layout: fixed;
 }
+
+.uq-charges-table--editable {
+    min-width: 1080px;
+}
+
+.uq-container-card .uq-table-wrap {
+    overflow-x: auto;
+}
+
+.uq-container-head .uq-c-type {
+    margin-left: 8px;
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: 1px solid var(--border-light);
+    background: white;
+    min-width: 5rem;
+}
+
+/* Editable final-quote column widths */
+.uq-charges-table--editable col.col-desc { width: 11%; }
+.uq-charges-table--editable col.col-account { width: 10%; }
+.uq-charges-table--editable col.col-curr { width: 5%; }
+.uq-charges-table--editable col.col-on { width: 9%; }
+.uq-charges-table--editable col.col-qty { width: 4%; }
+.uq-charges-table--editable col.col-rate { width: 8%; }
+.uq-charges-table--editable col.col-ex { width: 6%; }
+.uq-charges-table--editable col.col-sl-inr { width: 9%; }
+.uq-charges-table--editable col.col-client-rate { width: 8%; }
+.uq-charges-table--editable col.col-client-ex { width: 5%; }
+.uq-charges-table--editable col.col-client-inr { width: 9%; }
+.uq-charges-table--editable col.col-actions { width: 3%; }
 
 .uq-charges-table th {
     padding: 8px 10px;
@@ -235,11 +268,72 @@ body.embedded-mode.uq-modal-open {
 .uq-charges-table select {
     width: 100%;
     min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
     padding: 5px 6px;
     font-size: 12px;
     border: 1px solid var(--border-light);
     border-radius: 6px;
     background: white;
+}
+
+/* No dropdown arrow — opens on click only */
+.uq-charges-table select,
+.uq-container-head .uq-c-type {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: none;
+    padding-right: 6px;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.uq-charges-table select:focus,
+.uq-container-head .uq-c-type:focus {
+    outline: 2px solid #2563eb;
+    outline-offset: 0;
+    border-color: #2563eb;
+}
+
+.uq-charges-table input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.uq-charges-table input[type="number"]::-webkit-outer-spin-button,
+.uq-charges-table input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.uq-charges-table .uq-rate,
+.uq-charges-table .uq-vendor {
+    min-width: 4.5rem;
+    text-align: right;
+}
+
+.uq-charges-table .uq-ex,
+.uq-charges-table .uq-vendor-ex {
+    min-width: 3.25rem;
+    max-width: 4.5rem;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+.uq-charges-table .uq-qty {
+    min-width: 2.25rem;
+    text-align: center;
+    padding-left: 4px;
+    padding-right: 4px;
+}
+
+.uq-charges-table .uq-desc {
+    text-align: left;
 }
 
 .uq-charges-table.readonly td {

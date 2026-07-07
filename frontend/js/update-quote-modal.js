@@ -234,8 +234,8 @@ function renderInitialTable(containers) {
                         <th>Ex. Rate</th>
                         <th style="text-align:right">Shipping Line (INR)</th>
                         <th style="text-align:right">Client Rate</th>
-                        <th>Client Ex. Rate</th>
-                        <th style="text-align:right">Client Rate (INR)</th>
+                        <th title="Client exchange rate">Cl. Ex.</th>
+                        <th style="text-align:right">Client (INR)</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -269,13 +269,28 @@ function renderFinalTables() {
         <div class="uq-container-card" data-container-idx="${cIdx}">
             <div class="uq-container-head">
                 <span>Group ${cIdx + 1}</span>
-                <select class="uq-c-type" data-cidx="${cIdx}" style="margin-left:8px;padding:4px 8px;font-size:12px;border-radius:6px;">
+                <select class="uq-c-type" data-cidx="${cIdx}" title="Container type">
                     ${(CONFIG.containerTypes || []).map((t) =>
                         `<option value="${escapeHtml(t)}" ${t === c.container_type ? 'selected' : ''}>${escapeHtml(t)}</option>`
                     ).join('')}
                 </select>
             </div>
-            <table class="uq-charges-table">
+            <div class="uq-table-wrap">
+            <table class="uq-charges-table uq-charges-table--editable">
+                <colgroup>
+                    <col class="col-desc">
+                    <col class="col-account">
+                    <col class="col-curr">
+                    <col class="col-on">
+                    <col class="col-qty">
+                    <col class="col-rate">
+                    <col class="col-ex">
+                    <col class="col-sl-inr">
+                    <col class="col-client-rate">
+                    <col class="col-client-ex">
+                    <col class="col-client-inr">
+                    <col class="col-actions">
+                </colgroup>
                 <thead>
                     <tr>
                         <th>Charge Name</th>
@@ -287,8 +302,8 @@ function renderFinalTables() {
                         <th>Ex. Rate</th>
                         <th style="text-align:right">Shipping Line (INR)</th>
                         <th style="text-align:right">Client Rate</th>
-                        <th>Client Ex. Rate</th>
-                        <th style="text-align:right">Client Rate (INR)</th>
+                        <th title="Client exchange rate">Cl. Ex.</th>
+                        <th style="text-align:right">Client (INR)</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -296,6 +311,7 @@ function renderFinalTables() {
                     ${(c.charges || []).map((ch, rIdx) => renderFinalRow(ch, cIdx, rIdx, defaultQty)).join('')}
                 </tbody>
             </table>
+            </div>
             <button type="button" class="uq-add-charge" data-cidx="${cIdx}"><i class="fas fa-plus-circle"></i> Add Charge Item</button>
         </div>
     `).join('');
@@ -343,18 +359,18 @@ function renderFinalRow(ch, cIdx, rIdx, defaultQty) {
         <tr data-cidx="${cIdx}" data-ridx="${rIdx}">
             <td><input type="text" class="uq-desc" value="${escapeHtml(ch.charge_description || '')}"></td>
             <td>
-                <select class="uq-account">
+                <select class="uq-account" title="${escapeHtml(ch.account_type || 'On Your Account')}">
                     <option value="On Your Account" ${ch.account_type === 'On Your Account' ? 'selected' : ''}>On Your Account</option>
                     <option value="Consignee Account" ${ch.account_type === 'Consignee Account' ? 'selected' : ''}>Consignee Account</option>
                 </select>
             </td>
             <td>
-                <select class="uq-curr">
+                <select class="uq-curr" title="${escapeHtml(ch.currency || 'USD')}">
                     ${getUqChargeCurrencies().map(c => `<option value="${c}" ${ch.currency === c ? 'selected' : ''}>${c}</option>`).join('')}
                 </select>
             </td>
             <td>
-                <select class="uq-on">
+                <select class="uq-on" title="${escapeHtml(on)}">
                     <option value="Per BL" ${on === 'Per BL' ? 'selected' : ''}>Per BL</option>
                     <option value="Per Container" ${on === 'Per Container' ? 'selected' : ''}>Per Container</option>
                 </select>
@@ -363,8 +379,8 @@ function renderFinalRow(ch, cIdx, rIdx, defaultQty) {
             <td><input type="number" class="uq-rate" value="${ch.rate ?? ''}" min="0" step="any"></td>
             <td><input type="number" class="uq-ex" value="${displayUqExRate(ex)}" min="0" step="0.01" ${exReadonly ? 'readonly' : ''}></td>
             <td class="inr-cell uq-line-inr">₹${Math.round(inr).toLocaleString()}</td>
-            <td><input type="number" class="uq-vendor" value="${ch.vendor_rate ?? ch.rate ?? ''}" min="0" step="any" style="min-width:72px"></td>
-            <td><input type="number" class="uq-vendor-ex" value="${displayUqExRate(vendorEx)}" min="0" step="0.01" ${exReadonly ? 'readonly' : ''} style="min-width:72px"></td>
+            <td><input type="number" class="uq-vendor" value="${ch.vendor_rate ?? ch.rate ?? ''}" min="0" step="any"></td>
+            <td><input type="number" class="uq-vendor-ex" value="${displayUqExRate(vendorEx)}" min="0" step="0.01" ${exReadonly ? 'readonly' : ''}></td>
             <td class="inr-cell uq-client-inr" style="color:#374151">₹${Math.round(clientInr).toLocaleString()}</td>
             <td>
                 <button type="button" class="btn-icon-overlay uq-remove-row" title="Remove charge" style="position:static;">
@@ -387,6 +403,7 @@ function bindFinalRowEvents(host) {
             el.addEventListener('change', sync);
         });
         row.querySelector('.uq-on')?.addEventListener('change', (e) => {
+            e.target.title = e.target.value;
             const qtyEl = row.querySelector('.uq-qty');
             if (e.target.value === 'Per BL') {
                 qtyEl.value = 1;
@@ -400,6 +417,7 @@ function bindFinalRowEvents(host) {
             sync();
         });
         row.querySelector('.uq-curr')?.addEventListener('change', (e) => {
+            e.target.title = e.target.value;
             const nextEx = getUqExchangeRate(e.target.value);
             const exEl = row.querySelector('.uq-ex');
             const vendorExEl = row.querySelector('.uq-vendor-ex');

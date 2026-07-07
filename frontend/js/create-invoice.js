@@ -213,8 +213,43 @@ async function fetchAllData() {
             }
         }
 
+        await fetchInvoiceRatesPreview();
     } catch (error) {
         console.error('Error fetching data:', error);
+    }
+}
+
+async function fetchInvoiceRatesPreview() {
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/invoice/rates-preview/${enquiryId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        applyInvoiceRatesPreview(data);
+    } catch (err) {
+        console.warn('Invoice rates preview failed:', err);
+    }
+}
+
+function applyInvoiceRatesPreview(data) {
+    const banner = document.getElementById('invoiceRatesSourceBanner');
+    if (!data) return;
+
+    const count = (data.lines || []).length;
+    if (banner) {
+        if (data.source === 'final' && count > 0) {
+            banner.hidden = false;
+            banner.innerHTML =
+                '<i class="fas fa-info-circle" aria-hidden="true"></i> ' +
+                `Using <strong>post-SI final quote</strong> client rates (${count} billable charge${count === 1 ? '' : 's'}). ` +
+                'Exchange rates come from each line’s Client Ex. Rate on the quote.';
+        } else if (count > 0) {
+            banner.hidden = false;
+            banner.innerHTML =
+                '<i class="fas fa-info-circle" aria-hidden="true"></i> ' +
+                `Using <strong>accepted quote</strong> client rates (${count} billable charge${count === 1 ? '' : 's'}).`;
+        } else {
+            banner.hidden = true;
+        }
     }
 }
 
@@ -248,17 +283,6 @@ async function generateInvoice(type = 'draft') {
         return;
     }
 
-    const roeValue = parseFloat(document.getElementById('roe_val').value);
-    if (!document.getElementById('roe_val').value || isNaN(roeValue) || roeValue <= 0) {
-        if (typeof showModal === 'function') {
-            showModal('Input Required', 'Exchange Rate (ROE) is mandatory. Please enter the Exchange Rate before generating the invoice.', 'warning');
-        } else {
-            alert('Exchange Rate (ROE) is mandatory. Please enter the Exchange Rate before generating the invoice.');
-        }
-        document.getElementById('roe_val').focus();
-        return;
-    }
-
     try {
         // Generate and download the invoice PDF
         console.log('Generating invoice with data:', invoiceData);
@@ -270,7 +294,6 @@ async function generateInvoice(type = 'draft') {
             invoice_number: invoiceData.invoice_number,
             place_of_supply: invoiceData.place_of_supply,
             invoice_date: invoiceData.invoice_date,
-            roe: document.getElementById('roe_val').value || '',
             invoice_type: type,           // 'draft' or 'tax'
             item_type: document.getElementById('invoice_item_type').value || 'all'
         });
