@@ -236,7 +236,9 @@ def list_all_invoices(db: Session = Depends(get_db)):
             "status": inv.status,
             "irn": inv.irn,
             "customer_invoice_no": inv.customer_invoice_no,
-            "item_type": getattr(inv, "item_type", "all")
+            "item_type": getattr(inv, "item_type", "all"),
+            "remark": getattr(inv, "remark", None),
+            "additional_doc_id": getattr(inv, "additional_doc_id", None),
         }
         result.append(inv_dict)
     return result

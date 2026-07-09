@@ -175,7 +175,8 @@ function renderListTableRow(e, status = null, options = {}) {
         extraActionsHtml = '',
         quoteStatus = null,
         actionHtml = null,
-        compact = false
+        compact = false,
+        detailsExtraHtml = ''
     } = options;
 
     if (compact) {
@@ -201,6 +202,7 @@ function renderListTableRow(e, status = null, options = {}) {
                 <div class="cell-enquiry">
                     <a class="cell-enquiry-id" href="#" onclick="openActionModal('view-sale', ${e.id}); return false;">${escapeHtml(e.enquiry_number)}</a>
                     <div class="cell-enquiry-meta">${created}</div>
+                    ${detailsExtraHtml}
                     <span class="cell-urgency ${urgency.className}">${urgency.text}</span>
                 </div>
             </td>
@@ -345,15 +347,13 @@ function financeStatusBadge(e, subView, completionTab = 'pending') {
             : '<span class="badge badge-pending"><i class="fas fa-clock"></i> Payment Pending</span>';
     }
     if (subView === 'invoices') {
-        const remark = e && e.__finance_invoice_kind === 'additional'
-            ? ' <span class="cell-muted" style="display:block;margin-top:4px;font-size:12px;">Remark: Additional invoice</span>'
-            : '';
+        const remarkHtml = renderFinanceInvoiceRemark(e);
         if (isCompleted || e.invoice_complete) {
-            return '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> Invoice Complete</span>' + remark;
+            return `<span class="badge badge-completed"><i class="fas fa-check-circle"></i> Invoice Complete</span>${remarkHtml}`;
         }
         return e.bl_received
-            ? '<span class="badge badge-pending"><i class="fas fa-clock"></i> IRN / Invoice Pending</span>' + remark
-            : '<span class="badge badge-pending"><i class="fas fa-clock"></i> Awaiting BL</span>' + remark;
+            ? `<span class="badge badge-pending"><i class="fas fa-clock"></i> IRN / Invoice Pending</span>${remarkHtml}`
+            : `<span class="badge badge-pending"><i class="fas fa-clock"></i> Awaiting BL</span>${remarkHtml}`;
     }
     return e.bl_received
         ? '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> BL Received</span>'
@@ -479,6 +479,121 @@ function getAdditionalInvoiceForEnquiryDoc(enquiryId, docId) {
     return byDoc[String(docId)] || null;
 }
 
+function getFinanceInvoiceKindLabel(kind) {
+    if (kind === 'additional') return 'Additional invoice';
+    if (kind === 'main') return 'Main invoice';
+    return '';
+}
+
+function renderFinanceInvoiceTypeBadge(e) {
+    const label = getFinanceInvoiceKindLabel(e && e.__finance_invoice_kind);
+    if (!label) return '';
+    const isAdditional = e.__finance_invoice_kind === 'additional';
+    const bg = isAdditional ? '#ede9fe' : '#e0f2fe';
+    const color = isAdditional ? '#6d28d9' : '#0369a1';
+    return `<span class="finance-invoice-type-badge" style="display:inline-block;margin-top:6px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${bg};color:${color};">${escapeHtml(label)}</span>`;
+}
+
+function renderFinanceInvoiceRemark(e) {
+    const label = (e && e.__finance_remark) || getFinanceInvoiceKindLabel(e && e.__finance_invoice_kind);
+    if (!label) return '';
+    return `<div class="cell-muted" style="margin-top:4px;font-size:12px;">Remark: ${escapeHtml(label)}</div>`;
+}
+
+function buildFinanceInvoiceTaskRows(operationalEnquiries, bulkStatus, additionalInvBulk, completionTab) {
+    const showCompleted = completionTab === 'completed';
+    const rows = [];
+
+    for (const e of operationalEnquiries) {
+        const s = bulkStatus[e.id] || null;
+        if (!s || !s.shipping_invoice || !s.bl_received) continue;
+
+        const base = {
+            ...e,
+            bl_received: !!s.bl_received,
+            payment_done: isShippingLinePaymentDone(s),
+        };
+
+        const mainInv = getInvoiceForEnquiry(e.id);
+        const mainComplete = isInvoiceCreateCompleted(mainInv);
+        if (showCompleted ? mainComplete : !mainComplete) {
+            rows.push({
+                ...base,
+                __finance_invoice_kind: 'main',
+                __finance_remark: 'Main invoice',
+                invoice_complete: mainComplete,
+            });
+        }
+
+        if (showCompleted) {
+            const allInvoices = window._financeInvoicesList || [];
+            for (const inv of allInvoices) {
+                if (inv.enquiry_id !== e.id) continue;
+                if (String(inv.item_type || '').toLowerCase() !== 'additional') continue;
+                if (!isInvoiceCreateCompleted(inv)) continue;
+                rows.push({
+                    ...base,
+                    __finance_invoice_kind: 'additional',
+                    __finance_additional_doc_id: inv.additional_doc_id || null,
+                    __finance_remark: inv.remark || 'Additional invoice',
+                    invoice_complete: true,
+                });
+            }
+        } else {
+            const docs = (additionalInvBulk && (additionalInvBulk[String(e.id)] || additionalInvBulk[e.id])) || [];
+            for (const doc of docs) {
+                if (!doc || !doc.id) continue;
+                const addInv = getAdditionalInvoiceForEnquiryDoc(e.id, doc.id);
+                const addComplete = isInvoiceCreateCompleted(addInv);
+                if (addComplete) continue;
+                rows.push({
+                    ...base,
+                    __finance_invoice_kind: 'additional',
+                    __finance_additional_doc_id: doc.id,
+                    __finance_remark: 'Additional invoice',
+                    invoice_complete: false,
+                });
+            }
+        }
+    }
+
+    return rows;
+}
+
+function countFinanceInvoiceTasks(completionTab) {
+    const ops = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
+    const showCompleted = completionTab === 'completed';
+    const docsByEnquiry = window._additionalInvoiceDocsByEnquiry || {};
+    let count = 0;
+
+    for (const e of ops) {
+        const s = cachedBulkStatus[e.id];
+        if (!s || !s.shipping_invoice || !s.bl_received) continue;
+
+        const mainComplete = isInvoiceCreateCompleted(getInvoiceForEnquiry(e.id));
+        if (showCompleted ? mainComplete : !mainComplete) count += 1;
+
+        if (showCompleted) {
+            const allInvoices = window._financeInvoicesList || [];
+            for (const inv of allInvoices) {
+                if (inv.enquiry_id !== e.id) continue;
+                if (String(inv.item_type || '').toLowerCase() !== 'additional') continue;
+                if (!isInvoiceCreateCompleted(inv)) continue;
+                count += 1;
+            }
+        } else {
+            const docs = docsByEnquiry[String(e.id)] || docsByEnquiry[e.id] || [];
+            for (const doc of docs) {
+                if (!doc || !doc.id) continue;
+                const addInv = getAdditionalInvoiceForEnquiryDoc(e.id, doc.id);
+                if (!isInvoiceCreateCompleted(addInv)) count += 1;
+            }
+        }
+    }
+
+    return count;
+}
+
 function countFinanceSection(section) {
     return countFinanceCompletion(section, 'pending');
 }
@@ -496,33 +611,7 @@ function countFinanceCompletion(section, completionTab) {
         }).length;
     }
     if (section === 'invoices') {
-        return ops.filter((e) => {
-            const s = cachedBulkStatus[e.id];
-            if (!s || !s.shipping_invoice || !s.bl_received) return false;
-            const mainDone = isInvoiceCreateCompleted(getInvoiceForEnquiry(e.id));
-
-            // additional invoices: count each uploaded additionalInvoice doc (after cutoff) as its own row
-            const docsByEnquiry = window._additionalInvoiceDocsByEnquiry || {};
-            const docs = docsByEnquiry[String(e.id)] || docsByEnquiry[e.id] || [];
-            let additionalPendingCount = 0;
-            let additionalCompletedCount = 0;
-            if (Array.isArray(docs) && docs.length) {
-                for (const d of docs) {
-                    const inv = d && d.id ? getAdditionalInvoiceForEnquiryDoc(e.id, d.id) : null;
-                    const done = isInvoiceCreateCompleted(inv);
-                    if (done) additionalCompletedCount += 1;
-                    else additionalPendingCount += 1;
-                }
-            }
-
-            // if there are additional docs, the enquiry contributes multiple invoice rows:
-            // 1 main row + N additional rows
-            if (showCompleted) {
-                // at least one completed row?
-                return (mainDone ? 1 : 0) + additionalCompletedCount > 0;
-            }
-            return (!mainDone) || additionalPendingCount > 0;
-        }).length;
+        return countFinanceInvoiceTasks(completionTab);
     }
     if (section === 'received') {
         // Pending count for main card comes from financeReceivedCount (invoice list).
@@ -1685,7 +1774,7 @@ async function updateFinanceTable(subView = null) {
     const ids = operationalEnquiries.map((e) => e.id);
     const [bulkStatus, additionalInvBulk] = await Promise.all([
         fetchBulkStatus(ids),
-        (currentFinanceSubView === 'invoices' && currentFinanceCompletionTab === 'pending')
+        currentFinanceSubView === 'invoices'
             ? fetch(`${CONFIG.API_URL}/api/tracking/additional-invoices/bulk?ids=${encodeURIComponent(ids.join(','))}`)
                 .then((r) => r.ok ? r.json() : ({}))
                 .catch(() => ({}))
@@ -1693,57 +1782,39 @@ async function updateFinanceTable(subView = null) {
         currentFinanceSubView === 'invoices' ? fetchFinanceInvoicesCache() : Promise.resolve(null),
     ]).then((arr) => [arr[0], arr[1]]);
     cachedBulkStatus = { ...cachedBulkStatus, ...bulkStatus };
-    if (currentFinanceSubView === 'invoices' && currentFinanceCompletionTab === 'pending') {
+    if (currentFinanceSubView === 'invoices') {
         window._additionalInvoiceDocsByEnquiry = additionalInvBulk || {};
     }
 
-    const baseFinanceEnquiries = operationalEnquiries
-        .map((e) => {
-            const s = bulkStatus[e.id] || null;
-            if (!s || !s.shipping_invoice) return null;
-            const savedInvoice = getInvoiceForEnquiry(e.id);
-            return {
-                ...e,
-                bl_received: !!s.bl_received,
-                payment_done: isShippingLinePaymentDone(s),
-                invoice_complete: isInvoiceCreateCompleted(savedInvoice),
-            };
-        })
-        .filter(Boolean)
-        .filter((e) => {
-            const s = bulkStatus[e.id] || null;
-            const showCompleted = currentFinanceCompletionTab === 'completed';
-            if (currentFinanceSubView === 'payments') {
+    let financeEnquiries;
+    if (currentFinanceSubView === 'invoices') {
+        financeEnquiries = buildFinanceInvoiceTaskRows(
+            operationalEnquiries,
+            bulkStatus,
+            additionalInvBulk,
+            currentFinanceCompletionTab
+        );
+    } else {
+        financeEnquiries = operationalEnquiries
+            .map((e) => {
+                const s = bulkStatus[e.id] || null;
+                if (!s || !s.shipping_invoice) return null;
+                const savedInvoice = getInvoiceForEnquiry(e.id);
+                return {
+                    ...e,
+                    bl_received: !!s.bl_received,
+                    payment_done: isShippingLinePaymentDone(s),
+                    invoice_complete: isInvoiceCreateCompleted(savedInvoice),
+                };
+            })
+            .filter(Boolean)
+            .filter((e) => {
+                const s = bulkStatus[e.id] || null;
+                const showCompleted = currentFinanceCompletionTab === 'completed';
                 if (!s) return false;
                 const done = isShippingLinePaymentDone(s);
                 return showCompleted ? done : !done;
-            }
-            if (currentFinanceSubView === 'invoices') {
-                if (!s || !s.bl_received) return false;
-                return showCompleted ? e.invoice_complete : !e.invoice_complete;
-            }
-            return true;
-        });
-
-    let financeEnquiries = baseFinanceEnquiries;
-
-    // Additional invoice pending rows (created after 8 Jul 2026)
-    if (currentFinanceSubView === 'invoices' && currentFinanceCompletionTab === 'pending') {
-        const extraRows = [];
-        for (const e of baseFinanceEnquiries) {
-            const docs = (additionalInvBulk && (additionalInvBulk[String(e.id)] || additionalInvBulk[e.id])) || [];
-            if (!Array.isArray(docs) || docs.length === 0) continue;
-            for (const doc of docs) {
-                extraRows.push({
-                    ...e,
-                    __finance_invoice_kind: 'additional',
-                    __finance_additional_doc_id: doc && doc.id ? doc.id : null,
-                    __finance_remark: 'Additional invoice',
-                    invoice_complete: false,
-                });
-            }
-        }
-        financeEnquiries = [...financeEnquiries, ...extraRows];
+            });
     }
 
     updateStatusSectionCounts();
@@ -1767,7 +1838,8 @@ async function updateFinanceTable(subView = null) {
 
     tbody.innerHTML = paginatedFinance.map((e) => renderListTableRow(e, bulkStatus[e.id] || null, {
         statusHtml: financeStatusBadge(e, currentFinanceSubView, currentFinanceCompletionTab),
-        actionHtml: renderFinanceActionCell(e, currentFinanceSubView, currentFinanceCompletionTab)
+        actionHtml: renderFinanceActionCell(e, currentFinanceSubView, currentFinanceCompletionTab),
+        detailsExtraHtml: currentFinanceSubView === 'invoices' ? renderFinanceInvoiceTypeBadge(e) : ''
     })).join('');
 
     renderPagination('financePagination', total, page, 'changeFinancePage');
