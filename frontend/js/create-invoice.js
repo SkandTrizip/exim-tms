@@ -63,8 +63,8 @@ function applyInvoiceNumberForItemType() {
     invInput.value = base;
 }
 
-async function fetchNextInvoiceNumber() {
-    if (hasSavedInvoice) return;
+async function fetchNextInvoiceNumber(force = false) {
+    if (hasSavedInvoice && !force) return;
     const invoiceDate = document.getElementById('invoice_date')?.value;
     const params = invoiceDate ? `?invoice_date=${encodeURIComponent(invoiceDate)}` : '';
     try {
@@ -73,6 +73,9 @@ async function fetchNextInvoiceNumber() {
         const data = await res.json();
         if (data.invoice_number) {
             setBaseInvoiceNumber(data.invoice_number);
+            // Also set the visible value directly to avoid any stale state.
+            const invInput = document.getElementById('invoice_number');
+            if (invInput) invInput.value = String(data.invoice_number).trim();
         }
     } catch (err) {
         console.error('Failed to fetch next invoice number:', err);
@@ -315,7 +318,7 @@ async function refreshInvoiceDetailsForSelection() {
             invInput.dataset.original = '';
         }
     }
-    await fetchNextInvoiceNumber();
+    await fetchNextInvoiceNumber(itemType === 'additional');
 }
 
 async function fetchInvoiceRatesPreview() {
