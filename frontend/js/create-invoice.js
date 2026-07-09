@@ -58,11 +58,9 @@ function applyInvoiceNumberForItemType() {
         invInput.value = '';
         return;
     }
-    if (itemTypeEl && itemTypeEl.value === 'additional') {
-        invInput.value = base.includes('-ADD') ? base : `${base}-ADD-1`;
-    } else {
-        invInput.value = base;
-    }
+    // Additional invoices must follow the same auto-generated flow (fresh LPE sequence),
+    // not reuse the enquiry's main invoice number with an "-ADD" suffix.
+    invInput.value = base;
 }
 
 async function fetchNextInvoiceNumber() {
@@ -262,6 +260,21 @@ async function refreshInvoiceDetailsForSelection() {
     if (itemType === 'additional') {
         const docId = getSelectedAdditionalDocId();
         if (docId) params.set('additional_doc_id', String(docId));
+    }
+
+    // For additional invoices, don't load an arbitrary previous additional invoice
+    // when the reference doc isn't selected yet.
+    if (itemType === 'additional' && !params.get('additional_doc_id')) {
+        hasSavedInvoice = false;
+        const invInput = document.getElementById('invoice_number');
+        if (invInput) {
+            invInput.readOnly = false;
+            invInput.value = '';
+            invInput.dataset.baseNumber = '';
+            invInput.dataset.original = '';
+        }
+        await fetchNextInvoiceNumber();
+        return;
     }
 
     let invData = null;
