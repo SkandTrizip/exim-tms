@@ -2,6 +2,7 @@ let enquiryId = null;
 let clientData = null;
 let creditPeriod = 0;
 let hasSavedInvoice = false;
+let additionalDocs = [];
 
 /**
  * Strip the branch suffix from a client name for invoicing.
@@ -91,6 +92,8 @@ function getCustomerInvoiceNo() {
 document.addEventListener('DOMContentLoaded', async function () {
     const urlParams = new URLSearchParams(window.location.search);
     enquiryId = urlParams.get('enquiry_id');
+    const presetItemType = (urlParams.get('item_type') || '').trim();
+    const presetAdditionalDocId = (urlParams.get('additional_doc_id') || '').trim();
 
     if (!enquiryId) {
         alert('No enquiry ID found');
@@ -105,7 +108,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Set default Place of Supply
     document.getElementById('place_of_supply').value = '06AAFCL3674H1ZE/Gurugram';
 
-    await fetchAllData();
+    if (presetItemType) {
+        const typeEl = document.getElementById('invoice_item_type');
+        if (typeEl) typeEl.value = presetItemType;
+    }
+
+    await fetchAllData({ presetAdditionalDocId });
 
     // Listen for invoice date changes to update due date and preview invoice number
     document.getElementById('invoice_date').addEventListener('change', function () {
@@ -113,18 +121,20 @@ document.addEventListener('DOMContentLoaded', async function () {
         fetchNextInvoiceNumber();
     });
 
-    // Auto-suffix for additional invoices
-    document.getElementById('invoice_item_type').addEventListener('change', applyInvoiceNumberForItemType);
+    // Auto-suffix for additional invoices + reload saved invoice per type
+    document.getElementById('invoice_item_type').addEventListener('change', async function () {
+        applyInvoiceNumberForItemType();
+        await refreshInvoiceDetailsForSelection();
+    });
 });
 
-async function fetchAllData() {
+async function fetchAllData({ presetAdditionalDocId } = {}) {
     try {
-        const [enquiryRes, statusRes, clientRes, quotesRes, invoiceRes] = await Promise.all([
+        const [enquiryRes, statusRes, clientRes, quotesRes] = await Promise.all([
             fetch(`${CONFIG.API_URL}/api/enquiry/${enquiryId}`),
             fetch(`${CONFIG.API_URL}/api/tracking/status/${enquiryId}`),
             fetch(`${CONFIG.API_URL}/api/client/master/by-enquiry/${enquiryId}`),
             fetch(`${CONFIG.API_URL}/api/quotes/enquiry/${enquiryId}`),
-            fetch(`${CONFIG.API_URL}/api/invoice/details/${enquiryId}`)
         ]);
 
         if (enquiryRes.ok) {
@@ -192,31 +202,97 @@ async function fetchAllData() {
             }
         }
 
-        if (invoiceRes.ok) {
-            const invData = await invoiceRes.json();
-            if (invData) {
-                hasSavedInvoice = true;
-                if (invData.invoice_number) {
-                    setBaseInvoiceNumber(invData.invoice_number);
-                    const invInput = document.getElementById('invoice_number');
-                    if (invInput) invInput.readOnly = true;
-                }
-                if (invData.customer_invoice_no && !getCustomerInvoiceNo()) {
-                    syncCustomerInvoiceFromShipper(invData.customer_invoice_no);
-                }
-                if (invData.place_of_supply) document.getElementById('place_of_supply').value = invData.place_of_supply;
-                if (invData.invoice_date) document.getElementById('invoice_date').value = invData.invoice_date;
-                if (invData.payment_due_date) document.getElementById('payment_due_date').value = invData.payment_due_date;
-                if (invData.irn) document.getElementById('irn_val').value = invData.irn;
-            } else {
-                await fetchNextInvoiceNumber();
-            }
-        }
+        await loadAdditionalInvoiceDocs(presetAdditionalDocId);
+        await refreshInvoiceDetailsForSelection();
 
         await fetchInvoiceRatesPreview();
     } catch (error) {
         console.error('Error fetching data:', error);
     }
+}
+
+function getSelectedItemType() {
+    return (document.getElementById('invoice_item_type')?.value || 'all').trim();
+}
+
+function getSelectedAdditionalDocId() {
+    const raw = (document.getElementById('additional_invoice_doc_id')?.value || '').trim();
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) ? n : null;
+}
+
+async function loadAdditionalInvoiceDocs(presetAdditionalDocId = '') {
+    const row = document.getElementById('additionalInvoiceRefRow');
+    const select = document.getElementById('additional_invoice_doc_id');
+    if (!row || !select) return;
+
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/tracking/additional-invoices/${enquiryId}`);
+        additionalDocs = res.ok ? await res.json() : [];
+    } catch (e) {
+        additionalDocs = [];
+    }
+
+    // populate dropdown
+    const opts = ['<option value="">Select uploaded additional invoice…</option>'];
+    for (const d of (additionalDocs || [])) {
+        const label = `Doc #${d.id} • ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}`;
+        opts.push(`<option value="${String(d.id)}">${label}</option>`);
+    }
+    select.innerHTML = opts.join('');
+
+    if (presetAdditionalDocId) {
+        select.value = presetAdditionalDocId;
+    }
+
+    select.addEventListener('change', async function () {
+        await refreshInvoiceDetailsForSelection();
+    });
+
+    // show/hide based on current type
+    row.style.display = getSelectedItemType() === 'additional' ? '' : 'none';
+}
+
+async function refreshInvoiceDetailsForSelection() {
+    const itemType = getSelectedItemType();
+    const addRow = document.getElementById('additionalInvoiceRefRow');
+    if (addRow) addRow.style.display = itemType === 'additional' ? '' : 'none';
+
+    const params = new URLSearchParams({ item_type: itemType });
+    if (itemType === 'additional') {
+        const docId = getSelectedAdditionalDocId();
+        if (docId) params.set('additional_doc_id', String(docId));
+    }
+
+    let invData = null;
+    try {
+        const invoiceRes = await fetch(`${CONFIG.API_URL}/api/invoice/details/${enquiryId}?${params.toString()}`);
+        if (invoiceRes.ok) invData = await invoiceRes.json();
+    } catch (e) {
+        invData = null;
+    }
+
+    hasSavedInvoice = !!invData;
+
+    const invInput = document.getElementById('invoice_number');
+    if (invInput) invInput.readOnly = false;
+
+    if (invData) {
+        if (invData.invoice_number) {
+            setBaseInvoiceNumber(invData.invoice_number);
+            if (invInput) invInput.readOnly = true;
+        }
+        if (invData.customer_invoice_no && !getCustomerInvoiceNo()) {
+            syncCustomerInvoiceFromShipper(invData.customer_invoice_no);
+        }
+        if (invData.place_of_supply) document.getElementById('place_of_supply').value = invData.place_of_supply;
+        if (invData.invoice_date) document.getElementById('invoice_date').value = invData.invoice_date;
+        if (invData.payment_due_date) document.getElementById('payment_due_date').value = invData.payment_due_date;
+        if (invData.irn) document.getElementById('irn_val').value = invData.irn;
+        return;
+    }
+
+    await fetchNextInvoiceNumber();
 }
 
 async function fetchInvoiceRatesPreview() {
@@ -375,6 +451,8 @@ function confirmRecordInvoice() {
 
 async function recordInvoice() {
     const customerInvNo = getCustomerInvoiceNo();
+    const itemType = getSelectedItemType();
+    const additionalDocId = itemType === 'additional' ? getSelectedAdditionalDocId() : null;
     const invoiceData = {
         enquiry_id: parseInt(enquiryId),
         place_of_supply: document.getElementById('place_of_supply').value,
@@ -382,13 +460,21 @@ async function recordInvoice() {
         irn: document.getElementById('irn_val').value || null,
         invoice_date: document.getElementById('invoice_date').value,
         payment_due_date: document.getElementById('payment_due_date').value,
-        item_type: document.getElementById('invoice_item_type').value || 'all'
+        item_type: itemType || 'all',
+        additional_doc_id: additionalDocId,
+        remark: itemType === 'additional' ? 'Additional invoice' : 'Main invoice'
     };
 
     // Ensure dates are valid
     if (!invoiceData.invoice_date) {
         if (typeof showModal === 'function') showModal('Validation Error', 'Please select Invoice Date', 'warning');
         else alert('Please select Invoice Date');
+        return;
+    }
+
+    if (invoiceData.item_type === 'additional' && !invoiceData.additional_doc_id) {
+        if (typeof showModal === 'function') showModal('Validation Error', 'Please select Additional Invoice Ref', 'warning');
+        else alert('Please select Additional Invoice Ref');
         return;
     }
 

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import json
+import datetime
 from backend.database import get_db
 from backend.services import document_service, status_service
 from backend.services.enquiry_economics_service import sync_enquiry_economics
@@ -150,6 +151,81 @@ def update_status(enquiry_id: int, status_data: dict, db: Session = Depends(get_
 def get_enquiry_documents(enquiry_id: int, db: Session = Depends(get_db)):
     """Get all documents for a specific enquiry"""
     return document_service.get_documents_by_enquiry(db, enquiry_id)
+
+@router.get("/additional-invoices/bulk")
+def get_additional_invoice_docs_bulk(ids: str, db: Session = Depends(get_db)):
+    """
+    Bulk fetch additional-invoice docs for multiple enquiries.
+
+    ids: comma-separated enquiry IDs.
+    Returns: { enquiry_id: [ {id, created_at, metadata_info} ] }
+
+    Business rule: only include additional invoices created after 8th July 2026
+    (i.e. created_at >= 2026-07-09 00:00:00).
+    """
+    try:
+        id_list = [int(i.strip()) for i in (ids or "").split(",") if i.strip().isdigit()]
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid ids parameter")
+
+    if not id_list:
+        return {}
+
+    from backend.models.document import ShipmentDocument as ShipmentDocumentModel
+
+    cutoff = datetime.datetime(2026, 7, 9, 0, 0, 0)
+    rows = (
+        db.query(
+            ShipmentDocumentModel.enquiry_id,
+            ShipmentDocumentModel.id,
+            ShipmentDocumentModel.created_at,
+            ShipmentDocumentModel.metadata_info,
+        )
+        .filter(
+            ShipmentDocumentModel.enquiry_id.in_(id_list),
+            ShipmentDocumentModel.document_type == "additionalInvoice",
+            ShipmentDocumentModel.created_at >= cutoff,
+        )
+        .order_by(ShipmentDocumentModel.enquiry_id.asc(), ShipmentDocumentModel.created_at.asc())
+        .all()
+    )
+
+    out: dict[int, list[dict]] = {}
+    for enquiry_id, doc_id, created_at, metadata_info in rows:
+        out.setdefault(int(enquiry_id), []).append(
+            {
+                "id": int(doc_id),
+                "created_at": created_at,
+                "metadata_info": metadata_info or {},
+            }
+        )
+    return out
+
+
+@router.get("/additional-invoices/{enquiry_id}")
+def get_additional_invoice_docs(enquiry_id: int, db: Session = Depends(get_db)):
+    """Additional invoice docs for a single enquiry (after 8 Jul 2026)."""
+    from backend.models.document import ShipmentDocument as ShipmentDocumentModel
+
+    cutoff = datetime.datetime(2026, 7, 9, 0, 0, 0)
+    rows = (
+        db.query(
+            ShipmentDocumentModel.id,
+            ShipmentDocumentModel.created_at,
+            ShipmentDocumentModel.metadata_info,
+        )
+        .filter(
+            ShipmentDocumentModel.enquiry_id == enquiry_id,
+            ShipmentDocumentModel.document_type == "additionalInvoice",
+            ShipmentDocumentModel.created_at >= cutoff,
+        )
+        .order_by(ShipmentDocumentModel.created_at.asc())
+        .all()
+    )
+    return [
+        {"id": int(doc_id), "created_at": created_at, "metadata_info": metadata_info or {}}
+        for doc_id, created_at, metadata_info in rows
+    ]
 
 @router.post("/upload-single")
 def upload_single_document(

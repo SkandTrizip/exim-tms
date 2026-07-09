@@ -364,7 +364,7 @@ function bindPrimaryAction(mode) {
     };
 }
 
-window.openActionModal = async function openActionModal(mode, enquiryId, quoteStatus = null) {
+window.openActionModal = async function openActionModal(mode, enquiryId, quoteStatus = null, options = null) {
     ensureActionModalShell();
     closeActionDropdowns();
 
@@ -375,7 +375,7 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
     const copy = ACTION_MODAL_COPY[mode] || { title: 'Details', subtitle: '', primary: null };
 
     const loadId = ++actionModalLoadId;
-    actionModalState = { mode, enquiryId, enquiry: null };
+    actionModalState = { mode, enquiryId, enquiry: null, options: options || null };
     titleEl.textContent = copy.title;
     subtitleEl.textContent = copy.subtitle;
     bindPrimaryAction(mode);
@@ -433,7 +433,11 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
 
     if (mode === 'finance-invoice' && enquiryId) {
         bodyEl.className = 'action-modal-body action-modal-body-iframe';
-        bodyEl.innerHTML = renderIframeSection(`/create-invoice?enquiry_id=${enquiryId}&embedded=1`);
+        const o = (actionModalState && actionModalState.options) ? actionModalState.options : null;
+        const params = new URLSearchParams({ enquiry_id: String(enquiryId), embedded: '1' });
+        if (o && o.item_type) params.set('item_type', String(o.item_type));
+        if (o && o.additional_doc_id) params.set('additional_doc_id', String(o.additional_doc_id));
+        bodyEl.innerHTML = renderIframeSection(`/create-invoice?${params.toString()}`);
         return;
     }
 

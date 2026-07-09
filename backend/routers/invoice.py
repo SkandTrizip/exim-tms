@@ -37,6 +37,8 @@ class InvoiceCreate(BaseModel):
     customer_invoice_no: Optional[str] = None
     irn: Optional[str] = None
     item_type: str = "all"
+    additional_doc_id: Optional[int] = None
+    remark: Optional[str] = None
 
 class InvoicePayment(BaseModel):
     payment_date: datetime.date
@@ -60,18 +62,43 @@ def next_invoice_number_endpoint(
 def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
     logger.info(f"Recording invoice for enquiry ID {invoice.enquiry_id}")
     try:
-        existing_for_enquiry = (
-            db.query(Invoice).filter(Invoice.enquiry_id == invoice.enquiry_id).first()
-        )
-        if existing_for_enquiry:
-            logger.warning(
-                f"Invoice already exists for enquiry {invoice.enquiry_id}: "
-                f"{existing_for_enquiry.invoice_number}"
+        item_type = (invoice.item_type or "all").strip().lower()
+        is_additional = item_type == "additional"
+        if is_additional and not invoice.additional_doc_id:
+            raise HTTPException(status_code=400, detail="additional_doc_id is required for additional invoices")
+
+        # Prevent duplicates:
+        # - main invoice: only one per enquiry (item_type in {'all','main'})
+        # - additional invoice: only one per enquiry per additional_doc_id
+        if is_additional:
+            existing = (
+                db.query(Invoice.id, Invoice.invoice_number)
+                .filter(
+                    Invoice.enquiry_id == invoice.enquiry_id,
+                    Invoice.item_type == "additional",
+                    Invoice.additional_doc_id == invoice.additional_doc_id,
+                )
+                .first()
             )
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invoice already recorded for this enquiry ({existing_for_enquiry.invoice_number})",
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Additional invoice already recorded for this job ({existing[1]})",
+                )
+        else:
+            existing = (
+                db.query(Invoice.id, Invoice.invoice_number)
+                .filter(
+                    Invoice.enquiry_id == invoice.enquiry_id,
+                    Invoice.item_type.in_(["all", "main"]),
+                )
+                .first()
             )
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Main invoice already recorded for this job ({existing[1]})",
+                )
 
         allocated_number = allocate_invoice_number(db, invoice.invoice_date)
 
@@ -81,6 +108,9 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
         allowed_fields = set(Invoice.__table__.columns.keys())
         payload = {k: v for k, v in invoice.dict().items() if k in allowed_fields}
         payload["invoice_number"] = allocated_number
+        payload["item_type"] = item_type
+        if not payload.get("remark"):
+            payload["remark"] = "Additional invoice" if is_additional else "Main invoice"
 
         new_invoice = Invoice(**payload)
         db.add(new_invoice)
@@ -111,8 +141,25 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/details/{enquiry_id}")
-def get_invoice_details(enquiry_id: int, db: Session = Depends(get_db)):
-    invoice = db.query(Invoice).filter(Invoice.enquiry_id == enquiry_id).first()
+def get_invoice_details(
+    enquiry_id: int,
+    item_type: str = Query("all"),
+    additional_doc_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    it = (item_type or "all").strip().lower()
+    if it == "additional":
+        q = db.query(Invoice).filter(Invoice.enquiry_id == enquiry_id, Invoice.item_type == "additional")
+        if additional_doc_id is not None:
+            q = q.filter(Invoice.additional_doc_id == additional_doc_id)
+        invoice = q.order_by(Invoice.id.desc()).first()
+    else:
+        invoice = (
+            db.query(Invoice)
+            .filter(Invoice.enquiry_id == enquiry_id, Invoice.item_type.in_(["all", "main"]))
+            .order_by(Invoice.id.desc())
+            .first()
+        )
     if not invoice:
         # Return empty or 404? 
         # Better to return null so frontend knows to show empty form
