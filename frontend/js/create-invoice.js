@@ -305,6 +305,16 @@ async function refreshInvoiceDetailsForSelection() {
         return;
     }
 
+    // No saved invoice for this selection.
+    // For additional invoices we must ALWAYS generate a fresh invoice number.
+    if (itemType === 'additional') {
+        hasSavedInvoice = false;
+        if (invInput) {
+            invInput.value = '';
+            invInput.dataset.baseNumber = '';
+            invInput.dataset.original = '';
+        }
+    }
     await fetchNextInvoiceNumber();
 }
 
