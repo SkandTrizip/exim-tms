@@ -243,9 +243,9 @@ function renderFinanceActionCell(e, subView, completionTab = 'pending') {
 
 function renderFinanceDrawerActionBtn(mode, id, { primary = true, icon, label, title } = {}, modalOptions = null) {
     const btnClass = primary ? 'btn-primary' : 'btn-secondary';
-    const optsJson = modalOptions ? JSON.stringify(modalOptions) : null;
-    const onclick = optsJson
-        ? `openActionModal('${mode}', ${id}, null, ${optsJson})`
+    const optsEncoded = modalOptions ? btoa(unescape(encodeURIComponent(JSON.stringify(modalOptions)))) : '';
+    const onclick = optsEncoded
+        ? `openActionModal('${mode}', ${id}, null, '${optsEncoded}')`
         : `openActionModal('${mode}', ${id})`;
     return `<button type="button" class="btn ${btnClass} table-tool-btn finance-row-action-btn" onclick="${onclick}" title="${escapeAttr(title || label)}"><i class="fas fa-${icon}"></i> ${escapeHtml(label)}</button>`;
 }

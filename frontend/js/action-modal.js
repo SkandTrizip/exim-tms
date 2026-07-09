@@ -374,8 +374,18 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
     const bodyEl = document.getElementById('actionModalBody');
     const copy = ACTION_MODAL_COPY[mode] || { title: 'Details', subtitle: '', primary: null };
 
+    let parsedOptions = options || null;
+    if (typeof parsedOptions === 'string' && parsedOptions.trim()) {
+        try {
+            const json = decodeURIComponent(escape(atob(parsedOptions)));
+            parsedOptions = JSON.parse(json);
+        } catch (e) {
+            parsedOptions = null;
+        }
+    }
+
     const loadId = ++actionModalLoadId;
-    actionModalState = { mode, enquiryId, enquiry: null, options: options || null };
+    actionModalState = { mode, enquiryId, enquiry: null, options: parsedOptions || null };
     titleEl.textContent = copy.title;
     subtitleEl.textContent = copy.subtitle;
     bindPrimaryAction(mode);
