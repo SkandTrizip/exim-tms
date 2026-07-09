@@ -51,7 +51,6 @@ function getInvoiceNumberForDisplay() {
 
 function applyInvoiceNumberForItemType() {
     const invInput = document.getElementById('invoice_number');
-    const itemTypeEl = document.getElementById('invoice_item_type');
     if (!invInput) return;
     const base = getBaseInvoiceNumber();
     if (!base) {
@@ -61,6 +60,27 @@ function applyInvoiceNumberForItemType() {
     // Additional invoices must follow the same auto-generated flow (fresh LPE sequence),
     // not reuse the enquiry's main invoice number with an "-ADD" suffix.
     invInput.value = base;
+}
+
+function clearInvoiceNumberFields() {
+    const invInput = document.getElementById('invoice_number');
+    if (!invInput) return;
+    invInput.readOnly = false;
+    invInput.value = '';
+    invInput.dataset.baseNumber = '';
+    invInput.dataset.original = '';
+}
+
+function clearIrnField() {
+    const irnInput = document.getElementById('irn_val');
+    if (irnInput) irnInput.value = '';
+}
+
+async function prepareNewAdditionalInvoiceForm() {
+    hasSavedInvoice = false;
+    clearInvoiceNumberFields();
+    clearIrnField();
+    await fetchNextInvoiceNumber(true);
 }
 
 async function fetchNextInvoiceNumber(force = false) {
@@ -122,9 +142,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         fetchNextInvoiceNumber();
     });
 
-    // Auto-suffix for additional invoices + reload saved invoice per type
+    // Reload saved invoice per type (additional always gets a fresh number + empty IRN until saved)
     document.getElementById('invoice_item_type').addEventListener('change', async function () {
-        applyInvoiceNumberForItemType();
         await refreshInvoiceDetailsForSelection();
     });
 });
@@ -265,18 +284,9 @@ async function refreshInvoiceDetailsForSelection() {
         if (docId) params.set('additional_doc_id', String(docId));
     }
 
-    // For additional invoices, don't load an arbitrary previous additional invoice
-    // when the reference doc isn't selected yet.
+    // New additional invoice (no doc selected yet): never reuse main invoice number/IRN.
     if (itemType === 'additional' && !params.get('additional_doc_id')) {
-        hasSavedInvoice = false;
-        const invInput = document.getElementById('invoice_number');
-        if (invInput) {
-            invInput.readOnly = false;
-            invInput.value = '';
-            invInput.dataset.baseNumber = '';
-            invInput.dataset.original = '';
-        }
-        await fetchNextInvoiceNumber();
+        await prepareNewAdditionalInvoiceForm();
         return;
     }
 
@@ -285,6 +295,15 @@ async function refreshInvoiceDetailsForSelection() {
         const invoiceRes = await fetch(`${CONFIG.API_URL}/api/invoice/details/${enquiryId}?${params.toString()}`);
         if (invoiceRes.ok) invData = await invoiceRes.json();
     } catch (e) {
+        invData = null;
+    }
+
+    // Guard: never treat a main invoice payload as an additional invoice draft.
+    if (
+        itemType === 'additional' &&
+        invData &&
+        String(invData.item_type || '').toLowerCase() !== 'additional'
+    ) {
         invData = null;
     }
 
@@ -305,20 +324,19 @@ async function refreshInvoiceDetailsForSelection() {
         if (invData.invoice_date) document.getElementById('invoice_date').value = invData.invoice_date;
         if (invData.payment_due_date) document.getElementById('payment_due_date').value = invData.payment_due_date;
         if (invData.irn) document.getElementById('irn_val').value = invData.irn;
+        else clearIrnField();
         return;
     }
 
     // No saved invoice for this selection.
-    // For additional invoices we must ALWAYS generate a fresh invoice number.
+    // Additional invoices must always get a fresh LPE number and an empty IRN.
     if (itemType === 'additional') {
-        hasSavedInvoice = false;
-        if (invInput) {
-            invInput.value = '';
-            invInput.dataset.baseNumber = '';
-            invInput.dataset.original = '';
-        }
+        await prepareNewAdditionalInvoiceForm();
+        return;
     }
-    await fetchNextInvoiceNumber(itemType === 'additional');
+
+    clearIrnField();
+    await fetchNextInvoiceNumber(false);
 }
 
 async function fetchInvoiceRatesPreview() {

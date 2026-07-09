@@ -149,10 +149,20 @@ def get_invoice_details(
 ):
     it = (item_type or "all").strip().lower()
     if it == "additional":
-        q = db.query(Invoice).filter(Invoice.enquiry_id == enquiry_id, Invoice.item_type == "additional")
-        if additional_doc_id is not None:
-            q = q.filter(Invoice.additional_doc_id == additional_doc_id)
-        invoice = q.order_by(Invoice.id.desc()).first()
+        # Require a specific additional doc — otherwise callers can accidentally
+        # prefill from another additional invoice (or worse, main invoice UI state).
+        if additional_doc_id is None:
+            return None
+        invoice = (
+            db.query(Invoice)
+            .filter(
+                Invoice.enquiry_id == enquiry_id,
+                Invoice.item_type == "additional",
+                Invoice.additional_doc_id == additional_doc_id,
+            )
+            .order_by(Invoice.id.desc())
+            .first()
+        )
     else:
         invoice = (
             db.query(Invoice)
