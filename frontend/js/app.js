@@ -417,11 +417,17 @@ function countSalesSection(section) {
 }
 
 function countTrackingSection(section) {
-    const ops = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
+    const ops = enquiries.filter((e) => isTrackingListEnquiry(e));
     return ops.filter((e) => {
         const s = cachedBulkStatus[e.id] || null;
+        // Stage-2 rows only count once they have a shipment status record.
+        if ((e.stage || 1) < 3 && !s) return false;
         return matchesTrackingSection(section, s);
     }).length;
+}
+
+function isTrackingListEnquiry(e) {
+    return !!(e && !e.is_void && (e.stage || 1) >= 2);
 }
 
 function isShippingLinePaymentDone(status) {
@@ -680,7 +686,7 @@ function updateStatusSectionCounts() {
 }
 
 async function refreshBulkStatusCache() {
-    const ids = enquiries.filter((e) => e.stage >= 3 && !e.is_void).map((e) => e.id);
+    const ids = enquiries.filter((e) => isTrackingListEnquiry(e)).map((e) => e.id);
     cachedBulkStatus = ids.length ? await fetchBulkStatus(ids) : {};
     updateStatusSectionCounts();
     updateFinanceCompletionCounts();
@@ -1646,8 +1652,8 @@ async function updateTrackingTable(filterType = null) {
     if (!tbody) return;
     tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading...</td></tr>';
 
-    const trackingEnquiries = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
-    if (trackingEnquiries.length === 0) {
+    const candidates = enquiries.filter((e) => isTrackingListEnquiry(e));
+    if (candidates.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
         renderPagination('trackingPagination', 0, 1, 'changeTrackingPage');
         updateTableRecordsCount('trackingTable', 'trackingRecordsCount');
@@ -1655,11 +1661,17 @@ async function updateTrackingTable(filterType = null) {
         return;
     }
 
-    const ids = trackingEnquiries.map((e) => e.id);
+    const ids = candidates.map((e) => e.id);
     const bulkStatus = Object.keys(cachedBulkStatus).length
         ? cachedBulkStatus
         : await fetchBulkStatus(ids);
     if (!Object.keys(cachedBulkStatus).length) cachedBulkStatus = bulkStatus;
+
+    // Stage 3+ always eligible; stage 2 only if tracking has already started.
+    const trackingEnquiries = candidates.filter((e) => {
+        if ((e.stage || 1) >= 3) return true;
+        return !!bulkStatus[e.id];
+    });
 
     const sectionKey = shouldBypassTrackingSectionFilter() ? null : currentTrackingFilter;
 

@@ -394,8 +394,11 @@ def update_quote_status(
     db_quote.updated_at = datetime.datetime.utcnow()
 
     if status == "accepted":
-        # Initial confirmed rates remain in quotes / quote_containers / quote_charges (read-only thereafter).
-        pass
+        # Move enquiry into operations so it appears in Tracking / Finance lists.
+        enquiry = db.query(Enquiry).filter(Enquiry.id == db_quote.enquiry_id).first()
+        if enquiry and (enquiry.stage or 1) < 3:
+            enquiry.stage = 3
+            logger.info(f"Enquiry {enquiry.id} stage set to 3 after quote {quote_id} accepted")
 
     db.commit()
     db.refresh(db_quote)

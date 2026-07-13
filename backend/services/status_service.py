@@ -93,7 +93,14 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
                 setattr(status, field, datetime.strptime(status_data[field], "%Y-%m-%d"))
             except (ValueError, TypeError):
                 pass
-    
+
+    # Tracking activity implies the sale is in operations.
+    from backend.models.enquiry import Enquiry
+    enquiry = db.query(Enquiry).filter(Enquiry.id == enquiry_id).first()
+    if enquiry and (enquiry.stage or 1) < 3:
+        enquiry.stage = 3
+        logger.info(f"Enquiry {enquiry_id} stage set to 3 after tracking status update")
+
     db.commit()
     db.refresh(status)
     logger.info(f"Successfully processed shipment status for enquiry ID {enquiry_id}")
