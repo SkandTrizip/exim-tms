@@ -524,7 +524,13 @@ body.embedded-mode .global-search-floating {
     display: none !important;
 }
 
-/* Back to Dashboard — not needed inside drawer (parent has Cancel/close) */
+/* Create Sale: Save lives in the parent drawer footer */
+html.embedded-mode #enquiryForm .form-actions,
+body.embedded-mode #enquiryForm .form-actions {
+    display: none !important;
+}
+
+/* Back to Dashboard — not needed inside drawer (parent has close) */
 html.embedded-mode .step-actions .btn-secondary[onclick*="location.href"],
 body.embedded-mode .step-actions .btn-secondary[onclick*="location.href"],
 html.embedded-mode .form-actions .btn-secondary[onclick*="dashboard"],

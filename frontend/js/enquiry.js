@@ -430,6 +430,7 @@ async function saveEnquiry() {
         showModal('Connection Error', 'Failed to connect to server', 'error');
     }
 }
+window.saveEnquiry = saveEnquiry;
 
 // Helper Functions (Visibility, Risk, Autocomplete) - copied and adapted from app.js
 function updateModeVisibility() {

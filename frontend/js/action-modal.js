@@ -62,7 +62,7 @@ const ACTION_MODAL_COPY = {
     'new-sale': {
         title: 'Create New Sale',
         subtitle: 'Enter basic shipment details to start the workflow',
-        primary: null
+        primary: 'Save Sale'
     },
     'finance-payment': {
         title: 'Payment to Shipping Line',
@@ -105,7 +105,7 @@ function ensureActionModalShell() {
                 <div class="action-modal-loading">Loading…</div>
             </div>
             <div class="action-modal-footer" id="actionModalFooter">
-                <button type="button" class="btn btn-secondary" onclick="closeActionModal()">Cancel</button>
+                <button type="button" class="btn btn-secondary" id="actionModalCancelBtn" onclick="closeActionModal()">Cancel</button>
                 <button type="button" class="btn btn-primary" id="actionModalPrimaryBtn" style="display:none;">Update</button>
             </div>
         </div>`;
@@ -348,19 +348,57 @@ async function saveSaleFromModal() {
 
 function bindPrimaryAction(mode) {
     const btn = document.getElementById('actionModalPrimaryBtn');
+    const footer = document.getElementById('actionModalFooter');
     if (!btn) return;
 
+    let cancelBtn = document.getElementById('actionModalCancelBtn');
+    if (!cancelBtn && footer) {
+        cancelBtn = footer.querySelector('.btn-secondary');
+        if (cancelBtn) cancelBtn.id = 'actionModalCancelBtn';
+    }
+
     const copy = ACTION_MODAL_COPY[mode];
+    const hideCancel = mode === 'new-sale';
+
+    if (cancelBtn) {
+        cancelBtn.style.display = hideCancel ? 'none' : '';
+    }
+
     if (!copy || !copy.primary) {
         btn.style.display = 'none';
+        btn.disabled = false;
         btn.onclick = null;
+        if (footer) footer.style.display = hideCancel ? 'none' : '';
         return;
     }
 
+    if (footer) footer.style.display = '';
     btn.style.display = 'inline-flex';
+    btn.disabled = false;
     btn.textContent = copy.primary;
-    btn.onclick = () => {
-        if (mode === 'view-sale') saveSaleFromModal();
+    btn.onclick = async () => {
+        if (mode === 'view-sale') {
+            saveSaleFromModal();
+            return;
+        }
+        if (mode === 'new-sale') {
+            const iframe = document.querySelector('#actionModalBody .action-modal-iframe');
+            const win = iframe && iframe.contentWindow;
+            if (!win || typeof win.saveEnquiry !== 'function') return;
+
+            btn.disabled = true;
+            const label = copy.primary;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Saving…';
+            try {
+                await win.saveEnquiry();
+            } finally {
+                const overlay = document.getElementById('actionModalOverlay');
+                if (overlay && overlay.classList.contains('active') && actionModalState.mode === 'new-sale') {
+                    btn.disabled = false;
+                    btn.textContent = label;
+                }
+            }
+        }
     };
 }
 
