@@ -247,6 +247,8 @@ function renderShipmentClientSection(enq) {
 
 function renderSaleModalBody(enq) {
     const stuffing = enq.stuffing_date ? String(enq.stuffing_date).split('T')[0] : '';
+    const hblOn = !!enq.hbl_required;
+    const hblDisplay = hblOn ? 'block' : 'none';
     return `
         ${renderShipmentClientSection(enq)}
         <section class="action-section">
@@ -267,9 +269,61 @@ function renderSaleModalBody(enq) {
                     <label>Remarks</label>
                     <textarea id="actionRemarks" placeholder="Add remarks">${escapeHtml(enq.remarks || '')}</textarea>
                 </div>
+                <div class="form-group">
+                    <label>HBL Required</label>
+                    <label class="toggle-switch" style="display: inline-flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;">
+                        <input type="checkbox" id="actionHblRequired" onchange="toggleActionHblFields()" ${hblOn ? 'checked' : ''} style="display: none;">
+                        <span class="toggle-track" id="actionHblTrack" style="position: relative; width: 44px; height: 24px; background: ${hblOn ? 'var(--primary, #2563eb)' : '#cbd5e1'}; border-radius: 12px; transition: background 0.2s;">
+                            <span class="toggle-thumb" style="position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.15); transform: ${hblOn ? 'translateX(20px)' : 'translateX(0)'};"></span>
+                        </span>
+                        <span id="actionHblLabel" style="font-size: 13px; font-weight: 600; color: ${hblOn ? 'var(--primary, #2563eb)' : 'var(--text-tertiary)'};">${hblOn ? 'Yes' : 'No'}</span>
+                    </label>
+                </div>
+                <div class="form-group full-width" id="actionDeliveryAgentGroup" style="display: ${hblDisplay};">
+                    <label>Delivery Agent</label>
+                    <textarea id="actionDeliveryAgent" placeholder="Agent name, address, contact details...">${escapeHtml(enq.delivery_agent || '')}</textarea>
+                </div>
+                <div class="form-group full-width action-hbl-field" id="actionNotifyPartyGroup" style="display: ${hblDisplay};">
+                    <label>Notify Party 1 Address</label>
+                    <textarea id="actionNotifyPartyAddress" placeholder="Party name, full address, contact number...">${escapeHtml(enq.notify_party_address || '')}</textarea>
+                </div>
+                <div class="form-group full-width action-hbl-field" id="actionNotifyParty2Group" style="display: ${hblDisplay};">
+                    <label>Notify Party 2 Address</label>
+                    <textarea id="actionNotifyParty2Address" placeholder="Party name, full address, contact number...">${escapeHtml(enq.notify_party_2_address || '')}</textarea>
+                </div>
+                <div class="form-group action-hbl-field" id="actionVesselGroup" style="display: ${hblDisplay};">
+                    <label>Vessel</label>
+                    <input type="text" id="actionVessel" placeholder="e.g., MSC AURORA" value="${escapeAttr(enq.vessel || '')}">
+                </div>
+                <div class="form-group action-hbl-field" id="actionVoyageNoGroup" style="display: ${hblDisplay};">
+                    <label>Voyage No.</label>
+                    <input type="text" id="actionVoyageNo" placeholder="e.g., 123W" value="${escapeAttr(enq.voyage_no || '')}">
+                </div>
             </div>
         </section>`;
 }
+
+window.toggleActionHblFields = function toggleActionHblFields() {
+    const cb = document.getElementById('actionHblRequired');
+    if (!cb) return;
+
+    const on = cb.checked;
+    const label = document.getElementById('actionHblLabel');
+    const track = document.getElementById('actionHblTrack');
+    const thumb = track?.querySelector('.toggle-thumb');
+    const deliveryGroup = document.getElementById('actionDeliveryAgentGroup');
+
+    if (label) {
+        label.textContent = on ? 'Yes' : 'No';
+        label.style.color = on ? 'var(--primary, #2563eb)' : 'var(--text-tertiary)';
+    }
+    if (track) track.style.background = on ? 'var(--primary, #2563eb)' : '#cbd5e1';
+    if (thumb) thumb.style.transform = on ? 'translateX(20px)' : 'translateX(0)';
+    if (deliveryGroup) deliveryGroup.style.display = on ? 'block' : 'none';
+    document.querySelectorAll('.action-hbl-field').forEach((el) => {
+        el.style.display = on ? 'block' : 'none';
+    });
+};
 
 function renderQuoteSummarySection(quotes) {
     if (!quotes || quotes.length === 0) {
@@ -315,11 +369,18 @@ async function saveSaleFromModal() {
     const { enquiryId, enquiry } = actionModalState;
     if (!enquiryId || !enquiry) return;
 
+    const hblRequired = !!document.getElementById('actionHblRequired')?.checked;
     const payload = {
         ...enquiry,
         stuffing_date: document.getElementById('actionStuffingDate')?.value || null,
         client_target_rate: parseFloat(document.getElementById('actionTargetRate')?.value) || 0,
-        remarks: document.getElementById('actionRemarks')?.value || ''
+        remarks: document.getElementById('actionRemarks')?.value || '',
+        hbl_required: hblRequired,
+        delivery_agent: hblRequired ? (document.getElementById('actionDeliveryAgent')?.value || null) : null,
+        vessel: hblRequired ? (document.getElementById('actionVessel')?.value || null) : null,
+        voyage_no: hblRequired ? (document.getElementById('actionVoyageNo')?.value || null) : null,
+        notify_party_address: hblRequired ? (document.getElementById('actionNotifyPartyAddress')?.value || null) : null,
+        notify_party_2_address: hblRequired ? (document.getElementById('actionNotifyParty2Address')?.value || null) : null,
     };
 
     const res = await fetch(`${CONFIG.API_URL}/api/enquiry/${enquiryId}`, {
@@ -375,7 +436,7 @@ function bindPrimaryAction(mode) {
     if (footer) footer.style.display = '';
     btn.style.display = 'inline-flex';
     btn.disabled = false;
-    btn.textContent = actionModalState.primaryLabel || copy.primary;
+    btn.textContent = copy.primary;
     btn.onclick = async () => {
         if (mode === 'view-sale') {
             saveSaleFromModal();
@@ -387,7 +448,7 @@ function bindPrimaryAction(mode) {
             if (!win || typeof win.saveEnquiry !== 'function') return;
 
             btn.disabled = true;
-            const label = actionModalState.primaryLabel || copy.primary;
+            const label = copy.primary;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Saving…';
             try {
                 await win.saveEnquiry();
@@ -395,7 +456,7 @@ function bindPrimaryAction(mode) {
                 const overlay = document.getElementById('actionModalOverlay');
                 if (overlay && overlay.classList.contains('active') && actionModalState.mode === 'new-sale') {
                     btn.disabled = false;
-                    btn.textContent = actionModalState.primaryLabel || copy.primary;
+                    btn.textContent = label;
                 }
             }
         }
@@ -423,7 +484,7 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
     }
 
     const loadId = ++actionModalLoadId;
-    actionModalState = { mode, enquiryId, enquiry: null, options: parsedOptions || null, primaryLabel: null };
+    actionModalState = { mode, enquiryId, enquiry: null, options: parsedOptions || null };
     titleEl.textContent = copy.title;
     subtitleEl.textContent = copy.subtitle;
     bindPrimaryAction(mode);
@@ -600,23 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         if (event.data.type === 'sale-saved') {
-            if (event.data.close === false) {
-                if (event.data.primaryLabel) {
-                    actionModalState.primaryLabel = event.data.primaryLabel;
-                    const btn = document.getElementById('actionModalPrimaryBtn');
-                    if (btn) btn.textContent = event.data.primaryLabel;
-                }
-                if (event.data.title) {
-                    const titleEl = document.getElementById('actionModalTitle');
-                    if (titleEl) titleEl.textContent = event.data.title;
-                }
-                if (event.data.subtitle) {
-                    const subtitleEl = document.getElementById('actionModalSubtitle');
-                    if (subtitleEl) subtitleEl.textContent = event.data.subtitle;
-                }
-            } else {
-                closeActionModal();
-            }
+            closeActionModal();
             if (typeof fetchAllEnquiries === 'function') fetchAllEnquiries();
             else if (typeof updateAllEnquiriesTable === 'function') updateAllEnquiriesTable(currentAllEnquiriesFilter);
             if (typeof updateDashboardTable === 'function') updateDashboardTable();
