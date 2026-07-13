@@ -734,14 +734,19 @@ document.addEventListener('DOMContentLoaded', async function () {
 async function loadDocument(id) {
     try {
         const saved = await fetchSavedSnapshot(id);
-        if (!saved?.snapshot) {
-            alert('No saved HBL found for this enquiry.');
-            window.history.back();
+        if (saved?.snapshot) {
+            applySnapshot(saved.snapshot);
             return;
         }
 
-        // Render the saved snapshot; keep edit/save available for post-generation revisions.
-        applySnapshot(saved.snapshot);
+        // Fresh enquiry — no snapshot yet; prefill from enquiry / tracking data.
+        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/hbl-document/${id}`);
+        if (!res.ok) throw new Error(`Failed to load HBL data (${res.status})`);
+        const data = await res.json();
+        populateDocument(data);
+        const sel = document.getElementById('blTypeSelect');
+        if (sel) switchBlType(sel.value || 'original');
+        applyDraftPrefixVisibility();
     } catch (err) {
         console.error('Failed to load HBL document data:', err);
         alert('Could not load document data. Please try again.');
