@@ -375,7 +375,7 @@ function bindPrimaryAction(mode) {
     if (footer) footer.style.display = '';
     btn.style.display = 'inline-flex';
     btn.disabled = false;
-    btn.textContent = copy.primary;
+    btn.textContent = actionModalState.primaryLabel || copy.primary;
     btn.onclick = async () => {
         if (mode === 'view-sale') {
             saveSaleFromModal();
@@ -387,7 +387,7 @@ function bindPrimaryAction(mode) {
             if (!win || typeof win.saveEnquiry !== 'function') return;
 
             btn.disabled = true;
-            const label = copy.primary;
+            const label = actionModalState.primaryLabel || copy.primary;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Saving…';
             try {
                 await win.saveEnquiry();
@@ -395,7 +395,7 @@ function bindPrimaryAction(mode) {
                 const overlay = document.getElementById('actionModalOverlay');
                 if (overlay && overlay.classList.contains('active') && actionModalState.mode === 'new-sale') {
                     btn.disabled = false;
-                    btn.textContent = label;
+                    btn.textContent = actionModalState.primaryLabel || copy.primary;
                 }
             }
         }
@@ -423,7 +423,7 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
     }
 
     const loadId = ++actionModalLoadId;
-    actionModalState = { mode, enquiryId, enquiry: null, options: parsedOptions || null };
+    actionModalState = { mode, enquiryId, enquiry: null, options: parsedOptions || null, primaryLabel: null };
     titleEl.textContent = copy.title;
     subtitleEl.textContent = copy.subtitle;
     bindPrimaryAction(mode);
@@ -600,7 +600,23 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         if (event.data.type === 'sale-saved') {
-            closeActionModal();
+            if (event.data.close === false) {
+                if (event.data.primaryLabel) {
+                    actionModalState.primaryLabel = event.data.primaryLabel;
+                    const btn = document.getElementById('actionModalPrimaryBtn');
+                    if (btn) btn.textContent = event.data.primaryLabel;
+                }
+                if (event.data.title) {
+                    const titleEl = document.getElementById('actionModalTitle');
+                    if (titleEl) titleEl.textContent = event.data.title;
+                }
+                if (event.data.subtitle) {
+                    const subtitleEl = document.getElementById('actionModalSubtitle');
+                    if (subtitleEl) subtitleEl.textContent = event.data.subtitle;
+                }
+            } else {
+                closeActionModal();
+            }
             if (typeof fetchAllEnquiries === 'function') fetchAllEnquiries();
             else if (typeof updateAllEnquiriesTable === 'function') updateAllEnquiriesTable(currentAllEnquiriesFilter);
             if (typeof updateDashboardTable === 'function') updateDashboardTable();

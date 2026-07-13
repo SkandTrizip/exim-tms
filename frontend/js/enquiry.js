@@ -5,9 +5,38 @@ function isEmbeddedEnquiry() {
     return document.documentElement.classList.contains('embedded-mode');
 }
 
-function notifySaleSaved(enquiry) {
+function notifySaleSaved(enquiry, options = {}) {
     if (isEmbeddedEnquiry() && window.parent !== window) {
-        window.parent.postMessage({ type: 'sale-saved', enquiry }, '*');
+        window.parent.postMessage({
+            type: 'sale-saved',
+            enquiry,
+            close: options.close !== false,
+            primaryLabel: options.primaryLabel || null,
+            title: options.title || null,
+            subtitle: options.subtitle || null,
+        }, '*');
+    }
+}
+
+function setHblSectionVisible(visible, { scroll = false } = {}) {
+    const group = document.getElementById('hblRequiredGroup');
+    if (!group) return;
+
+    group.hidden = !visible;
+    if (!visible) {
+        const cb = document.getElementById('hblRequired');
+        if (cb) {
+            cb.checked = false;
+            toggleDeliveryAgent();
+        }
+        return;
+    }
+
+    toggleDeliveryAgent();
+    if (scroll) {
+        requestAnimationFrame(() => {
+            group.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        });
     }
 }
 
@@ -30,8 +59,10 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     if (enquiryId) {
         await fetchEnquiryData(enquiryId);
+        setHblSectionVisible(true);
     } else {
         await generateEnquiryNumber();
+        setHblSectionVisible(false);
     }
     hideEmbeddedDrawerBackButtons();
 });
@@ -415,12 +446,29 @@ async function saveEnquiry() {
 
         if (response.ok) {
             const result = await response.json();
+            const wasCreate = !isUpdate;
             currentEnquiry = result; // Update current enquiry with saved data
+
+            if (wasCreate) {
+                setHblSectionVisible(true, { scroll: true });
+            }
+
             if (isEmbeddedEnquiry()) {
-                notifySaleSaved(result);
+                notifySaleSaved(result, {
+                    close: !wasCreate,
+                    primaryLabel: wasCreate ? 'Save HBL' : null,
+                    title: wasCreate ? 'Sale Saved' : null,
+                    subtitle: wasCreate ? 'Set HBL required if needed, then save again' : null,
+                });
                 return;
             }
-            showModal('Success', 'Sale saved successfully!', 'success');
+            showModal(
+                'Success',
+                wasCreate
+                    ? 'Sale saved successfully. Set HBL required if needed.'
+                    : 'Sale saved successfully!',
+                'success'
+            );
         } else {
             const error = await response.json();
             showModal('Error', error.detail || 'Unknown error', 'error');
