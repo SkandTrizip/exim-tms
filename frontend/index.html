@@ -508,32 +508,11 @@
                         </div>
 
                         <div class="status-sections" id="trackingStatusSections" role="tablist" aria-label="Tracking status sections">
-                            <button type="button" class="status-section-card active" data-view="tracking" data-section="pending_booking" role="tab" aria-selected="true">
-                                <div class="status-section-icon sales"><i class="fas fa-anchor"></i></div>
+                            <button type="button" class="status-section-card active" data-view="tracking" data-section="pending" role="tab" aria-selected="true">
+                                <div class="status-section-icon traffic"><i class="fas fa-clock"></i></div>
                                 <div class="status-section-body">
-                                    <div class="status-section-label">Booking Pending</div>
-                                    <div class="status-section-count"><span data-count="pending_booking">0</span> LEFT</div>
-                                </div>
-                            </button>
-                            <button type="button" class="status-section-card" data-view="tracking" data-section="pending_si" role="tab" aria-selected="false">
-                                <div class="status-section-icon traffic"><i class="fas fa-file-signature"></i></div>
-                                <div class="status-section-body">
-                                    <div class="status-section-label">SI Pending</div>
-                                    <div class="status-section-count"><span data-count="pending_si">0</span> LEFT</div>
-                                </div>
-                            </button>
-                            <button type="button" class="status-section-card" data-view="tracking" data-section="pending_bl" role="tab" aria-selected="false">
-                                <div class="status-section-icon ops"><i class="fas fa-file-contract"></i></div>
-                                <div class="status-section-body">
-                                    <div class="status-section-label">BL Pending</div>
-                                    <div class="status-section-count"><span data-count="pending_bl">0</span> LEFT</div>
-                                </div>
-                            </button>
-                            <button type="button" class="status-section-card" data-view="tracking" data-section="pending_sob" role="tab" aria-selected="false">
-                                <div class="status-section-icon sales"><i class="fas fa-ship"></i></div>
-                                <div class="status-section-body">
-                                    <div class="status-section-label">SOB Remaining</div>
-                                    <div class="status-section-count"><span data-count="pending_sob">0</span> LEFT</div>
+                                    <div class="status-section-label">Not Completed</div>
+                                    <div class="status-section-count"><span data-count="pending">0</span> LEFT</div>
                                 </div>
                             </button>
                             <button type="button" class="status-section-card" data-view="tracking" data-section="completed" role="tab" aria-selected="false">
@@ -549,12 +528,12 @@
                             <div class="table-head">
                                 <div class="table-head-left">
                                     <div class="table-head-title">Tracking Details</div>
-                                    <div class="table-head-sub">Milestone-wise shipment tracking</div>
+                                    <div class="table-head-sub">Completed and not completed shipments</div>
                                 </div>
                                 <div class="table-head-right">
                                     <div class="status-pill" id="trackingStatusPill">
                                         <span class="status-dot"></span>
-                                        <span class="status-text">Booking Pending</span>
+                                        <span class="status-text">Not Completed</span>
                                     </div>
                                     <div class="records-pill" id="trackingRecordsPill">
                                         <i class="fas fa-list"></i>
