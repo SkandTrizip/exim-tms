@@ -27,6 +27,42 @@ function masterStatusBadge(status) {
     return `<span class="master-status-badge ${escapeHtml(cls)}">${escapeHtml(label)}</span>`;
 }
 
+function getMastersUsername() {
+    try {
+        const raw = localStorage.getItem('user') || '';
+        if (!raw) return '';
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === 'string') return parsed;
+        return parsed.username || '';
+    } catch (_) {
+        return localStorage.getItem('user') || '';
+    }
+}
+
+function isMastersAdmin() {
+    try {
+        const currentUser = (getMastersUsername() || '').toLowerCase();
+        if (!currentUser) return false;
+        if (window.CONFIG && CONFIG.adminUsers) {
+            let admins = CONFIG.adminUsers;
+            if (typeof admins === 'string') admins = JSON.parse(admins);
+            if (Array.isArray(admins)) {
+                return admins.map((u) => String(u).toLowerCase()).includes(currentUser);
+            }
+        }
+        return currentUser === 'admin';
+    } catch (_) {
+        return false;
+    }
+}
+
+function mastersAuthHeaders() {
+    const t = localStorage.getItem('token') || '';
+    return t
+        ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' }
+        : { 'Content-Type': 'application/json' };
+}
+
 function openMasterDrawer(mode, id) {
     if (typeof closeOtherRailGroups === 'function') closeOtherRailGroups(null);
     if (typeof openActionModal === 'function') {
@@ -34,9 +70,25 @@ function openMasterDrawer(mode, id) {
     }
 }
 
-function renderMasterRowActions(type, id) {
+function renderMasterRowActions(type, id, status = null) {
     const editMode = type === 'client' ? 'edit-client' : 'edit-shipping-line';
     const viewMode = type === 'client' ? 'view-client' : 'view-shipping-line';
+    const statusKey = String(status || 'pending').toLowerCase();
+    const canApprove = isMastersAdmin() && statusKey !== 'verified' && statusKey !== 'approved';
+
+    let adminItems = '';
+    if (canApprove) {
+        adminItems = `
+                <button class="actions-item confirm-item" type="button" style="color:#059669;font-weight:700;"
+                    onclick="approveMasterRecord('${type}', ${id})">
+                    <i class="fas fa-check-circle"></i> Verify / Approve
+                </button>
+                <button class="actions-item" type="button" style="color:#dc2626;font-weight:700;"
+                    onclick="rejectMasterRecord('${type}', ${id})">
+                    <i class="fas fa-times-circle"></i> Reject
+                </button>`;
+    }
+
     return `
         <div class="actions-dropdown">
             <button class="row-actions-btn actions-btn" type="button" title="Actions" aria-label="Actions">
@@ -49,11 +101,76 @@ function renderMasterRowActions(type, id) {
                 <button class="actions-item" type="button" onclick="openMasterDrawer('${viewMode}', ${id})">
                     <i class="fas fa-eye"></i> View
                 </button>
+                ${adminItems}
             </div>
         </div>`;
 }
 
+async function approveMasterRecord(type, id) {
+    const label = type === 'client' ? 'client master' : 'shipping line';
+    const go = async () => {
+        try {
+            const url = type === 'client'
+                ? `${CONFIG.API_URL}/api/client/master/${id}/verify`
+                : `${CONFIG.API_URL}/api/shipping-lines/${id}/verify`;
+            const res = await fetch(url, { method: 'PATCH', headers: mastersAuthHeaders() });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || `Could not verify ${label}.`);
+            }
+            showModal('Verified', `The ${label} has been approved.`, 'success');
+            refreshMastersList();
+        } catch (err) {
+            showModal('Error', err.message || `Could not verify ${label}.`, 'error');
+        }
+    };
+
+    if (typeof showModal === 'function') {
+        showModal(
+            'Confirm Approval',
+            `Approve this ${label}? This marks it as verified for use in Sales.`,
+            'warning',
+            go
+        );
+    } else {
+        await go();
+    }
+}
+
+async function rejectMasterRecord(type, id) {
+    const label = type === 'client' ? 'client master' : 'shipping line';
+    const go = async () => {
+        try {
+            const url = type === 'client'
+                ? `${CONFIG.API_URL}/api/client/master/${id}/reject`
+                : `${CONFIG.API_URL}/api/shipping-lines/${id}/reject`;
+            const res = await fetch(url, { method: 'PATCH', headers: mastersAuthHeaders() });
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || `Could not reject ${label}.`);
+            }
+            showModal('Rejected', `The ${label} has been rejected.`, 'warning');
+            refreshMastersList();
+        } catch (err) {
+            showModal('Error', err.message || `Could not reject ${label}.`, 'error');
+        }
+    };
+
+    if (typeof showModal === 'function') {
+        showModal(
+            'Confirm Rejection',
+            `Reject this ${label}? It will no longer be treated as approved.`,
+            'warning',
+            go
+        );
+    } else {
+        await go();
+    }
+}
+
 window.openMasterDrawer = openMasterDrawer;
+window.approveMasterRecord = approveMasterRecord;
+window.rejectMasterRecord = rejectMasterRecord;
 
 function renderMastersPagination(containerId, totalItems, currentPage, onPageChange, pageSize) {
     const container = document.getElementById(containerId);
@@ -169,7 +286,7 @@ function renderClientMastersTable() {
                 <td data-col="branch" class="cell-upper">${escapeHtml(c.client_name || '—')}</td>
                 <td data-col="phone">${escapeHtml(c.contact_no || '—')}</td>
                 <td data-col="location">${escapeHtml(c.office_location || '—')}</td>
-                <td data-col="action">${renderMasterRowActions('client', c.id)}</td>
+                <td data-col="action">${renderMasterRowActions('client', c.id, c.status)}</td>
             </tr>`).join('');
     }
 
@@ -217,7 +334,7 @@ function renderShippingLinesTable() {
                 <td data-col="contact">${escapeHtml(s.primary_contact_person || '—')}</td>
                 <td data-col="phone">${escapeHtml(s.primary_contact_number || '—')}</td>
                 <td data-col="location">${escapeHtml(s.office_location || '—')}</td>
-                <td data-col="action">${renderMasterRowActions('shipping', s.id)}</td>
+                <td data-col="action">${renderMasterRowActions('shipping', s.id, s.status)}</td>
             </tr>`).join('');
     }
 
