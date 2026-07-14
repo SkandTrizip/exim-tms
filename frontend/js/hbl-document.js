@@ -28,6 +28,19 @@ function getFreightSelection() {
     return prepaid.style.fontWeight === 'bold' ? 'prepaid' : 'collect';
 }
 
+const HBL_ADDRESS_FIELD_IDS = new Set([
+    'notifyParty1', 'notifyParty2', 'consignor', 'consignee', 'deliveryAgent',
+]);
+
+function softWrapLongTokens(text) {
+    if (!text) return '';
+    // Ensure ",email@" becomes ", email@" and allow breaks on long tokens
+    return String(text)
+        .replace(/\u200b/g, '')
+        .replace(/,([^\s])/g, ', $1')
+        .replace(/([^\s]{28})/g, '$1\u200b');
+}
+
 function collectSnapshot() {
     const fields = {};
     for (const id of HBL_SNAPSHOT_FIELD_IDS) {
@@ -37,8 +50,8 @@ function collectSnapshot() {
             fields[id] = getCargoFullText(cargoPair[0], cargoPair[1]);
         } else {
             // Use textContent so whitespace/newlines/alignment via spaces survives restore.
-            // (innerHTML can be rewritten by the browser during contenteditable editing.)
-            fields[id] = el ? (el.textContent || '') : '';
+            // Strip soft-wrap markers so saves stay clean.
+            fields[id] = el ? (el.textContent || '').replace(/\u200b/g, '') : '';
         }
     }
     const draftCb = document.getElementById('draftMarkToggle');
@@ -60,7 +73,9 @@ function applySnapshot(s) {
     for (const id of HBL_SNAPSHOT_FIELD_IDS) {
         if (s.fields[id] !== undefined) {
             const el = document.getElementById(id);
-            if (el) el.textContent = s.fields[id] ?? '';
+            if (!el) continue;
+            const raw = s.fields[id] ?? '';
+            el.textContent = HBL_ADDRESS_FIELD_IDS.has(id) ? softWrapLongTokens(raw) : raw;
         }
     }
     const sel = document.getElementById('blTypeSelect');
@@ -762,12 +777,12 @@ function fmtDate(iso) {
 function populateDocument(d) {
     document.getElementById('mtdBlNo').textContent = d.enquiry_number || '';
 
-    document.getElementById('consignor').textContent = d.consignor || d.client_name || '';
+    document.getElementById('consignor').textContent = softWrapLongTokens(d.consignor || d.client_name || '');
     document.getElementById('shipmentRefNo').textContent = d.enquiry_number || '';
-    document.getElementById('consignee').textContent = d.consignee || '';
-    document.getElementById('deliveryAgent').textContent = d.delivery_agent || '';
-    document.getElementById('notifyParty1').textContent = d.notify_party_address || '';
-    document.getElementById('notifyParty2').textContent = d.notify_party_2_address || '';
+    document.getElementById('consignee').textContent = softWrapLongTokens(d.consignee || '');
+    document.getElementById('deliveryAgent').textContent = softWrapLongTokens(d.delivery_agent || '');
+    document.getElementById('notifyParty1').textContent = softWrapLongTokens(d.notify_party_address || '');
+    document.getElementById('notifyParty2').textContent = softWrapLongTokens(d.notify_party_2_address || '');
 
     const origin = d.origin || '';
     const dest = d.destination || '';
