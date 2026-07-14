@@ -705,6 +705,28 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.data.type === 'master-saved') {
             closeActionModal();
             if (typeof refreshMastersList === 'function') refreshMastersList();
+
+            const entity = event.data.entity || 'record';
+            const isUpdate = !!event.data.updated;
+            const name = event.data.name ? `"${event.data.name}"` : 'record';
+            let title = 'Saved';
+            let message = event.data.message || '';
+
+            if (entity === 'client') {
+                title = isUpdate ? 'Client Master Updated' : 'Client Master Saved';
+                message = message || (isUpdate
+                    ? `Client master ${name} was updated successfully.`
+                    : `Client master ${name} was created successfully.`);
+            } else if (entity === 'shipping') {
+                title = isUpdate ? 'Shipping Line Updated' : 'Shipping Line Saved';
+                message = message || (isUpdate
+                    ? `Shipping line ${name} was updated successfully.`
+                    : `Shipping line ${name} was created successfully.`);
+            } else if (!message) {
+                message = isUpdate ? 'Changes were saved successfully.' : 'Saved successfully.';
+            }
+
+            showModal(title, message, 'success');
             return;
         }
         if (event.data.type === 'master-save-error') {

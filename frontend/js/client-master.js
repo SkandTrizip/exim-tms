@@ -29,9 +29,16 @@ function isEmbeddedMaster() {
     return document.documentElement.classList.contains('embedded-mode');
 }
 
-function notifyMasterSaved(entity) {
+function notifyMasterSaved(entity, details = {}) {
     if (isEmbeddedMaster() && window.parent !== window) {
-        window.parent.postMessage({ type: 'master-saved', entity }, '*');
+        window.parent.postMessage({
+            type: 'master-saved',
+            entity,
+            updated: !!details.updated,
+            name: details.name || '',
+            code: details.code || '',
+            message: details.message || '',
+        }, '*');
     }
 }
 
@@ -558,7 +565,14 @@ async function handleMasterSubmit(e) {
         if (res.ok) {
             const savedItem = await res.json();
             if (isEmbeddedMaster()) {
-                notifyMasterSaved('client');
+                notifyMasterSaved('client', {
+                    updated: !!masterId,
+                    name: savedItem.client_name || clientName,
+                    code: savedItem.client_code || clientCode,
+                    message: masterId
+                        ? `Branch "${savedItem.client_name || clientName}" was updated successfully.`
+                        : `Branch "${savedItem.client_name || clientName}" was created successfully.`,
+                });
                 return savedItem;
             }
             showModal('success', `Client Master ${masterId ? 'Updated' : 'Saved'}!`,
