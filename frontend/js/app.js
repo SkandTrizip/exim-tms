@@ -1992,33 +1992,29 @@ function renderEnquiryActions(e, quoteStatus = null) {
         </button>
     `;
 
-    // Pricing context — amounts are locked once quote is accepted (stage 3+)
+    // Quotes stay editable until accepted (stage 3+ / status Accepted)
     if (!e.is_void) {
-        if (e.stage >= 3 || quoteStatus === 'Accepted') {
+        const statusKey = String(quoteStatus || '').toLowerCase();
+        const isAccepted = e.stage >= 3 || statusKey === 'accepted';
+        if (isAccepted) {
             html += `
                 <button class="actions-item" onclick="openActionModal('view-quotes', ${e.id})">
                     <i class="fas fa-file-invoice-dollar"></i> View Quotes
                 </button>
             `;
-        } else if (quoteStatus === 'Draft' || !quoteStatus) {
+        } else {
             html += `
                 <button class="actions-item" onclick="openActionModal('edit-quotes', ${e.id})">
                     <i class="fas fa-edit"></i> Edit Quotes
                 </button>
             `;
-            if (e.stage === 2) {
+            if ((e.stage || 1) >= 2) {
                 html += `
                     <button class="actions-item confirm-item confirm-action" onclick="openActionModal('confirm-quote', ${e.id})">
                         <i class="fas fa-check-double"></i> Confirm Quote
                     </button>
                 `;
             }
-        } else if (e.stage === 2) {
-            html += `
-                <button class="actions-item confirm-item confirm-action" onclick="openActionModal('confirm-quote', ${e.id})">
-                    <i class="fas fa-check-double"></i> Confirm Quote
-                </button>
-            `;
         }
     }
 
