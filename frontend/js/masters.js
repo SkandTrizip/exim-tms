@@ -130,7 +130,7 @@ async function approveMasterRecord(type, id) {
     const label = type === 'client' ? 'client master' : 'shipping line';
     closeMastersActionMenus();
 
-    const go = async () => {
+    const run = async () => {
         try {
             const url = type === 'client'
                 ? `${CONFIG.API_URL}/api/client/master/${id}/verify`
@@ -147,25 +147,21 @@ async function approveMasterRecord(type, id) {
         }
     };
 
-    if (typeof showModal === 'function') {
-        showModal(
-            'Confirm Approval',
-            `Approve this ${label}? This marks it as verified for use in Sales.`,
-            'warning',
-            go
-        );
-        const confirmBtn = document.getElementById('modalConfirmBtn');
-        if (confirmBtn) confirmBtn.textContent = 'Approve';
-    } else {
-        await go();
-    }
+    showModal(
+        'Confirm Approval',
+        `Approve this ${label}? This marks it as verified for use in Sales.`,
+        'warning',
+        run
+    );
+    const confirmBtn = document.getElementById('modalConfirmBtn');
+    if (confirmBtn) confirmBtn.textContent = 'Approve';
 }
 
 async function rejectMasterRecord(type, id) {
     const label = type === 'client' ? 'client master' : 'shipping line';
     closeMastersActionMenus();
 
-    const go = async () => {
+    const run = async () => {
         try {
             const url = type === 'client'
                 ? `${CONFIG.API_URL}/api/client/master/${id}/reject`
@@ -182,18 +178,14 @@ async function rejectMasterRecord(type, id) {
         }
     };
 
-    if (typeof showModal === 'function') {
-        showModal(
-            'Confirm Rejection',
-            `Reject this ${label}? It will no longer be treated as approved.`,
-            'warning',
-            go
-        );
-        const confirmBtn = document.getElementById('modalConfirmBtn');
-        if (confirmBtn) confirmBtn.textContent = 'Reject';
-    } else {
-        await go();
-    }
+    showModal(
+        'Confirm Rejection',
+        `Reject this ${label}? It will no longer be treated as approved.`,
+        'warning',
+        run
+    );
+    const confirmBtn = document.getElementById('modalConfirmBtn');
+    if (confirmBtn) confirmBtn.textContent = 'Reject';
 }
 
 window.openMasterDrawer = openMasterDrawer;

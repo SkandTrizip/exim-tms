@@ -131,6 +131,7 @@ function closeActionDropdowns() {
         d.classList.remove('actions-menu-open');
     });
 }
+window.closeActionDropdowns = closeActionDropdowns;
 
 function resetActionsMenuPosition(menu) {
     if (!menu) return;

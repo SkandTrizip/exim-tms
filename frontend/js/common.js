@@ -248,27 +248,27 @@ function showModal(title, message, type = 'info', onConfirm = null) {
         confirmBtn.className = 'btn btn-primary';
         confirmBtn.id = 'modalConfirmBtn';
         confirmBtn.textContent = 'OK';
-        confirmBtn.onclick = async () => {
+        confirmBtn.onclick = () => {
             if (confirmBtn.disabled) return;
-            const originalLabel = confirmBtn.textContent;
-            confirmBtn.disabled = true;
-            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            const closeBtn = footer.querySelector('.btn-secondary');
-            if (closeBtn) closeBtn.disabled = true;
-            try {
-                await onConfirm();
-            } catch (err) {
-                console.error(err);
-            } finally {
-                // Only tear down if this confirm dialog is still showing.
-                // Async handlers often open a follow-up success/error modal on the same overlay.
-                if (document.getElementById('modalConfirmBtn') === confirmBtn) {
+            const result = onConfirm();
+            // Async confirm: keep dialog open with spinner until the handler finishes
+            // (handlers often replace this overlay with a success/error modal).
+            if (result && typeof result.then === 'function') {
+                const originalLabel = confirmBtn.textContent;
+                confirmBtn.disabled = true;
+                confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i>';
+                const closeBtn = footer.querySelector('.btn-secondary');
+                if (closeBtn) closeBtn.disabled = true;
+                result.finally(() => {
+                    if (document.getElementById('modalConfirmBtn') !== confirmBtn) return;
                     confirmBtn.disabled = false;
                     confirmBtn.textContent = originalLabel;
                     if (closeBtn) closeBtn.disabled = false;
                     closeModal();
-                }
+                });
+                return;
             }
+            closeModal();
         };
         footer.appendChild(confirmBtn);
     }
