@@ -893,24 +893,37 @@ function getQuoteSummary(quote) {
     return { origin: totShippingLine, vendor: totVendor, destination: 0 };
 }
 
+function isFirstTimeQuoteConfirmation() {
+    return !pricingQuotes.some(isQuoteAcceptedStatus) && (currentEnquiry?.stage || 1) < 3;
+}
+
+function promptFinalizeQuoteConfirmation(quote, remarks = null) {
+    showModal(
+        'Confirm Selection',
+        `Are you sure you want to finalize <strong>${quote.name}</strong> (${quote.line})? This will lock the pricing sheet.`,
+        'warning',
+        async () => {
+            await executeFinalizeQuote(quote, remarks);
+        }
+    );
+}
+
 async function finalizeSelectedQuote(idx) {
     const quote = pricingQuotes[idx];
     activeQuoteIndex = idx;
 
     closeModal();
 
+    if (isFirstTimeQuoteConfirmation()) {
+        promptFinalizeQuoteConfirmation(quote);
+        return;
+    }
+
     showQuoteRemarksModal({
         title: 'Remarks before finalizing quote',
         confirmLabel: 'Continue',
         onConfirm: (remarks) => {
-            showModal(
-                'Confirm Selection',
-                `Are you sure you want to finalize <strong>${quote.name}</strong> (${quote.line})? This will lock the pricing sheet.`,
-                'warning',
-                async () => {
-                    await executeFinalizeQuote(quote, remarks);
-                }
-            );
+            promptFinalizeQuoteConfirmation(quote, remarks);
         },
     });
 }
@@ -928,8 +941,8 @@ async function executeFinalizeQuote(quote, remarks) {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        remarks_reason: remarks.remarks_reason,
-                        remarks_other: remarks.remarks_other,
+                        remarks_reason: remarks?.remarks_reason || null,
+                        remarks_other: remarks?.remarks_other || null,
                     }),
                 }
             );
@@ -938,8 +951,10 @@ async function executeFinalizeQuote(quote, remarks) {
                 throw new Error(err.detail || 'Failed to update quote status');
             }
             quote.status = 'accepted';
-            quote.accepted_remarks_reason = remarks.remarks_reason;
-            quote.accepted_remarks_other = remarks.remarks_other;
+            if (remarks) {
+                quote.accepted_remarks_reason = remarks.remarks_reason;
+                quote.accepted_remarks_other = remarks.remarks_other;
+            }
             console.log('✅ Quote status updated to accepted');
         }
 

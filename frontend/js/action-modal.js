@@ -32,22 +32,22 @@ const ACTION_MODAL_COPY = {
     'add-client': {
         title: 'Add Client',
         subtitle: 'Create a new client origin and branch',
-        primary: null
+        primary: 'Save Origin & Continue'
     },
     'edit-client': {
         title: 'Client Master',
         subtitle: 'View or update client master details',
-        primary: null
+        primary: 'Update Client Master'
     },
     'add-shipping-line': {
         title: 'Add Shipping Line',
         subtitle: 'Register a new shipping line partner',
-        primary: null
+        primary: 'Save Shipping Line'
     },
     'edit-shipping-line': {
         title: 'Edit Shipping Line',
         subtitle: 'Update shipping line partner details',
-        primary: null
+        primary: 'Update Shipping Line'
     },
     'view-client': {
         title: 'View Client',
@@ -407,6 +407,21 @@ async function saveSaleFromModal() {
     if (typeof refreshBulkStatusCache === 'function') refreshBulkStatusCache();
 }
 
+function isMasterSaveMode(mode) {
+    return ['add-client', 'edit-client', 'add-shipping-line', 'edit-shipping-line'].includes(mode);
+}
+
+async function invokeMasterSaveFromDrawer(mode) {
+    const iframe = document.querySelector('#actionModalBody .action-modal-iframe');
+    const win = iframe && iframe.contentWindow;
+    if (!win) return;
+    if (mode.includes('client')) {
+        if (typeof win.saveEmbeddedMaster === 'function') await win.saveEmbeddedMaster();
+        return;
+    }
+    if (typeof win.saveEmbeddedShippingLine === 'function') await win.saveEmbeddedShippingLine();
+}
+
 function bindPrimaryAction(mode) {
     const btn = document.getElementById('actionModalPrimaryBtn');
     const footer = document.getElementById('actionModalFooter');
@@ -455,6 +470,21 @@ function bindPrimaryAction(mode) {
             } finally {
                 const overlay = document.getElementById('actionModalOverlay');
                 if (overlay && overlay.classList.contains('active') && actionModalState.mode === 'new-sale') {
+                    btn.disabled = false;
+                    btn.textContent = label;
+                }
+            }
+            return;
+        }
+        if (isMasterSaveMode(mode)) {
+            btn.disabled = true;
+            const label = copy.primary;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Saving…';
+            try {
+                await invokeMasterSaveFromDrawer(mode);
+            } finally {
+                const overlay = document.getElementById('actionModalOverlay');
+                if (overlay && overlay.classList.contains('active') && actionModalState.mode === mode) {
                     btn.disabled = false;
                     btn.textContent = label;
                 }
@@ -556,6 +586,30 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
         return;
     }
 
+    if ((mode === 'edit-quotes' || mode === 'confirm-quote' || mode === 'view-quotes') && enquiryId) {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = '<div class="action-modal-loading">Loading…</div>';
+
+        try {
+            const quotesRes = await fetch(`${CONFIG.API_URL}/api/quotes/enquiry/${enquiryId}`);
+            if (loadId !== actionModalLoadId) return;
+            const quotes = quotesRes.ok ? await quotesRes.json() : [];
+            const hasAccepted = quotes.some((q) => String(q.status || '').toLowerCase() === 'accepted');
+            let effectiveMode = mode;
+            if (hasAccepted && mode !== 'view-quotes') {
+                effectiveMode = 'view-quotes';
+            }
+            const modeMap = { 'edit-quotes': 'edit', 'confirm-quote': 'confirm', 'view-quotes': 'view' };
+            const iframeSrc = `/pricing?enquiry_id=${enquiryId}&mode=${modeMap[effectiveMode]}&embedded=1`;
+            bodyEl.innerHTML = renderIframeSection(iframeSrc);
+        } catch (err) {
+            if (loadId !== actionModalLoadId) return;
+            bodyEl.className = 'action-modal-body';
+            bodyEl.innerHTML = `<div class="action-modal-loading" style="color:var(--error);">${escapeHtml(err.message || 'Failed to load')}</div>`;
+        }
+        return;
+    }
+
     bodyEl.className = 'action-modal-body';
     bodyEl.innerHTML = '<div class="action-modal-loading">Loading…</div>';
 
@@ -567,21 +621,6 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
 
         if (mode === 'view-sale') {
             bodyEl.innerHTML = renderSaleModalBody(enq);
-            return;
-        }
-
-        if (mode === 'edit-quotes' || mode === 'confirm-quote' || mode === 'view-quotes') {
-            const quotesRes = await fetch(`${CONFIG.API_URL}/api/quotes/enquiry/${enquiryId}`);
-            if (loadId !== actionModalLoadId) return;
-            const quotes = quotesRes.ok ? await quotesRes.json() : [];
-            const hasAccepted = quotes.some((q) => String(q.status || '').toLowerCase() === 'accepted');
-            let effectiveMode = mode;
-            if (hasAccepted && mode !== 'view-quotes') {
-                effectiveMode = 'view-quotes';
-            }
-            const modeMap = { 'edit-quotes': 'edit', 'confirm-quote': 'confirm', 'view-quotes': 'view' };
-            const iframeSrc = `/pricing?enquiry_id=${enquiryId}&mode=${modeMap[effectiveMode]}&embedded=1`;
-            bodyEl.innerHTML = `${renderShipmentClientSection(enq)}${renderQuoteSummarySection(quotes)}${renderIframeSection(iframeSrc)}`;
             return;
         }
 
@@ -658,6 +697,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.data.type === 'master-saved') {
             closeActionModal();
             if (typeof refreshMastersList === 'function') refreshMastersList();
+            return;
+        }
+        if (event.data.type === 'master-step-changed') {
+            const btn = document.getElementById('actionModalPrimaryBtn');
+            if (btn && event.data.label) btn.textContent = event.data.label;
             return;
         }
         if (event.data.type === 'sale-saved') {

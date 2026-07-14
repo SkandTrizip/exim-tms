@@ -256,6 +256,7 @@ function showModal(title, message, type = 'info', onConfirm = null) {
     }
 
     // Show modal
+    document.body.classList.add('app-modal-open');
     setTimeout(() => {
         overlay.classList.add('active');
     }, 10);
@@ -265,10 +266,12 @@ function closeModal() {
     const overlay = document.querySelector('.modal-overlay');
     if (overlay) {
         overlay.classList.remove('active');
-        // Wait for transition to finish before hiding/removing if we wanted to remove, 
-        // but keeping it in DOM is fine for performance if reused.
         setTimeout(() => {
-            // overlay.remove(); // Optional: remove if you want fresh state every time
+            if (!document.querySelector('.modal-overlay.active, .quote-remarks-overlay[style*="flex"]')) {
+                document.body.classList.remove('app-modal-open');
+            }
         }, 300);
+    } else {
+        document.body.classList.remove('app-modal-open');
     }
 }

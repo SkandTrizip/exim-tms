@@ -28,8 +28,9 @@
 /* Modal Box */
 .modal-box {
     background: white;
-    width: 90%;
-    max-width: 440px;
+    width: min(440px, calc(100% - 32px));
+    max-width: calc(100vw - 32px);
+    max-height: min(90vh, 720px);
     border-radius: var(--radius-xl);
     padding: 0;
     box-shadow: var(--shadow-xl);
@@ -88,6 +89,7 @@
     font-size: 1rem;
     font-weight: 600;
     line-height: 1.5;
+    overflow-y: auto;
 }
 
 /* Modal Footer */

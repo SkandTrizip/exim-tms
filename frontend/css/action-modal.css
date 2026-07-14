@@ -98,6 +98,10 @@
 .action-modal-body.action-modal-body-iframe {
     padding: 0;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
     background: #fff;
 }
 
@@ -211,6 +215,12 @@
     background: #fff;
 }
 
+.action-modal-body-iframe .action-modal-iframe {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+}
+
 .quote-summary-grid {
     display: grid;
     gap: 10px;
@@ -301,9 +311,56 @@ body.action-drawer-open {
 
 html.embedded-mode,
 html.embedded-mode body {
+    overflow-x: hidden !important;
     overflow-y: auto !important;
-    height: auto !important;
-    min-height: 100%;
+    height: 100% !important;
+    min-height: 0;
+    max-width: 100%;
+    margin: 0;
+}
+
+html.embedded-mode .pricing-page-container,
+body.embedded-mode .pricing-page-container {
+    max-width: 100%;
+    margin: 0;
+    padding: 12px 14px;
+    box-sizing: border-box;
+}
+
+html.embedded-mode #mainContent,
+body.embedded-mode #mainContent {
+    max-width: 100% !important;
+    overflow-x: hidden;
+}
+
+html.embedded-mode .pricing-card-body,
+body.embedded-mode .pricing-card-body {
+    padding: 14px 16px;
+}
+
+html.embedded-mode .pricing-table-container,
+body.embedded-mode .pricing-table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+html.embedded-mode .route-info-grid,
+body.embedded-mode .route-info-grid {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+html.embedded-mode body.app-modal-open,
+body.embedded-mode.app-modal-open {
+    overflow: hidden !important;
+}
+
+html.embedded-mode .modal-overlay,
+html.embedded-mode .quote-remarks-overlay,
+body.embedded-mode .modal-overlay,
+body.embedded-mode .quote-remarks-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
 }
 
 .embedded-drawer-steps {
@@ -527,6 +584,26 @@ body.embedded-mode .global-search-floating {
 /* Create Sale: Save lives in the parent drawer footer */
 html.embedded-mode #enquiryForm .form-actions,
 body.embedded-mode #enquiryForm .form-actions {
+    display: none !important;
+}
+
+/* Client / Shipping Line masters: Save lives in the parent drawer footer */
+html.embedded-mode.cm-embedded #saveOriginBtn,
+html.embedded-mode.cm-embedded #saveMasterBtn,
+body.embedded-mode.cm-embedded #saveOriginBtn,
+body.embedded-mode.cm-embedded #saveMasterBtn,
+html.embedded-mode.sl-embedded #saveSLBtn,
+body.embedded-mode.sl-embedded #saveSLBtn {
+    display: none !important;
+}
+
+html.embedded-mode.cm-embedded .step-actions,
+body.embedded-mode.cm-embedded .step-actions {
+    display: none !important;
+}
+
+html.embedded-mode.sl-embedded .form-actions,
+body.embedded-mode.sl-embedded .form-actions {
     display: none !important;
 }
 

@@ -383,10 +383,13 @@ def update_quote_status(
         raise HTTPException(status_code=404, detail="Quote not found")
 
     if status == "accepted":
-        try:
-            remarks_reason, remarks_other = validate_quote_remarks(remarks_reason, remarks_other)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        if remarks_reason:
+            try:
+                remarks_reason, remarks_other = validate_quote_remarks(remarks_reason, remarks_other)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+        else:
+            remarks_reason, remarks_other = None, None
         db_quote.accepted_remarks_reason = remarks_reason
         db_quote.accepted_remarks_other = remarks_other
 

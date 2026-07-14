@@ -124,7 +124,8 @@ def update_quote_status(
     Update only the status of a quote.
 
     Valid statuses: draft, sent, accepted, rejected.
-    When accepting, include remarks_reason (and remarks_other if reason is 'other') in the body.
+    When accepting after SI, include remarks_reason (and remarks_other if reason is 'other') in the body.
+    Remarks are optional for the first client confirmation.
     """
     valid_statuses = ["draft", "sent", "accepted", "rejected"]
     if status not in valid_statuses:

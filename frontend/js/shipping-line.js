@@ -492,6 +492,11 @@ function val(id) {
     return el ? el.value.trim() : '';
 }
 
+async function saveEmbeddedShippingLine() {
+    await handleSubmit({ preventDefault() {} });
+}
+window.saveEmbeddedShippingLine = saveEmbeddedShippingLine;
+
 // ── Modal ─────────────────────────────────────────────────────────────────────
 let _cb = null;
 

@@ -153,6 +153,7 @@ function showQuoteRemarksModal(opts) {
 
     overlay.style.display = 'flex';
     overlay.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('app-modal-open');
     document.body.style.overflow = 'hidden';
 }
 
@@ -164,6 +165,9 @@ function closeQuoteRemarksModal() {
     if (!document.getElementById('updateQuoteModal')?.style.display ||
         document.getElementById('updateQuoteModal')?.style.display === 'none') {
         document.body.style.overflow = '';
+        if (!document.querySelector('.modal-overlay.active')) {
+            document.body.classList.remove('app-modal-open');
+        }
     }
 }
 

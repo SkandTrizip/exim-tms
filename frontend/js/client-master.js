@@ -61,6 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             await switchTab(tab);
         }
         initEmbeddedStepToggles();
+        notifyEmbeddedMasterStepChange(parseInt(params.get('tab') || '1', 10));
     }
     hideEmbeddedDrawerBackButtons();
 });
@@ -102,12 +103,36 @@ function applyEmbeddedViewMode() {
     if (originSelect) originSelect.disabled = true;
 }
 
+function notifyEmbeddedMasterStepChange(step) {
+    if (!isEmbeddedMaster() || window.parent === window) return;
+    const panel2 = document.getElementById('panel2');
+    const onMasterStep = step === 2 || (panel2 && !panel2.hasAttribute('hidden'));
+    const label = onMasterStep
+        ? (editingMasterId ? 'Update Client Master' : 'Save Client Master')
+        : 'Save Origin & Continue';
+    window.parent.postMessage({ type: 'master-step-changed', step, label }, '*');
+}
+
+async function saveEmbeddedMaster() {
+    if (!isEmbeddedMaster()) return;
+    const panel2 = document.getElementById('panel2');
+    const onMasterStep = panel2 && !panel2.hasAttribute('hidden');
+    if (onMasterStep) {
+        await handleMasterSubmit({ preventDefault() {} });
+    } else {
+        await handleOriginSubmit({ preventDefault() {} });
+    }
+}
+
+window.saveEmbeddedMaster = saveEmbeddedMaster;
+
 function updateEmbeddedStepbar(step) {
     document.querySelectorAll('.embedded-drawer-steps .embedded-step').forEach((el) => {
         const isActive = parseInt(el.dataset.step, 10) === step;
         el.classList.toggle('active', isActive);
         el.setAttribute('aria-selected', isActive ? 'true' : 'false');
     });
+    notifyEmbeddedMasterStepChange(step);
 }
 
 function populateOriginForm(origin) {
@@ -382,6 +407,7 @@ async function handleOriginSubmit(e) {
 
             if (isEmbeddedMaster()) {
                 switchTab(2);
+                notifyEmbeddedMasterStepChange(2);
                 await loadOrigins();
                 document.getElementById('masterOriginSelect').value = String(savedOriginId);
                 await onOriginSelect();
