@@ -101,6 +101,14 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
         enquiry.stage = 3
         logger.info(f"Enquiry {enquiry_id} stage set to 3 after tracking status update")
 
+    # Keep enquiry_economics.sob_date in sync for month-wise analytics.
+    if 'sob' in status_data:
+        try:
+            from backend.services.enquiry_economics_service import sync_enquiry_economics_sob_date
+            sync_enquiry_economics_sob_date(db, enquiry_id, commit=False)
+        except Exception as e:
+            logger.warning(f"Could not sync economics SOB date for enquiry {enquiry_id}: {e}")
+
     db.commit()
     db.refresh(status)
     logger.info(f"Successfully processed shipment status for enquiry ID {enquiry_id}")

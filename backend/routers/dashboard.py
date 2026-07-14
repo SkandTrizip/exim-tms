@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct
+from typing import Optional
 from backend.database import get_db
 from backend.models.enquiry import Enquiry
 from backend.models.quote import Quote
@@ -116,10 +117,20 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 
 
 @router.get("/analytics")
-def get_dashboard_analytics_endpoint(db: Session = Depends(get_db)):
-    """Cost, revenue, margin and per-enquiry economics for valid enquiries (master number assigned)."""
+def get_dashboard_analytics_endpoint(
+    month: Optional[str] = None,
+    metric: str = "both",
+    fy: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Cost, revenue, margin and per-enquiry economics by Indian FY (Apr–Mar).
+    Optional filters: fy=2026-27, month=YYYY-MM, metric=cost|revenue|both.
+    """
     try:
-        return get_dashboard_analytics(db)
+        return get_dashboard_analytics(
+            db, month=month or None, metric=metric, fy=fy or None
+        )
     except Exception as e:
         logger.error(f"Dashboard analytics failed: {e}")
         db.rollback()
@@ -131,5 +142,8 @@ def get_dashboard_analytics_endpoint(db: Session = Depends(get_db)):
                 "capture_inr": 0,
                 "margin_pct": None,
             },
+            "monthly_series": [],
+            "available_months": [],
+            "available_financial_years": [],
             "enquiries": [],
         }

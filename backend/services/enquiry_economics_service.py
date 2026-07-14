@@ -1,4 +1,4 @@
-"""Sync enquiry_economics from final quote rates and additional invoice line items."""
+"""Sync enquiry_economics from final quote rates, additional invoices, and SOB date."""
 from __future__ import annotations
 
 import datetime
@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session, joinedload
 
 from backend.models.document import ShipmentDocument
 from backend.models.enquiry_economics import EnquiryEconomics
-from backend.models.final_quote import FinalQuote, FinalQuoteContainer, FinalQuoteCharge
+from backend.models.final_quote import FinalQuote, FinalQuoteContainer
+from backend.models.shipment_status import ShipmentStatus
 from backend.utils.logger import logger
 
 
@@ -90,6 +91,19 @@ def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> float:
     return round(total, 2)
 
 
+def get_sob_date_for_enquiry(db: Session, enquiry_id: int) -> Optional[datetime.date]:
+    """Return the SOB date from shipment_statuses, if set."""
+    status = (
+        db.query(ShipmentStatus)
+        .filter(ShipmentStatus.enquiry_id == enquiry_id)
+        .first()
+    )
+    if not status or not status.sob:
+        return None
+    sob = status.sob
+    return sob.date() if isinstance(sob, datetime.datetime) else sob
+
+
 def compute_enquiry_economics(db: Session, enquiry_id: int) -> Tuple[float, float]:
     cost = 0.0
     revenue = 0.0
@@ -115,6 +129,7 @@ def sync_enquiry_economics(
 ) -> Optional[EnquiryEconomics]:
     """
     Upsert enquiry_economics for an enquiry from final quote + additional line items.
+    Also syncs sob_date from shipment_statuses.
     Skips when there is no final quote and no additional invoices.
     """
     final_quote = _load_final_quote_for_enquiry(db, enquiry_id)
@@ -123,6 +138,7 @@ def sync_enquiry_economics(
         return None
 
     cost_inr, revenue_inr = compute_enquiry_economics(db, enquiry_id)
+    sob_date = get_sob_date_for_enquiry(db, enquiry_id)
     now = datetime.datetime.utcnow()
 
     record = (
@@ -135,6 +151,7 @@ def sync_enquiry_economics(
             enquiry_id=enquiry_id,
             cost_inr=cost_inr,
             revenue_inr=revenue_inr,
+            sob_date=sob_date,
             created_at=now,
             updated_at=now,
         )
@@ -142,6 +159,7 @@ def sync_enquiry_economics(
     else:
         record.cost_inr = cost_inr
         record.revenue_inr = revenue_inr
+        record.sob_date = sob_date
         record.updated_at = now
 
     if commit:
@@ -149,9 +167,36 @@ def sync_enquiry_economics(
         db.refresh(record)
 
     logger.info(
-        "Synced enquiry economics enquiry_id=%s cost_inr=%s revenue_inr=%s",
+        "Synced enquiry economics enquiry_id=%s cost_inr=%s revenue_inr=%s sob_date=%s",
         enquiry_id,
         cost_inr,
         revenue_inr,
+        sob_date,
     )
+    return record
+
+
+def sync_enquiry_economics_sob_date(
+    db: Session,
+    enquiry_id: int,
+    *,
+    commit: bool = False,
+) -> Optional[EnquiryEconomics]:
+    """Update only sob_date on an existing economics row (or no-op if none)."""
+    record = (
+        db.query(EnquiryEconomics)
+        .filter(EnquiryEconomics.enquiry_id == enquiry_id)
+        .first()
+    )
+    if record is None:
+        return None
+
+    sob_date = get_sob_date_for_enquiry(db, enquiry_id)
+    record.sob_date = sob_date
+    record.updated_at = datetime.datetime.utcnow()
+
+    if commit:
+        db.commit()
+        db.refresh(record)
+
     return record
