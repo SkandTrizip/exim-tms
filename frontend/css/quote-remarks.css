@@ -103,6 +103,13 @@
     font-size: 13px;
 }
 
+html.embedded-mode .quote-remarks-overlay,
+html.embedded-mode #customModal.modal-overlay,
+body.embedded-mode .quote-remarks-overlay,
+body.embedded-mode #customModal.modal-overlay {
+    z-index: 2147483000;
+}
+
 @media (prefers-reduced-motion: reduce) {
     .quote-remark-option {
         transition: none;

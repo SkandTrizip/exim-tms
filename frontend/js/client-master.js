@@ -57,11 +57,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             setEmbeddedPanelVisible(2);
             updateEmbeddedStepbar(2);
             await editClient(parseInt(editId, 10), isViewMode);
+            notifyEmbeddedMasterStepChange(2);
         } else {
             await switchTab(tab);
+            notifyEmbeddedMasterStepChange(tab);
         }
         initEmbeddedStepToggles();
-        notifyEmbeddedMasterStepChange(parseInt(params.get('tab') || '1', 10));
     }
     hideEmbeddedDrawerBackButtons();
 });
@@ -115,16 +116,34 @@ function notifyEmbeddedMasterStepChange(step) {
 
 async function saveEmbeddedMaster() {
     if (!isEmbeddedMaster()) return;
+
+    // Prefer Client Master panel when editing an existing branch or when step 2 is active.
     const panel2 = document.getElementById('panel2');
-    const onMasterStep = panel2 && !panel2.hasAttribute('hidden');
-    if (onMasterStep) {
-        await handleMasterSubmit({ preventDefault() {} });
-    } else {
-        await handleOriginSubmit({ preventDefault() {} });
+    const onMasterStep = !!(
+        panel2
+        && !panel2.hasAttribute('hidden')
+        && (panel2.classList.contains('active') || editingMasterId)
+    );
+
+    try {
+        if (onMasterStep) {
+            await handleMasterSubmit({ preventDefault() {} });
+        } else {
+            await handleOriginSubmit({ preventDefault() {} });
+        }
+    } catch (err) {
+        notifyMasterSaveError(err.message || 'Could not save client master.');
+        throw err;
     }
 }
 
 window.saveEmbeddedMaster = saveEmbeddedMaster;
+
+function notifyMasterSaveError(message) {
+    if (isEmbeddedMaster() && window.parent !== window) {
+        window.parent.postMessage({ type: 'master-save-error', message: String(message || '') }, '*');
+    }
+}
 
 function updateEmbeddedStepbar(step) {
     document.querySelectorAll('.embedded-drawer-steps .embedded-step').forEach((el) => {
@@ -437,13 +456,26 @@ async function handleOriginSubmit(e) {
     }
 }
 
+function formatClientApiDetail(detail) {
+    if (!detail) return 'Request failed';
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+        return detail.map((d) => d.msg || d.message || JSON.stringify(d)).join('; ');
+    }
+    if (typeof detail === 'object') {
+        return detail.msg || detail.message || JSON.stringify(detail);
+    }
+    return String(detail);
+}
+
 // ── Step 2 – Save Client Master ───────────────────────────────────────────────
 async function handleMasterSubmit(e) {
     e.preventDefault();
 
     if (!savedOriginId) {
-        showModal('warning', 'Origin Required', 'Please select or create a Client Origin first.');
-        return;
+        const msg = 'Please select or create a Client Origin first.';
+        showModal('warning', 'Origin Required', msg);
+        throw new Error(msg);
     }
 
     const clientCode = val('m_client_code');
@@ -451,14 +483,21 @@ async function handleMasterSubmit(e) {
     const contactPerson = val('m_contact_person');
 
     if (!clientCode || !clientName || !contactPerson) {
-        showModal('warning', 'Missing Fields',
-            'Client Code, Branch Name, and Contact Person are required.');
-        return;
+        const msg = 'Client Code, Branch Name, and Contact Person are required.';
+        showModal('warning', 'Missing Fields', msg);
+        throw new Error(msg);
     }
 
+    // Prefer id from state, fall back to URL (drawer edit mode)
+    const editIdFromUrl = parseInt(new URLSearchParams(window.location.search).get('id') || '', 10);
+    const masterId = editingMasterId || (Number.isFinite(editIdFromUrl) ? editIdFromUrl : null);
+    if (masterId && !editingMasterId) editingMasterId = masterId;
+
     const btn = document.getElementById('saveMasterBtn');
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${editingMasterId ? 'Updating' : 'Saving'}…`;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${masterId ? 'Updating' : 'Saving'}…`;
+    }
 
     const payload = {
         origin_id: savedOriginId,
@@ -496,39 +535,40 @@ async function handleMasterSubmit(e) {
         sales_branch: val('m_sales_branch'),
         sales_person: val('m_sales_person'),
         cs_name: val('m_cs_name'),
-        created_by: val('m_created_by'),
+        created_by: val('m_created_by') || getUsername() || null,
     };
 
-    // Strip empty/null
-    Object.keys(payload).forEach(k => {
+    // Strip empty/null for create; keep explicit values on update
+    Object.keys(payload).forEach((k) => {
         if (payload[k] === '' || payload[k] === null || payload[k] === undefined) delete payload[k];
     });
 
     try {
-        const url = editingMasterId
-            ? `${API}/api/client/masters/${editingMasterId}`
+        const url = masterId
+            ? `${API}/api/client/masters/${masterId}`
             : `${API}/api/client/masters`;
-        const method = editingMasterId ? 'PATCH' : 'POST';
+        const method = masterId ? 'PATCH' : 'POST';
 
         const res = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            method,
+            headers: authHeaders(),
+            body: JSON.stringify(payload),
         });
 
         if (res.ok) {
             const savedItem = await res.json();
             if (isEmbeddedMaster()) {
                 notifyMasterSaved('client');
-                return;
+                return savedItem;
             }
-            showModal('success', `Client Master ${editingMasterId ? 'Updated' : 'Saved'}!`,
-                `Branch "${savedItem.client_name}" (Code: ${savedItem.client_code}) has been ${editingMasterId ? 'updated' : 'created'} successfully.`,
+            showModal('success', `Client Master ${masterId ? 'Updated' : 'Saved'}!`,
+                `Branch "${savedItem.client_name}" (Code: ${savedItem.client_code}) has been ${masterId ? 'updated' : 'created'} successfully.`,
                 () => {
-                    if (editingMasterId) {
+                    if (masterId) {
                         resetMasterForm();
                         editingMasterId = null;
-                        document.getElementById('saveMasterBtn').innerHTML = '<i class="fas fa-save"></i> Save Client Master';
+                        const saveBtn = document.getElementById('saveMasterBtn');
+                        if (saveBtn) saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Client Master';
                         switchTab(3);
                     } else if (confirm('Add another branch to the same Origin?')) {
                         resetMasterForm();
@@ -538,17 +578,30 @@ async function handleMasterSubmit(e) {
                     }
                 }
             );
-        } else {
-            const err = await res.json();
-            showModal('error', 'Save Failed', err.detail || 'Could not save Client Master.');
+            return savedItem;
         }
+
+        const err = await res.json().catch(() => ({}));
+        const msg = formatClientApiDetail(err.detail) || 'Could not save Client Master.';
+        showModal('error', 'Save Failed', msg);
+        throw new Error(msg);
     } catch (err) {
-        showModal('error', 'Network Error', err.message);
+        if (err && !err._clientMasterHandled) {
+            const msg = err.message || 'Network error while saving Client Master.';
+            // Avoid double-toast when we already showed Save Failed above
+            if (!/Could not save|required|Origin Required|Missing Fields/i.test(msg)) {
+                showModal('error', 'Network Error', msg);
+            }
+            err._clientMasterHandled = true;
+        }
+        throw err;
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = editingMasterId
-            ? '<i class="fas fa-save"></i> Update Client Master'
-            : '<i class="fas fa-save"></i> Save Client Master';
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = (editingMasterId || masterId)
+                ? '<i class="fas fa-save"></i> Update Client Master'
+                : '<i class="fas fa-save"></i> Save Client Master';
+        }
     }
 }
 

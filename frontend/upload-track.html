@@ -7,6 +7,7 @@
     <title>Tracking &amp; Documents - ATLAS EXIM</title>
     <link rel="stylesheet" href="css/styles.css">
     <link rel="stylesheet" href="css/action-modal.css">
+    <link rel="stylesheet" href="css/modal.css">
     <link rel="stylesheet" href="css/quote-remarks.css">
     <link rel="stylesheet" href="css/pricing-refined.css">
     <link rel="stylesheet" href="css/update-quote-modal.css">
@@ -15,6 +16,9 @@
         (function () {
             if (new URLSearchParams(location.search).get('embedded') === '1') {
                 document.documentElement.classList.add('embedded-mode');
+                document.addEventListener('DOMContentLoaded', function () {
+                    document.body.classList.add('embedded-mode');
+                });
             }
         })();
     </script>

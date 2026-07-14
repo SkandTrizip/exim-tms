@@ -414,12 +414,18 @@ function isMasterSaveMode(mode) {
 async function invokeMasterSaveFromDrawer(mode) {
     const iframe = document.querySelector('#actionModalBody .action-modal-iframe');
     const win = iframe && iframe.contentWindow;
-    if (!win) return;
+    if (!win) throw new Error('Form is still loading. Try again in a moment.');
     if (mode.includes('client')) {
-        if (typeof win.saveEmbeddedMaster === 'function') await win.saveEmbeddedMaster();
+        if (typeof win.saveEmbeddedMaster !== 'function') {
+            throw new Error('Client form is not ready yet. Try again.');
+        }
+        await win.saveEmbeddedMaster();
         return;
     }
-    if (typeof win.saveEmbeddedShippingLine === 'function') await win.saveEmbeddedShippingLine();
+    if (typeof win.saveEmbeddedShippingLine !== 'function') {
+        throw new Error('Shipping line form is not ready yet. Try again.');
+    }
+    await win.saveEmbeddedShippingLine();
 }
 
 function bindPrimaryAction(mode) {
@@ -482,6 +488,8 @@ function bindPrimaryAction(mode) {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Saving…';
             try {
                 await invokeMasterSaveFromDrawer(mode);
+            } catch (err) {
+                showModal('Error', err.message || 'Could not save. Try again.', 'error');
             } finally {
                 const overlay = document.getElementById('actionModalOverlay');
                 if (overlay && overlay.classList.contains('active') && actionModalState.mode === mode) {
@@ -610,6 +618,12 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
         return;
     }
 
+    if (mode === 'view-tracking' && enquiryId) {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = renderIframeSection(`/upload-track?enquiry_id=${enquiryId}&embedded=1`);
+        return;
+    }
+
     bodyEl.className = 'action-modal-body';
     bodyEl.innerHTML = '<div class="action-modal-loading">Loading…</div>';
 
@@ -621,12 +635,6 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
 
         if (mode === 'view-sale') {
             bodyEl.innerHTML = renderSaleModalBody(enq);
-            return;
-        }
-
-        if (mode === 'view-tracking') {
-            const iframeSrc = `/upload-track?enquiry_id=${enquiryId}&embedded=1`;
-            bodyEl.innerHTML = `${renderShipmentClientSection(enq)}${renderIframeSection(iframeSrc)}`;
             return;
         }
 
@@ -697,6 +705,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (event.data.type === 'master-saved') {
             closeActionModal();
             if (typeof refreshMastersList === 'function') refreshMastersList();
+            return;
+        }
+        if (event.data.type === 'master-save-error') {
+            const msg = event.data.message || 'Could not save. Check the form and try again.';
+            showModal('Error', msg, 'error');
             return;
         }
         if (event.data.type === 'master-step-changed') {

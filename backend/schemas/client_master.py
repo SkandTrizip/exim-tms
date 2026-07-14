@@ -38,6 +38,7 @@ class ClientMasterBase(BaseModel):
     sales_branch: Optional[str] = None
     sales_person: Optional[str] = None
     cs_name: Optional[str] = None
+    created_by: Optional[str] = None
     status: Optional[str] = "pending"
     submitted_by: Optional[str] = None
     verified_by: Optional[str] = None

@@ -504,6 +504,38 @@ body.embedded-mode .upload-track-container > .form-section:first-child {
     display: none !important;
 }
 
+html.embedded-mode #mainContent,
+body.embedded-mode #mainContent,
+html.embedded-mode .upload-track-container,
+body.embedded-mode .upload-track-container {
+    max-width: 100% !important;
+    margin: 0 !important;
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+
+html.embedded-mode .upload-track-container,
+body.embedded-mode .upload-track-container {
+    padding: 12px 14px;
+}
+
+html.embedded-mode .form-section,
+body.embedded-mode .form-section {
+    padding: 14px 16px;
+    overflow-x: hidden;
+}
+
+html.embedded-mode .modal-overlay,
+html.embedded-mode .quote-remarks-overlay,
+html.embedded-mode .update-quote-overlay,
+body.embedded-mode .modal-overlay,
+body.embedded-mode .quote-remarks-overlay,
+body.embedded-mode .update-quote-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483000;
+}
+
 html.embedded-mode .wizard-tabs,
 body.embedded-mode .wizard-tabs {
     display: none !important;
@@ -534,10 +566,8 @@ body.embedded-mode .wizard-panel {
     padding-top: 0 !important;
 }
 
-html.embedded-mode .action-modal-footer,
-body.embedded-mode .action-modal-footer {
-    display: none !important;
-}
+/* Parent drawer footer must stay visible (Create Sale / Masters use it).
+   Embedded pages do not mount #actionModalFooter, so no hide rule needed here. */
 
 html.embedded-mode .form-actions,
 body.embedded-mode .form-actions {
