@@ -80,11 +80,11 @@ function renderMasterRowActions(type, id, status = null) {
     if (canApprove) {
         adminItems = `
                 <button class="actions-item confirm-item" type="button" style="color:#059669;font-weight:700;"
-                    onclick="approveMasterRecord('${type}', ${id})">
+                    onclick="event.stopPropagation(); approveMasterRecord('${type}', ${id})">
                     <i class="fas fa-check-circle"></i> Verify / Approve
                 </button>
                 <button class="actions-item" type="button" style="color:#dc2626;font-weight:700;"
-                    onclick="rejectMasterRecord('${type}', ${id})">
+                    onclick="event.stopPropagation(); rejectMasterRecord('${type}', ${id})">
                     <i class="fas fa-times-circle"></i> Reject
                 </button>`;
     }
@@ -106,8 +106,30 @@ function renderMasterRowActions(type, id, status = null) {
         </div>`;
 }
 
+function formatMasterApiDetail(detail, fallback) {
+    if (!detail) return fallback;
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+        return detail.map((d) => (typeof d === 'string' ? d : d.msg || JSON.stringify(d))).join(' ');
+    }
+    return String(detail);
+}
+
+function closeMastersActionMenus() {
+    if (typeof closeActionDropdowns === 'function') {
+        closeActionDropdowns();
+        return;
+    }
+    document.querySelectorAll('.actions-menu.open, .actions-menu.actions-menu-floating').forEach((m) => {
+        m.classList.remove('open', 'actions-menu-floating');
+        m.style.display = 'none';
+    });
+}
+
 async function approveMasterRecord(type, id) {
     const label = type === 'client' ? 'client master' : 'shipping line';
+    closeMastersActionMenus();
+
     const go = async () => {
         try {
             const url = type === 'client'
@@ -116,7 +138,7 @@ async function approveMasterRecord(type, id) {
             const res = await fetch(url, { method: 'PATCH', headers: mastersAuthHeaders() });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                throw new Error(err.detail || `Could not verify ${label}.`);
+                throw new Error(formatMasterApiDetail(err.detail, `Could not verify ${label}.`));
             }
             showModal('Verified', `The ${label} has been approved.`, 'success');
             refreshMastersList();
@@ -132,6 +154,8 @@ async function approveMasterRecord(type, id) {
             'warning',
             go
         );
+        const confirmBtn = document.getElementById('modalConfirmBtn');
+        if (confirmBtn) confirmBtn.textContent = 'Approve';
     } else {
         await go();
     }
@@ -139,6 +163,8 @@ async function approveMasterRecord(type, id) {
 
 async function rejectMasterRecord(type, id) {
     const label = type === 'client' ? 'client master' : 'shipping line';
+    closeMastersActionMenus();
+
     const go = async () => {
         try {
             const url = type === 'client'
@@ -147,7 +173,7 @@ async function rejectMasterRecord(type, id) {
             const res = await fetch(url, { method: 'PATCH', headers: mastersAuthHeaders() });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
-                throw new Error(err.detail || `Could not reject ${label}.`);
+                throw new Error(formatMasterApiDetail(err.detail, `Could not reject ${label}.`));
             }
             showModal('Rejected', `The ${label} has been rejected.`, 'warning');
             refreshMastersList();
@@ -163,6 +189,8 @@ async function rejectMasterRecord(type, id) {
             'warning',
             go
         );
+        const confirmBtn = document.getElementById('modalConfirmBtn');
+        if (confirmBtn) confirmBtn.textContent = 'Reject';
     } else {
         await go();
     }

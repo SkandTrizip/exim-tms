@@ -248,9 +248,27 @@ function showModal(title, message, type = 'info', onConfirm = null) {
         confirmBtn.className = 'btn btn-primary';
         confirmBtn.id = 'modalConfirmBtn';
         confirmBtn.textContent = 'OK';
-        confirmBtn.onclick = () => {
-            onConfirm();
-            closeModal();
+        confirmBtn.onclick = async () => {
+            if (confirmBtn.disabled) return;
+            const originalLabel = confirmBtn.textContent;
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            const closeBtn = footer.querySelector('.btn-secondary');
+            if (closeBtn) closeBtn.disabled = true;
+            try {
+                await onConfirm();
+            } catch (err) {
+                console.error(err);
+            } finally {
+                // Only tear down if this confirm dialog is still showing.
+                // Async handlers often open a follow-up success/error modal on the same overlay.
+                if (document.getElementById('modalConfirmBtn') === confirmBtn) {
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = originalLabel;
+                    if (closeBtn) closeBtn.disabled = false;
+                    closeModal();
+                }
+            }
         };
         footer.appendChild(confirmBtn);
     }
