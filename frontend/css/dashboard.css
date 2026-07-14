@@ -470,6 +470,236 @@
     margin-top: 12px;
 }
 
+.analytics-projection {
+    margin-top: 14px;
+    background: #fff;
+    border: 1px solid var(--border-light);
+    border-radius: 16px;
+    padding: 16px 16px 12px;
+    box-shadow: 0 8px 24px rgba(10, 22, 40, 0.04);
+}
+
+.analytics-projection__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 14px;
+}
+
+.analytics-projection__title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--navy-900);
+    font-family: 'Outfit', sans-serif;
+}
+
+.analytics-projection__sub {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-weight: 600;
+}
+
+.analytics-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+}
+
+.analytics-filter {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.analytics-filter select {
+    min-width: 150px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-medium);
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--navy-800);
+    background: #fff;
+    font-family: inherit;
+}
+
+.analytics-chart-wrap {
+    min-height: 180px;
+}
+
+.analytics-chart-empty {
+    padding: 36px 16px;
+    text-align: center;
+    color: var(--text-tertiary);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.analytics-pie-layout {
+    display: grid;
+    grid-template-columns: minmax(240px, 280px) minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
+}
+
+.analytics-pie-visual {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 8px 0;
+}
+
+.analytics-pie-svg {
+    width: 100%;
+    max-width: 260px;
+    height: auto;
+}
+
+.analytics-pie-center-label {
+    font-size: 11px;
+    font-weight: 700;
+    fill: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.analytics-pie-center-value {
+    font-size: 15px;
+    font-weight: 800;
+    fill: #0f172a;
+}
+
+.analytics-pie-legend {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    max-height: none;
+    overflow: visible;
+}
+
+.analytics-pie-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    background: #f8fafc;
+    min-width: 0;
+}
+
+.analytics-pie-card.is-empty {
+    opacity: 0.55;
+    background: #fff;
+}
+
+.analytics-pie-swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 4px;
+    margin-top: 3px;
+    flex-shrink: 0;
+}
+
+.analytics-pie-card-body {
+    min-width: 0;
+    flex: 1;
+}
+
+.analytics-pie-card-top {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.analytics-pie-card-top strong {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--navy-900);
+}
+
+.analytics-pie-card-top em {
+    font-style: normal;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--navy-700);
+}
+
+.analytics-pie-card-meta {
+    margin-top: 3px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-tertiary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.analytics-pending-note {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    color: #9a3412;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+@media (max-width: 1100px) {
+    .analytics-pie-legend {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 768px) {
+    .analytics-projection__header {
+        flex-direction: column;
+    }
+
+    .analytics-filter select {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .analytics-filters {
+        width: 100%;
+    }
+
+    .analytics-filter {
+        flex: 1 1 140px;
+    }
+
+    .analytics-pie-layout {
+        grid-template-columns: 1fr;
+        gap: 16px;
+    }
+
+    .analytics-pie-legend {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 480px) {
+    .analytics-pie-legend {
+        grid-template-columns: 1fr;
+    }
+}
+
 .biz-view-details {
     display: inline-flex;
     align-items: center;

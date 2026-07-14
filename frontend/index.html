@@ -150,13 +150,48 @@
                                 </button>
                                 <span class="biz-records-badge" id="analyticsRecordsBadge">— Records</span>
                             </div>
+
+                            <div class="analytics-projection" id="analyticsProjectionPanel">
+                                <div class="analytics-projection__header">
+                                    <div>
+                                        <h3 class="analytics-projection__title">Month-wise Margin &amp; Profit</h3>
+                                        <p class="analytics-projection__sub" id="analyticsFySubtitle">Financial year Apr – Mar (by SOB date)</p>
+                                    </div>
+                                    <div class="analytics-filters">
+                                        <label class="analytics-filter">
+                                            <span>Financial Year</span>
+                                            <select id="analyticsFyFilter" aria-label="Filter by financial year">
+                                                <option value="2026-27">FY 2026-27</option>
+                                            </select>
+                                        </label>
+                                        <label class="analytics-filter">
+                                            <span>Month</span>
+                                            <select id="analyticsMonthFilter" aria-label="Filter by SOB month">
+                                                <option value="">All months</option>
+                                            </select>
+                                        </label>
+                                        <label class="analytics-filter">
+                                            <span>Metric</span>
+                                            <select id="analyticsMetricFilter" aria-label="Filter cost or revenue">
+                                                <option value="both">Margin (profit)</option>
+                                                <option value="cost">Cost</option>
+                                                <option value="revenue">Revenue</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="analytics-chart-wrap" id="analyticsMonthlyChart" role="img" aria-label="Monthly cost, revenue and margin chart">
+                                    <div class="analytics-chart-empty">No SOB-dated economics yet.</div>
+                                </div>
+                                <p class="analytics-pending-note" id="analyticsPendingSobNote" hidden></p>
+                            </div>
                         </section>
 
                         <div id="analyticsDetailsPanel" class="analytics-details-panel" hidden>
                             <div class="table-topbar analytics-table-topbar">
                                 <div>
                                     <h2 class="table-title">Enquiry Economics</h2>
-                                    <div class="table-subtitle">Cost and revenue per enquiry</div>
+                                    <div class="table-subtitle">Cost and revenue per enquiry (by SOB date)</div>
                                 </div>
                             </div>
 
@@ -168,6 +203,7 @@
                                             <th>Master #</th>
                                             <th>Client</th>
                                             <th>Route</th>
+                                            <th>SOB Date</th>
                                             <th class="num">Cost</th>
                                             <th class="num">Revenue</th>
                                             <th class="num">Capture</th>
@@ -176,7 +212,7 @@
                                     </thead>
                                     <tbody id="analyticsEnquiryTable">
                                         <tr class="analytics-loading-row">
-                                            <td colspan="8">Loading analytics…</td>
+                                            <td colspan="9">Loading analytics…</td>
                                         </tr>
                                     </tbody>
                                 </table>

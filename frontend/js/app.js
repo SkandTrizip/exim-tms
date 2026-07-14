@@ -904,6 +904,10 @@ function formatInrLakhs(value) {
     const n = Number(value);
     if (!Number.isFinite(n)) return '—';
     const abs = Math.abs(n);
+    // 100 lac = 1 crore
+    if (abs > 10000000) {
+        return `₹${(n / 10000000).toFixed(2)} Cr`;
+    }
     if (abs >= 100000) {
         return `₹${(n / 100000).toFixed(2)} L`;
     }
@@ -918,6 +922,13 @@ function formatMarginPct(value, digits = 1) {
     return `${Number(value).toFixed(digits)}%`;
 }
 
+function formatSobDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
 function analyticsValueClass(value) {
     const n = Number(value);
     if (!Number.isFinite(n) || n === 0) return '';
@@ -927,6 +938,21 @@ function analyticsValueClass(value) {
 function setText(id, text) {
     const el = document.getElementById(id);
     if (el) el.textContent = text;
+}
+
+const analyticsFilterState = {
+    fy: '',
+    month: '',
+    metric: 'both',
+};
+
+let analyticsAvailableMonths = [];
+let analyticsAvailableYears = [];
+
+function currentAnalyticsFyValue() {
+    const now = new Date();
+    const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    return `${y}-${String(y + 1).slice(-2)}`;
 }
 
 function buildMarginGaugeSvg(pct) {
@@ -973,20 +999,263 @@ function renderAnalyticsSummary(summary) {
         const iconHtml = '<div class="biz-kpi-gauge-icon"><i class="fas fa-bullseye"></i></div>';
         gaugeWrap.innerHTML = buildMarginGaugeSvg(marginPct) + iconHtml;
     }
+
+    const fySub = document.getElementById('analyticsFySubtitle');
+    if (fySub) {
+        const label = summary.fy_label || summary.filter_fy || 'Financial year';
+        const range = summary.fy_range || 'Apr – Mar';
+        fySub.textContent = `${label} · ${range} · by SOB date`;
+    }
+
+    const pendingNote = document.getElementById('analyticsPendingSobNote');
+    const pending = summary.pending_no_sob;
+    if (pendingNote) {
+        if (pending && pending.trips > 0) {
+            pendingNote.hidden = false;
+            pendingNote.textContent =
+                `${pending.trips} enquir${pending.trips === 1 ? 'y' : 'ies'} without SOB date · ` +
+                `Revenue ${formatInrLakhs(pending.revenue_inr)} · Capture ${formatInrLakhs(pending.capture_inr)}`;
+        } else {
+            pendingNote.hidden = true;
+            pendingNote.textContent = '';
+        }
+    }
+}
+
+function populateAnalyticsFyFilter(years) {
+    const select = document.getElementById('analyticsFyFilter');
+    if (!select) return;
+
+    const list = Array.isArray(years) && years.length
+        ? years
+        : [{ value: currentAnalyticsFyValue(), label: `FY ${currentAnalyticsFyValue()}` }];
+
+    if (!analyticsFilterState.fy) {
+        analyticsFilterState.fy = currentAnalyticsFyValue();
+    }
+
+    const options = list.map((y) => {
+        const value = y.value || '';
+        const label = y.label || `FY ${value}`;
+        return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+    });
+    select.innerHTML = options.join('');
+
+    const hasCurrent = list.some((y) => y.value === analyticsFilterState.fy);
+    select.value = hasCurrent ? analyticsFilterState.fy : (list[0]?.value || '');
+    analyticsFilterState.fy = select.value;
+}
+
+function populateAnalyticsMonthFilter(months) {
+    const select = document.getElementById('analyticsMonthFilter');
+    if (!select) return;
+    const current = analyticsFilterState.month;
+    const options = ['<option value="">All months (Apr – Mar)</option>']
+        .concat((months || []).map((m) => {
+            const value = m.value || m.month || '';
+            const label = m.short_label || m.label || value;
+            return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+        }));
+    select.innerHTML = options.join('');
+    select.value = current && months.some((m) => (m.value || m.month) === current) ? current : '';
+    analyticsFilterState.month = select.value;
+}
+
+function getAnalyticsSliceValue(row, metric) {
+    if (metric === 'cost') return Math.max(0, Number(row.cost_inr) || 0);
+    if (metric === 'revenue') return Math.max(0, Number(row.revenue_inr) || 0);
+    return Math.max(0, Number(row.capture_inr) || 0);
+}
+
+function getAnalyticsMetricLabel(metric) {
+    if (metric === 'cost') return 'Cost';
+    if (metric === 'revenue') return 'Revenue';
+    return 'Margin';
+}
+
+const ANALYTICS_PIE_COLORS = [
+    '#0284c7', '#059669', '#f59e0b', '#7c3aed', '#dc2626',
+    '#0d9488', '#db2777', '#2563eb', '#ca8a04', '#475569',
+    '#0891b2', '#4f46e5',
+];
+
+function buildAnalyticsPiePath(cx, cy, radius, startAngle, endAngle) {
+    const toXY = (angle) => {
+        const rad = ((angle - 90) * Math.PI) / 180;
+        return [cx + radius * Math.cos(rad), cy + radius * Math.sin(rad)];
+    };
+    const [x1, y1] = toXY(startAngle);
+    const [x2, y2] = toXY(endAngle);
+    const large = endAngle - startAngle > 180 ? 1 : 0;
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2} Z`;
+}
+
+function renderMonthlyAnalyticsChart(series, metric) {
+    const wrap = document.getElementById('analyticsMonthlyChart');
+    if (!wrap) return;
+
+    const rows = Array.isArray(series) ? series : [];
+    const metricKey = metric || 'both';
+    const metricLabel = getAnalyticsMetricLabel(metricKey);
+
+    // Keep FY month order; only draw pie slices with positive value
+    const ordered = rows.map((r, idx) => ({
+        label: r.short_label || r.label,
+        fullLabel: r.label,
+        month: r.month,
+        trips: r.trips || 0,
+        margin_pct: r.margin_pct,
+        value: getAnalyticsSliceValue(r, metricKey),
+        color: ANALYTICS_PIE_COLORS[idx % ANALYTICS_PIE_COLORS.length],
+        cost_inr: r.cost_inr,
+        revenue_inr: r.revenue_inr,
+        capture_inr: r.capture_inr,
+    }));
+
+    const slices = ordered.filter((s) => s.value > 0);
+    if (!slices.length) {
+        wrap.innerHTML = `<div class="analytics-chart-empty">No ${escapeHtml(metricLabel.toLowerCase())} for this financial year yet. Mark SOB dates from Apr onward.</div>`;
+        return;
+    }
+
+    const total = slices.reduce((sum, s) => sum + s.value, 0);
+    const size = 260;
+    const cx = size / 2;
+    const cy = size / 2;
+    const radius = 108;
+    let angle = 0;
+
+    const paths = slices.map((s) => {
+        const portion = (s.value / total) * 360;
+        const start = angle;
+        const end = angle + portion;
+        angle = end;
+        const d = portion >= 359.999
+            ? `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.01} ${cy - radius} Z`
+            : buildAnalyticsPiePath(cx, cy, radius, start, end);
+        const pct = ((s.value / total) * 100).toFixed(1);
+        return `<path d="${d}" fill="${s.color}" stroke="#fff" stroke-width="2.5">
+            <title>${escapeHtml(s.fullLabel)}: ${formatInrAmount(s.value)} (${pct}%)</title>
+        </path>`;
+    }).join('');
+
+    // Legend: only months with trips in the FY
+    const legendMonths = ordered.filter((s) => (s.trips || 0) > 0);
+    const legend = legendMonths.map((s) => {
+        const hasValue = s.value > 0;
+        const pct = hasValue && total > 0 ? ((s.value / total) * 100).toFixed(1) : '0.0';
+        return `
+            <li class="analytics-pie-card">
+                <span class="analytics-pie-swatch" style="background:${s.color}"></span>
+                <div class="analytics-pie-card-body">
+                    <div class="analytics-pie-card-top">
+                        <strong>${escapeHtml(s.label)}</strong>
+                        <em>${hasValue ? `${pct}%` : '—'}</em>
+                    </div>
+                    <div class="analytics-pie-card-meta">
+                        ${hasValue ? formatInrLakhs(s.value) : '₹0'} · ${s.trips} trip${s.trips === 1 ? '' : 's'}
+                    </div>
+                </div>
+            </li>`;
+    }).join('');
+
+    if (!legendMonths.length) {
+        wrap.innerHTML = `<div class="analytics-chart-empty">No trips with SOB in this financial year yet.</div>`;
+        return;
+    }
+
+    wrap.innerHTML = `
+        <div class="analytics-pie-layout">
+            <div class="analytics-pie-visual">
+                <svg viewBox="0 0 ${size} ${size}" class="analytics-pie-svg" role="img" aria-label="${escapeHtml(metricLabel)} by financial year month">
+                    ${paths}
+                    <circle cx="${cx}" cy="${cy}" r="58" fill="#fff"></circle>
+                    <text x="${cx}" y="${cy - 8}" text-anchor="middle" class="analytics-pie-center-label">${escapeHtml(metricLabel)}</text>
+                    <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="analytics-pie-center-value">${formatInrLakhs(total)}</text>
+                </svg>
+            </div>
+            <ul class="analytics-pie-legend">${legend}</ul>
+        </div>`;
+}
+
+function renderAnalyticsEnquiryRows(rows) {
+    const tbody = document.getElementById('analyticsEnquiryTable');
+    if (!tbody) return;
+
+    if (!rows.length) {
+        tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">No economics data for this filter.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = rows.map((row) => `
+            <tr>
+                <td><a href="#shipment/${row.enquiry_id}" class="table-link">${escapeHtml(row.enquiry_number || '—')}</a></td>
+                <td>${escapeHtml(row.master_number || '—')}</td>
+                <td>${escapeHtml(row.client_name || '—')}</td>
+                <td>${escapeHtml(row.route || '—')}</td>
+                <td>${formatSobDate(row.sob_date)}</td>
+                <td class="num">${formatInrAmount(row.cost_inr)}</td>
+                <td class="num">${formatInrAmount(row.revenue_inr)}</td>
+                <td class="num ${analyticsValueClass(row.capture_inr)}">${formatInrAmount(row.capture_inr)}</td>
+                <td class="num ${analyticsValueClass(row.margin_pct)}">${formatMarginPct(row.margin_pct)}</td>
+            </tr>
+        `).join('');
+}
+
+function bindAnalyticsFilters() {
+    const fySelect = document.getElementById('analyticsFyFilter');
+    const monthSelect = document.getElementById('analyticsMonthFilter');
+    const metricSelect = document.getElementById('analyticsMetricFilter');
+
+    if (fySelect && !fySelect.dataset.bound) {
+        fySelect.dataset.bound = '1';
+        fySelect.addEventListener('change', () => {
+            analyticsFilterState.fy = fySelect.value || currentAnalyticsFyValue();
+            analyticsFilterState.month = '';
+            fetchDashboardAnalytics();
+        });
+    }
+    if (monthSelect && !monthSelect.dataset.bound) {
+        monthSelect.dataset.bound = '1';
+        monthSelect.addEventListener('change', () => {
+            analyticsFilterState.month = monthSelect.value || '';
+            fetchDashboardAnalytics();
+        });
+    }
+    if (metricSelect && !metricSelect.dataset.bound) {
+        metricSelect.dataset.bound = '1';
+        metricSelect.value = analyticsFilterState.metric;
+        metricSelect.addEventListener('change', () => {
+            analyticsFilterState.metric = metricSelect.value || 'both';
+            fetchDashboardAnalytics();
+        });
+    }
 }
 
 async function fetchDashboardAnalytics() {
+    bindAnalyticsFilters();
+    if (!analyticsFilterState.fy) {
+        analyticsFilterState.fy = currentAnalyticsFyValue();
+    }
+
     const tbody = document.getElementById('analyticsEnquiryTable');
     if (tbody) {
-        tbody.innerHTML = '<tr class="analytics-loading-row"><td colspan="8">Loading analytics…</td></tr>';
+        tbody.innerHTML = '<tr class="analytics-loading-row"><td colspan="9">Loading analytics…</td></tr>';
     }
 
     try {
-        const response = await fetch(`${CONFIG.API_URL}/api/dashboard/analytics`);
+        const params = new URLSearchParams();
+        params.set('fy', analyticsFilterState.fy);
+        if (analyticsFilterState.month) params.set('month', analyticsFilterState.month);
+        if (analyticsFilterState.metric && analyticsFilterState.metric !== 'both') {
+            params.set('metric', analyticsFilterState.metric);
+        }
+        const url = `${CONFIG.API_URL}/api/dashboard/analytics?${params.toString()}`;
+        const response = await fetch(url);
         if (!response.ok) {
             console.error('Dashboard analytics HTTP error:', response.status, await response.text());
             if (tbody) {
-                tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="8">Could not load analytics.</td></tr>';
+                tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">Could not load analytics.</td></tr>';
             }
             return;
         }
@@ -995,30 +1264,29 @@ async function fetchDashboardAnalytics() {
         const summary = data.summary || {};
         renderAnalyticsSummary(summary);
 
-        if (!tbody) return;
+        analyticsAvailableYears = Array.isArray(data.available_financial_years)
+            ? data.available_financial_years
+            : [];
+        const series = Array.isArray(data.monthly_series) ? data.monthly_series : [];
+        analyticsAvailableMonths = (Array.isArray(data.available_months) ? data.available_months : [])
+            .filter((m) => {
+                const key = m.value || m.month;
+                const row = series.find((s) => s.month === key);
+                return row && (row.trips || 0) > 0;
+            });
+        populateAnalyticsFyFilter(analyticsAvailableYears);
+        populateAnalyticsMonthFilter(analyticsAvailableMonths);
 
-        const rows = Array.isArray(data.enquiries) ? data.enquiries : [];
-        if (!rows.length) {
-            tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="8">No economics data yet. Add rows to enquiry_economics.</td></tr>';
-            return;
-        }
+        const chartSeries = analyticsFilterState.month
+            ? series.filter((m) => m.month === analyticsFilterState.month)
+            : series;
+        renderMonthlyAnalyticsChart(chartSeries, analyticsFilterState.metric);
 
-        tbody.innerHTML = rows.map((row) => `
-                <tr>
-                    <td><a href="#shipment/${row.enquiry_id}" class="table-link">${escapeHtml(row.enquiry_number || '—')}</a></td>
-                    <td>${escapeHtml(row.master_number || '—')}</td>
-                    <td>${escapeHtml(row.client_name || '—')}</td>
-                    <td>${escapeHtml(row.route || '—')}</td>
-                    <td class="num">${formatInrAmount(row.cost_inr)}</td>
-                    <td class="num">${formatInrAmount(row.revenue_inr)}</td>
-                    <td class="num ${analyticsValueClass(row.capture_inr)}">${formatInrAmount(row.capture_inr)}</td>
-                    <td class="num ${analyticsValueClass(row.margin_pct)}">${formatMarginPct(row.margin_pct)}</td>
-                </tr>
-            `).join('');
+        renderAnalyticsEnquiryRows(Array.isArray(data.enquiries) ? data.enquiries : []);
     } catch (error) {
         console.error('Error fetching dashboard analytics:', error);
         if (tbody) {
-            tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="8">Could not load analytics.</td></tr>';
+            tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">Could not load analytics.</td></tr>';
         }
     }
 }
