@@ -1,7 +1,6 @@
-"""Dashboard analytics from enquiry_economics (synced from final quote + additional invoices)."""
+"""Dashboard analytics from enquiry_economics (synced from final/initial quote + additional invoices)."""
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import date
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -9,6 +8,8 @@ from sqlalchemy.orm import Session
 
 from backend.models.enquiry import Enquiry
 from backend.models.enquiry_economics import EnquiryEconomics
+from backend.models.final_quote import FinalQuote, FinalQuoteContainer
+from backend.models.quote import Quote
 from backend.models.shipment_status import ShipmentStatus
 
 _MONTH_NAMES = (
@@ -87,6 +88,20 @@ def _fy_start_for_date(d: date) -> int:
     return d.year if d.month >= 4 else d.year - 1
 
 
+def _aggregate_totals(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    cost = round(sum(r["cost_inr"] for r in rows), 2)
+    revenue = round(sum(r["revenue_inr"] for r in rows), 2)
+    gross_margin = round(revenue - cost, 2)
+    return {
+        "cost_inr": cost,
+        "revenue_inr": revenue,
+        "capture_inr": gross_margin,
+        "gross_margin_inr": gross_margin,
+        "margin_pct": _margin_pct(revenue, cost),
+        "trips": len(rows),
+    }
+
+
 def get_dashboard_analytics(
     db: Session,
     *,
@@ -95,7 +110,11 @@ def get_dashboard_analytics(
     fy: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Build analytics summary, per-enquiry rows, and FY month-wise series by SOB date.
+    Build analytics summary, per-enquiry rows, and FY month-wise series.
+
+    Inclusion (cost / revenue / gross margin):
+      - Final (settled) enquiries with SOB / net economics
+      - Ongoing tracking enquiries (stage >= 3) with an initial (accepted) quote
 
     Filters:
       - fy: '2026-27' Indian financial year (Apr–Mar)
@@ -114,10 +133,24 @@ def get_dashboard_analytics(
         db.query(EnquiryEconomics, Enquiry, ShipmentStatus)
         .join(Enquiry, Enquiry.id == EnquiryEconomics.enquiry_id)
         .outerjoin(ShipmentStatus, ShipmentStatus.enquiry_id == Enquiry.id)
-        .filter(Enquiry.is_void == False)
+        .filter(Enquiry.is_void == False, Enquiry.stage >= 3)
         .order_by(EnquiryEconomics.updated_at.desc(), EnquiryEconomics.id.desc())
         .all()
     )
+
+    final_quote_enquiry_ids = {
+        row[0]
+        for row in (
+            db.query(FinalQuote.enquiry_id)
+            .join(FinalQuoteContainer, FinalQuoteContainer.final_quote_id == FinalQuote.id)
+            .distinct()
+            .all()
+        )
+    }
+    accepted_quote_enquiry_ids = {
+        row[0]
+        for row in db.query(Quote.enquiry_id).filter(Quote.status == "accepted").distinct().all()
+    }
 
     all_rows: List[Dict[str, Any]] = []
     fy_years_seen = {fy_start}
@@ -125,7 +158,11 @@ def get_dashboard_analytics(
     for economics, enquiry, shipment in rows_q:
         cost = round(float(economics.cost_inr or 0), 2)
         revenue = round(float(economics.revenue_inr or 0), 2)
-        capture = round(revenue - cost, 2)
+        # Skip empty shells (no quote economics yet)
+        if cost <= 0 and revenue <= 0:
+            continue
+
+        gross_margin = round(revenue - cost, 2)
         master_number = (shipment.master_number or "").strip() if shipment else ""
 
         sob_date = economics.sob_date
@@ -137,6 +174,14 @@ def get_dashboard_analytics(
         if sob_date:
             fy_years_seen.add(_fy_start_for_date(sob_date))
 
+        if enquiry.id in final_quote_enquiry_ids:
+            quote_source = "final"
+        elif enquiry.id in accepted_quote_enquiry_ids:
+            quote_source = "initial"
+        else:
+            quote_source = "additional"
+        economics_status = "final" if sob_date else "ongoing"
+
         all_rows.append({
             "enquiry_id": enquiry.id,
             "enquiry_number": enquiry.enquiry_number,
@@ -145,19 +190,25 @@ def get_dashboard_analytics(
             "route": f"{enquiry.origin or '—'} → {enquiry.destination or '—'}",
             "cost_inr": cost,
             "revenue_inr": revenue,
-            "capture_inr": capture,
+            "capture_inr": gross_margin,
+            "gross_margin_inr": gross_margin,
             "margin_pct": _margin_pct(revenue, cost),
             "sob_date": sob_date.isoformat() if sob_date else None,
             "sob_month": sob_month,
+            "quote_source": quote_source,
+            "has_final_quote": enquiry.id in final_quote_enquiry_ids,
+            "economics_status": economics_status,
+            "stage": enquiry.stage,
         })
 
-    # Restrict working set to selected FY (SOB in Apr–Mar); keep no-SOB for pending note
+    # SOB-attributed rows in selected FY
     fy_rows = [
         r for r in all_rows
         if r["sob_date"]
         and fy_start_date <= date.fromisoformat(r["sob_date"]) <= fy_end_date
     ]
-    pending_rows = [r for r in all_rows if not r.get("sob_date")]
+    # Ongoing tracking (initial quote, no SOB yet) — included in FY totals when no month filter
+    ongoing_rows = [r for r in all_rows if not r.get("sob_date")]
 
     buckets: Dict[str, Dict[str, float]] = {
         key: {"cost_inr": 0.0, "revenue_inr": 0.0, "capture_inr": 0.0, "trips": 0}
@@ -174,17 +225,8 @@ def get_dashboard_analytics(
         b["capture_inr"] += row["capture_inr"]
         b["trips"] += 1
 
-    pending_no_sob = {
-        "cost_inr": round(sum(r["cost_inr"] for r in pending_rows), 2),
-        "revenue_inr": round(sum(r["revenue_inr"] for r in pending_rows), 2),
-        "capture_inr": round(sum(r["capture_inr"] for r in pending_rows), 2),
-        "trips": len(pending_rows),
-    }
-    pending_no_sob["margin_pct"] = _margin_pct(
-        pending_no_sob["revenue_inr"], pending_no_sob["cost_inr"]
-    )
+    pending_no_sob = _aggregate_totals(ongoing_rows)
 
-    # Full FY calendar (Apr→Mar), including zero months for consistent ordering
     monthly_series: List[Dict[str, Any]] = []
     for key in fy_months:
         b = buckets[key]
@@ -199,26 +241,28 @@ def get_dashboard_analytics(
             "cost_inr": cost,
             "revenue_inr": revenue,
             "capture_inr": capture,
+            "gross_margin_inr": capture,
             "margin_pct": _margin_pct(revenue, cost),
         })
 
-    # Apply table/KPI filters within FY
-    filtered = fy_rows
+    # KPIs / table: SOB rows in FY, plus ongoing pipeline when viewing all months
     if month:
         if month not in fy_months:
             filtered = []
         else:
-            filtered = [r for r in filtered if r.get("sob_month") == month]
+            filtered = [r for r in fy_rows if r.get("sob_month") == month]
+    else:
+        filtered = fy_rows + ongoing_rows
 
-    total_cost = sum(r["cost_inr"] for r in filtered)
-    total_revenue = sum(r["revenue_inr"] for r in filtered)
-    capture_total = round(total_revenue - total_cost, 2)
+    totals = _aggregate_totals(filtered)
     valid_enquiries = sum(1 for r in filtered if r.get("master_number"))
     adhoc_count = len(filtered) - valid_enquiries
     unrealized_revenue = round(
         sum(r["revenue_inr"] for r in filtered if not r.get("master_number")),
         2,
     )
+    final_count = sum(1 for r in filtered if r.get("economics_status") == "final")
+    ongoing_count = sum(1 for r in filtered if r.get("economics_status") == "ongoing")
 
     sorted_rows = sorted(filtered, key=lambda r: r["enquiry_id"])
     cum_revenue: List[float] = []
@@ -247,7 +291,6 @@ def get_dashboard_analytics(
         }
         for y in sorted(fy_years_seen, reverse=True)
     ]
-    # Ensure current selected FY is always listed
     selected_label = financial_year_label(fy_start)
     if not any(y["value"] == selected_label for y in available_financial_years):
         available_financial_years.insert(
@@ -263,13 +306,16 @@ def get_dashboard_analytics(
         "summary": {
             "valid_enquiries": valid_enquiries,
             "total_enquiries": len(filtered),
+            "final_count": final_count,
+            "ongoing_count": ongoing_count,
             "contracted_count": valid_enquiries,
             "adhoc_count": adhoc_count,
-            "total_cost_inr": round(total_cost, 2),
-            "total_revenue_inr": round(total_revenue, 2),
+            "total_cost_inr": totals["cost_inr"],
+            "total_revenue_inr": totals["revenue_inr"],
             "unrealized_revenue_inr": unrealized_revenue,
-            "capture_inr": capture_total,
-            "margin_pct": _margin_pct(total_revenue, total_cost),
+            "capture_inr": totals["gross_margin_inr"],
+            "gross_margin_inr": totals["gross_margin_inr"],
+            "margin_pct": totals["margin_pct"],
             "filter_month": month,
             "filter_metric": metric_key,
             "filter_fy": selected_label,

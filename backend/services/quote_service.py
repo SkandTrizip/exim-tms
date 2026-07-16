@@ -405,4 +405,14 @@ def update_quote_status(
 
     db.commit()
     db.refresh(db_quote)
+
+    if status == "accepted":
+        try:
+            from backend.services.enquiry_economics_service import sync_enquiry_economics
+            sync_enquiry_economics(db, db_quote.enquiry_id, commit=True)
+        except Exception as e:
+            logger.warning(
+                f"Could not sync economics after accepting quote {quote_id}: {e}"
+            )
+
     return db_quote
