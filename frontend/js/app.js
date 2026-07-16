@@ -971,19 +971,11 @@ function renderAnalyticsSummary(summary) {
     setText('analyticsTripsBadge', `${total} Total`);
     setText('analyticsTripsValue', String(total));
     setText('analyticsRecordsBadge', `${total} Records`);
-    const finalCount = summary.final_count;
-    const ongoingCount = summary.ongoing_count;
-    if (finalCount != null || ongoingCount != null) {
-        setText(
-            'analyticsTripsBadge',
-            `${Number(finalCount) || 0} final · ${Number(ongoingCount) || 0} ongoing`
-        );
-    }
 
     setText('analyticsRevenue', formatInrLakhs(summary.total_revenue_inr));
     setText('analyticsCost', formatInrLakhs(summary.total_cost_inr));
-    setText('analyticsCostMarginPill', `Gross Margin: ${formatMarginPct(marginPct, 1)}`);
-    setText('analyticsCapture', formatInrLakhs(summary.gross_margin_inr ?? summary.capture_inr));
+    setText('analyticsCostMarginPill', `Net Margin: ${formatMarginPct(marginPct, 1)}`);
+    setText('analyticsCapture', formatInrLakhs(summary.capture_inr));
 
     const captureEl = document.getElementById('analyticsCapture');
     if (captureEl) {
@@ -1021,8 +1013,8 @@ function renderAnalyticsSummary(summary) {
         if (pending && pending.trips > 0) {
             pendingNote.hidden = false;
             pendingNote.textContent =
-                `${pending.trips} ongoing tracking enquir${pending.trips === 1 ? 'y' : 'ies'} (initial quote, no SOB yet) · ` +
-                `Revenue ${formatInrLakhs(pending.revenue_inr)} · Gross Margin ${formatInrLakhs(pending.gross_margin_inr ?? pending.capture_inr)}`;
+                `${pending.trips} enquir${pending.trips === 1 ? 'y' : 'ies'} without SOB date · ` +
+                `Revenue ${formatInrLakhs(pending.revenue_inr)} · Capture ${formatInrLakhs(pending.capture_inr)}`;
         } else {
             pendingNote.hidden = true;
             pendingNote.textContent = '';
@@ -1204,7 +1196,7 @@ function renderAnalyticsEnquiryRows(rows) {
                 <td>${formatSobDate(row.sob_date)}</td>
                 <td class="num">${formatInrAmount(row.cost_inr)}</td>
                 <td class="num">${formatInrAmount(row.revenue_inr)}</td>
-                <td class="num ${analyticsValueClass(row.gross_margin_inr ?? row.capture_inr)}">${formatInrAmount(row.gross_margin_inr ?? row.capture_inr)}</td>
+                <td class="num ${analyticsValueClass(row.capture_inr)}">${formatInrAmount(row.capture_inr)}</td>
                 <td class="num ${analyticsValueClass(row.margin_pct)}">${formatMarginPct(row.margin_pct)}</td>
             </tr>
         `).join('');

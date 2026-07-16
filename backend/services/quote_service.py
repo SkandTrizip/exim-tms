@@ -403,16 +403,17 @@ def update_quote_status(
             enquiry.stage = 3
             logger.info(f"Enquiry {enquiry.id} stage set to 3 after quote {quote_id} accepted")
 
-    db.commit()
-    db.refresh(db_quote)
-
-    if status == "accepted":
         try:
             from backend.services.enquiry_economics_service import sync_enquiry_economics
-            sync_enquiry_economics(db, db_quote.enquiry_id, commit=True)
+
+            sync_enquiry_economics(db, db_quote.enquiry_id, commit=False)
         except Exception as e:
             logger.warning(
-                f"Could not sync economics after accepting quote {quote_id}: {e}"
+                "Could not sync enquiry economics after quote %s accepted: %s",
+                quote_id,
+                e,
             )
 
+    db.commit()
+    db.refresh(db_quote)
     return db_quote

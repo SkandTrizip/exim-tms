@@ -119,24 +119,17 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 @router.get("/analytics")
 def get_dashboard_analytics_endpoint(
     month: Optional[str] = None,
-    month_from: Optional[str] = None,
-    month_to: Optional[str] = None,
-    metric: str = "gross_margin",
+    metric: str = "both",
     fy: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """
-    Cost, revenue, gross/net margin and per-enquiry economics by Indian FY (Apr–Mar).
-    Optional filters: fy=2026-27, month=YYYY-MM, month_from/month_to, metric.
+    Cost, revenue, margin and per-enquiry economics by Indian FY (Apr–Mar).
+    Optional filters: fy=2026-27, month=YYYY-MM, metric=cost|revenue|both.
     """
     try:
         return get_dashboard_analytics(
-            db,
-            month=month or None,
-            month_from=month_from or None,
-            month_to=month_to or None,
-            metric=metric,
-            fy=fy or None,
+            db, month=month or None, metric=metric, fy=fy or None
         )
     except Exception as e:
         logger.error(f"Dashboard analytics failed: {e}")
@@ -147,10 +140,6 @@ def get_dashboard_analytics_endpoint(
                 "total_cost_inr": 0,
                 "total_revenue_inr": 0,
                 "capture_inr": 0,
-                "gross_margin_inr": 0,
-                "gross_margin_pct": None,
-                "net_margin_inr": 0,
-                "net_margin_pct": None,
                 "margin_pct": None,
             },
             "monthly_series": [],

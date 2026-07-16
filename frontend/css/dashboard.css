@@ -339,7 +339,7 @@
 
 .biz-kpi-row {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(5, minmax(0, 1fr));
     gap: 12px;
 }
 
@@ -378,7 +378,6 @@
 .biz-kpi-icon--sky { background: #e0f2fe; color: #0369a1; }
 .biz-kpi-icon--amber { background: #ffedd5; color: #c2410c; }
 .biz-kpi-icon--green { background: #dcfce7; color: #15803d; }
-.biz-kpi-icon--violet { background: #ede9fe; color: #6d28d9; }
 
 .biz-kpi-badge {
     font-size: 10px;
@@ -431,16 +430,6 @@
 }
 
 .biz-kpi-card__value--center { text-align: center; font-size: 24px; }
-
-.biz-kpi-card__hint {
-    margin-top: 6px;
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text-tertiary);
-}
-
-.biz-kpi-card__hint.positive { color: #047857; }
-.biz-kpi-card__hint.negative { color: #b91c1c; }
 
 .biz-kpi-card__value.positive { color: #047857; }
 .biz-kpi-card__value.negative { color: #b91c1c; }
@@ -808,6 +797,9 @@
 @media (max-width: 1280px) {
     .biz-kpi-row {
         grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .biz-kpi-card--gauge {
+        grid-column: span 1;
     }
 }
 
