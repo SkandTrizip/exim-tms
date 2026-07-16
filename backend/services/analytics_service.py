@@ -88,17 +88,50 @@ def _fy_start_for_date(d: date) -> int:
     return d.year if d.month >= 4 else d.year - 1
 
 
+def _month_in_fy_range(
+    month_key: Optional[str],
+    month_from: Optional[str],
+    month_to: Optional[str],
+    fy_months: List[str],
+) -> bool:
+    """True when month_key falls within [month_from, month_to] in FY order."""
+    if not month_key or month_key not in fy_months:
+        return False
+    if not month_from and not month_to:
+        return True
+    idx = fy_months.index(month_key)
+    start_idx = fy_months.index(month_from) if month_from in fy_months else 0
+    end_idx = (
+        fy_months.index(month_to) if month_to in fy_months else len(fy_months) - 1
+    )
+    if start_idx > end_idx:
+        start_idx, end_idx = end_idx, start_idx
+    return start_idx <= idx <= end_idx
+
+
 def _aggregate_totals(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     cost = round(sum(r["cost_inr"] for r in rows), 2)
     revenue = round(sum(r["revenue_inr"] for r in rows), 2)
     gross_margin = round(revenue - cost, 2)
+
+    final_rows = [r for r in rows if r.get("economics_status") == "final"]
+    net_cost = round(sum(r["cost_inr"] for r in final_rows), 2)
+    net_revenue = round(sum(r["revenue_inr"] for r in final_rows), 2)
+    net_margin = round(net_revenue - net_cost, 2)
+
     return {
         "cost_inr": cost,
         "revenue_inr": revenue,
         "capture_inr": gross_margin,
         "gross_margin_inr": gross_margin,
+        "gross_margin_pct": _margin_pct(revenue, cost),
+        "net_cost_inr": net_cost,
+        "net_revenue_inr": net_revenue,
+        "net_margin_inr": net_margin,
+        "net_margin_pct": _margin_pct(net_revenue, net_cost),
         "margin_pct": _margin_pct(revenue, cost),
         "trips": len(rows),
+        "final_trips": len(final_rows),
     }
 
 
@@ -106,7 +139,9 @@ def get_dashboard_analytics(
     db: Session,
     *,
     month: Optional[str] = None,
-    metric: str = "both",
+    month_from: Optional[str] = None,
+    month_to: Optional[str] = None,
+    metric: str = "gross_margin",
     fy: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
@@ -116,14 +151,27 @@ def get_dashboard_analytics(
       - Final (settled) enquiries with SOB / net economics
       - Ongoing tracking enquiries (stage >= 3) with an initial (accepted) quote
 
+    Margin definitions:
+      - gross_margin_inr: revenue − cost on all included rows (final + ongoing)
+      - net_margin_inr: revenue − cost on final (SOB-settled) rows only
+
     Filters:
       - fy: '2026-27' Indian financial year (Apr–Mar)
-      - month: 'YYYY-MM' — only rows with that SOB month (within FY)
-      - metric: 'cost' | 'revenue' | 'both'
+      - month: 'YYYY-MM' — single SOB month (legacy; overrides month_from/month_to)
+      - month_from / month_to: inclusive SOB month range within FY
+      - metric: 'cost' | 'revenue' | 'gross_margin' | 'net_margin' | 'both'
     """
-    metric_key = (metric or "both").lower()
-    if metric_key not in ("cost", "revenue", "both"):
-        metric_key = "both"
+    metric_key = (metric or "gross_margin").lower()
+    if metric_key == "both":
+        metric_key = "gross_margin"
+    if metric_key not in ("cost", "revenue", "gross_margin", "net_margin"):
+        metric_key = "gross_margin"
+
+    range_from = month_from or None
+    range_to = month_to or None
+    if month:
+        range_from = month
+        range_to = month
 
     fy_start = parse_financial_year(fy)
     fy_start_date, fy_end_date = financial_year_bounds(fy_start)
@@ -182,6 +230,8 @@ def get_dashboard_analytics(
             quote_source = "additional"
         economics_status = "final" if sob_date else "ongoing"
 
+        net_margin = gross_margin if economics_status == "final" else None
+
         all_rows.append({
             "enquiry_id": enquiry.id,
             "enquiry_number": enquiry.enquiry_number,
@@ -192,6 +242,9 @@ def get_dashboard_analytics(
             "revenue_inr": revenue,
             "capture_inr": gross_margin,
             "gross_margin_inr": gross_margin,
+            "gross_margin_pct": _margin_pct(revenue, cost),
+            "net_margin_inr": net_margin,
+            "net_margin_pct": _margin_pct(revenue, cost) if economics_status == "final" else None,
             "margin_pct": _margin_pct(revenue, cost),
             "sob_date": sob_date.isoformat() if sob_date else None,
             "sob_month": sob_month,
@@ -211,7 +264,14 @@ def get_dashboard_analytics(
     ongoing_rows = [r for r in all_rows if not r.get("sob_date")]
 
     buckets: Dict[str, Dict[str, float]] = {
-        key: {"cost_inr": 0.0, "revenue_inr": 0.0, "capture_inr": 0.0, "trips": 0}
+        key: {
+            "cost_inr": 0.0,
+            "revenue_inr": 0.0,
+            "capture_inr": 0.0,
+            "gross_margin_inr": 0.0,
+            "net_margin_inr": 0.0,
+            "trips": 0,
+        }
         for key in fy_months
     }
 
@@ -223,9 +283,12 @@ def get_dashboard_analytics(
         b["cost_inr"] += row["cost_inr"]
         b["revenue_inr"] += row["revenue_inr"]
         b["capture_inr"] += row["capture_inr"]
+        b["gross_margin_inr"] += row["gross_margin_inr"]
+        b["net_margin_inr"] += row["gross_margin_inr"]
         b["trips"] += 1
 
     pending_no_sob = _aggregate_totals(ongoing_rows)
+    has_month_filter = bool(range_from or range_to)
 
     monthly_series: List[Dict[str, Any]] = []
     for key in fy_months:
@@ -233,6 +296,8 @@ def get_dashboard_analytics(
         cost = round(b["cost_inr"], 2)
         revenue = round(b["revenue_inr"], 2)
         capture = round(b["capture_inr"], 2)
+        gross_m = round(b["gross_margin_inr"], 2)
+        net_m = round(b["net_margin_inr"], 2)
         monthly_series.append({
             "month": key,
             "label": _month_label(key),
@@ -241,16 +306,20 @@ def get_dashboard_analytics(
             "cost_inr": cost,
             "revenue_inr": revenue,
             "capture_inr": capture,
-            "gross_margin_inr": capture,
+            "gross_margin_inr": gross_m,
+            "net_margin_inr": net_m,
             "margin_pct": _margin_pct(revenue, cost),
+            "gross_margin_pct": _margin_pct(revenue, cost),
+            "net_margin_pct": _margin_pct(revenue, cost),
         })
 
-    # KPIs / table: SOB rows in FY, plus ongoing pipeline when viewing all months
-    if month:
-        if month not in fy_months:
-            filtered = []
-        else:
-            filtered = [r for r in fy_rows if r.get("sob_month") == month]
+    # KPIs / table: SOB rows in FY (+ ongoing when no month filter)
+    if has_month_filter:
+        filtered = [
+            r
+            for r in fy_rows
+            if _month_in_fy_range(r.get("sob_month"), range_from, range_to, fy_months)
+        ]
     else:
         filtered = fy_rows + ongoing_rows
 
@@ -315,13 +384,25 @@ def get_dashboard_analytics(
             "unrealized_revenue_inr": unrealized_revenue,
             "capture_inr": totals["gross_margin_inr"],
             "gross_margin_inr": totals["gross_margin_inr"],
-            "margin_pct": totals["margin_pct"],
+            "gross_margin_pct": totals["gross_margin_pct"],
+            "net_margin_inr": totals["net_margin_inr"],
+            "net_margin_pct": totals["net_margin_pct"],
+            "net_cost_inr": totals["net_cost_inr"],
+            "net_revenue_inr": totals["net_revenue_inr"],
+            "margin_pct": totals["gross_margin_pct"],
             "filter_month": month,
+            "filter_month_from": range_from,
+            "filter_month_to": range_to,
             "filter_metric": metric_key,
             "filter_fy": selected_label,
             "fy_label": f"FY {selected_label}",
             "fy_range": f"Apr {fy_start} – Mar {fy_start + 1}",
             "pending_no_sob": pending_no_sob,
+            "pipeline_margin_inr": (
+                pending_no_sob["gross_margin_inr"]
+                if not has_month_filter and pending_no_sob["trips"] > 0
+                else 0.0
+            ),
             "sparklines": {
                 "trips": cum_trips,
                 "revenue": cum_revenue,
