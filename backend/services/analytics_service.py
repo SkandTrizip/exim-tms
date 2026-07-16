@@ -110,28 +110,42 @@ def _month_in_fy_range(
 
 
 def _aggregate_totals(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Sum cost, revenue, and margin (revenue − cost) for the given rows."""
     cost = round(sum(r["cost_inr"] for r in rows), 2)
     revenue = round(sum(r["revenue_inr"] for r in rows), 2)
-    gross_margin = round(revenue - cost, 2)
-
-    final_rows = [r for r in rows if r.get("economics_status") == "final"]
-    net_cost = round(sum(r["cost_inr"] for r in final_rows), 2)
-    net_revenue = round(sum(r["revenue_inr"] for r in final_rows), 2)
-    net_margin = round(net_revenue - net_cost, 2)
-
+    margin = round(revenue - cost, 2)
     return {
         "cost_inr": cost,
         "revenue_inr": revenue,
-        "capture_inr": gross_margin,
-        "gross_margin_inr": gross_margin,
-        "gross_margin_pct": _margin_pct(revenue, cost),
-        "net_cost_inr": net_cost,
-        "net_revenue_inr": net_revenue,
-        "net_margin_inr": net_margin,
-        "net_margin_pct": _margin_pct(net_revenue, net_cost),
+        "margin_inr": margin,
         "margin_pct": _margin_pct(revenue, cost),
         "trips": len(rows),
-        "final_trips": len(final_rows),
+    }
+
+
+def _summary_margin_totals(
+    filtered: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """
+    Gross margin: revenue − cost on all filtered rows (final + ongoing).
+    Net margin: revenue − cost on final (SOB-settled) rows only.
+    """
+    final_rows = [r for r in filtered if r.get("economics_status") == "final"]
+    gross = _aggregate_totals(filtered)
+    net = _aggregate_totals(final_rows)
+    return {
+        "cost_inr": gross["cost_inr"],
+        "revenue_inr": gross["revenue_inr"],
+        "capture_inr": net["margin_inr"],
+        "gross_margin_inr": gross["margin_inr"],
+        "gross_margin_pct": gross["margin_pct"],
+        "net_margin_inr": net["margin_inr"],
+        "net_margin_pct": net["margin_pct"],
+        "net_cost_inr": net["cost_inr"],
+        "net_revenue_inr": net["revenue_inr"],
+        "margin_pct": net["margin_pct"],
+        "trips": gross["trips"],
+        "final_trips": net["trips"],
     }
 
 
@@ -152,7 +166,7 @@ def get_dashboard_analytics(
       - Ongoing tracking enquiries (stage >= 3) with an initial (accepted) quote
 
     Margin definitions:
-      - gross_margin_inr: revenue − cost on all included rows (final + ongoing)
+      - gross_margin_inr: revenue − cost on all filtered rows (final + ongoing)
       - net_margin_inr: revenue − cost on final (SOB-settled) rows only
 
     Filters:
@@ -210,7 +224,7 @@ def get_dashboard_analytics(
         if cost <= 0 and revenue <= 0:
             continue
 
-        gross_margin = round(revenue - cost, 2)
+        row_margin = round(revenue - cost, 2)
         master_number = (shipment.master_number or "").strip() if shipment else ""
 
         sob_date = economics.sob_date
@@ -230,8 +244,6 @@ def get_dashboard_analytics(
             quote_source = "additional"
         economics_status = "final" if sob_date else "ongoing"
 
-        net_margin = gross_margin if economics_status == "final" else None
-
         all_rows.append({
             "enquiry_id": enquiry.id,
             "enquiry_number": enquiry.enquiry_number,
@@ -240,10 +252,10 @@ def get_dashboard_analytics(
             "route": f"{enquiry.origin or '—'} → {enquiry.destination or '—'}",
             "cost_inr": cost,
             "revenue_inr": revenue,
-            "capture_inr": gross_margin,
-            "gross_margin_inr": gross_margin,
+            "capture_inr": row_margin,
+            "gross_margin_inr": row_margin,
             "gross_margin_pct": _margin_pct(revenue, cost),
-            "net_margin_inr": net_margin,
+            "net_margin_inr": row_margin if economics_status == "final" else None,
             "net_margin_pct": _margin_pct(revenue, cost) if economics_status == "final" else None,
             "margin_pct": _margin_pct(revenue, cost),
             "sob_date": sob_date.isoformat() if sob_date else None,
@@ -284,7 +296,7 @@ def get_dashboard_analytics(
         b["revenue_inr"] += row["revenue_inr"]
         b["capture_inr"] += row["capture_inr"]
         b["gross_margin_inr"] += row["gross_margin_inr"]
-        b["net_margin_inr"] += row["gross_margin_inr"]
+        b["net_margin_inr"] += row["net_margin_inr"] or 0
         b["trips"] += 1
 
     pending_no_sob = _aggregate_totals(ongoing_rows)
@@ -323,7 +335,7 @@ def get_dashboard_analytics(
     else:
         filtered = fy_rows + ongoing_rows
 
-    totals = _aggregate_totals(filtered)
+    totals = _summary_margin_totals(filtered)
     valid_enquiries = sum(1 for r in filtered if r.get("master_number"))
     adhoc_count = len(filtered) - valid_enquiries
     unrealized_revenue = round(
@@ -382,14 +394,14 @@ def get_dashboard_analytics(
             "total_cost_inr": totals["cost_inr"],
             "total_revenue_inr": totals["revenue_inr"],
             "unrealized_revenue_inr": unrealized_revenue,
-            "capture_inr": totals["gross_margin_inr"],
+            "capture_inr": totals["net_margin_inr"],
             "gross_margin_inr": totals["gross_margin_inr"],
             "gross_margin_pct": totals["gross_margin_pct"],
             "net_margin_inr": totals["net_margin_inr"],
             "net_margin_pct": totals["net_margin_pct"],
             "net_cost_inr": totals["net_cost_inr"],
             "net_revenue_inr": totals["net_revenue_inr"],
-            "margin_pct": totals["gross_margin_pct"],
+            "margin_pct": totals["net_margin_pct"],
             "filter_month": month,
             "filter_month_from": range_from,
             "filter_month_to": range_to,
@@ -397,9 +409,15 @@ def get_dashboard_analytics(
             "filter_fy": selected_label,
             "fy_label": f"FY {selected_label}",
             "fy_range": f"Apr {fy_start} – Mar {fy_start + 1}",
-            "pending_no_sob": pending_no_sob,
+            "pending_no_sob": {
+                "trips": pending_no_sob["trips"],
+                "cost_inr": pending_no_sob["cost_inr"],
+                "revenue_inr": pending_no_sob["revenue_inr"],
+                "gross_margin_inr": pending_no_sob["margin_inr"],
+                "capture_inr": pending_no_sob["margin_inr"],
+            },
             "pipeline_margin_inr": (
-                pending_no_sob["gross_margin_inr"]
+                pending_no_sob["margin_inr"]
                 if not has_month_filter and pending_no_sob["trips"] > 0
                 else 0.0
             ),

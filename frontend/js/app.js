@@ -985,7 +985,7 @@ function renderAnalyticsSummary(summary) {
 
     setText('analyticsRevenue', formatInrLakhs(summary.total_revenue_inr));
     setText('analyticsCost', formatInrLakhs(summary.total_cost_inr));
-    setText('analyticsCostMarginPill', `Gross: ${formatMarginPct(grossMarginPct, 1)}`);
+    setText('analyticsCostMarginPill', `Net: ${formatMarginPct(netMarginPct, 1)}`);
 
     const grossMarginInr = summary.gross_margin_inr ?? summary.capture_inr;
     const netMarginInr = summary.net_margin_inr;
@@ -1191,10 +1191,9 @@ function renderMonthlyAnalyticsChart(series, metric, options = {}) {
     const metricKey = metric || 'gross_margin';
     const metricLabel = getAnalyticsMetricLabel(metricKey);
     const pipelineMargin = Number(options.pipelineMargin) || 0;
-    const showPipeline = metricKey === 'gross_margin' && pipelineMargin > 0;
+    const pipelineTrips = Number(options.pipelineTrips) || 0;
 
-    // Keep FY month order; only draw pie slices with positive value
-    const ordered = rows.map((r, idx) => ({
+    let ordered = rows.map((r, idx) => ({
         label: r.short_label || r.label,
         fullLabel: r.label,
         month: r.month,
@@ -1210,12 +1209,12 @@ function renderMonthlyAnalyticsChart(series, metric, options = {}) {
         net_margin_inr: r.net_margin_inr,
     }));
 
-    if (showPipeline) {
+    if (metricKey === 'gross_margin' && pipelineMargin > 0) {
         ordered.push({
             label: 'Ongoing',
-            fullLabel: 'Ongoing (no SOB yet)',
+            fullLabel: 'Ongoing tracking (no SOB yet)',
             month: '__ongoing__',
-            trips: options.pipelineTrips || 0,
+            trips: pipelineTrips,
             value: pipelineMargin,
             color: '#94a3b8',
         });
@@ -1223,7 +1222,10 @@ function renderMonthlyAnalyticsChart(series, metric, options = {}) {
 
     const slices = ordered.filter((s) => s.value > 0);
     if (!slices.length) {
-        wrap.innerHTML = `<div class="analytics-chart-empty">No ${escapeHtml(metricLabel.toLowerCase())} for this filter yet. Mark SOB dates from Apr onward.</div>`;
+        const emptyHint = metricKey === 'gross_margin'
+            ? 'No gross margin for this filter yet.'
+            : `No ${escapeHtml(metricLabel.toLowerCase())} for this filter yet. Mark SOB dates from Apr onward.`;
+        wrap.innerHTML = `<div class="analytics-chart-empty">${emptyHint}</div>`;
         return;
     }
 
@@ -1248,7 +1250,7 @@ function renderMonthlyAnalyticsChart(series, metric, options = {}) {
         </path>`;
     }).join('');
 
-    // Legend: months with trips, plus ongoing pipeline slice when shown
+    // Legend
     const legendMonths = ordered.filter((s) => (s.trips || 0) > 0 || s.month === '__ongoing__');
     const legend = legendMonths.map((s) => {
         const hasValue = s.value > 0;
