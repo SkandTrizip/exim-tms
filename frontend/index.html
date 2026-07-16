@@ -129,29 +129,18 @@
                                 <article class="biz-kpi-card biz-kpi-card--margin">
                                     <div class="biz-kpi-card__top">
                                         <div class="biz-kpi-icon biz-kpi-icon--green" aria-hidden="true"><i class="fas fa-chart-line"></i></div>
-                                        <span class="biz-kpi-trend-badge positive" id="analyticsGrossMarginTrendBadge">↗ —</span>
+                                        <span class="biz-kpi-trend-badge positive" id="analyticsMarginTrendBadge">↗ —</span>
                                     </div>
                                     <div class="biz-kpi-card__label">Gross Margin</div>
-                                    <div class="biz-kpi-card__value positive" id="analyticsGrossMargin">—</div>
-                                    <div class="biz-kpi-card__hint" id="analyticsGrossMarginPct">—</div>
-                                </article>
-
-                                <article class="biz-kpi-card biz-kpi-card--margin biz-kpi-card--net">
-                                    <div class="biz-kpi-card__top">
-                                        <div class="biz-kpi-icon biz-kpi-icon--violet" aria-hidden="true"><i class="fas fa-chart-pie"></i></div>
-                                        <span class="biz-kpi-trend-badge positive" id="analyticsNetMarginTrendBadge">↗ —</span>
-                                    </div>
-                                    <div class="biz-kpi-card__label">Net Margin</div>
-                                    <div class="biz-kpi-card__value positive" id="analyticsNetMargin">—</div>
-                                    <div class="biz-kpi-card__hint" id="analyticsNetMarginPct">—</div>
+                                    <div class="biz-kpi-card__value positive" id="analyticsCapture">—</div>
                                 </article>
 
                                 <article class="biz-kpi-card biz-kpi-card--gauge">
-                                    <div class="biz-kpi-gauge-wrap" id="analyticsNetMarginGauge" aria-hidden="true">
+                                    <div class="biz-kpi-gauge-wrap" id="analyticsMarginGauge" aria-hidden="true">
                                         <div class="biz-kpi-gauge-icon"><i class="fas fa-bullseye"></i></div>
                                     </div>
-                                    <div class="biz-kpi-card__label biz-kpi-card__label--center">Net Margin %</div>
-                                    <div class="biz-kpi-card__value biz-kpi-card__value--center" id="analyticsNetMarginPctGauge">—</div>
+                                    <div class="biz-kpi-card__label biz-kpi-card__label--center">Gross Margin %</div>
+                                    <div class="biz-kpi-card__value biz-kpi-card__value--center" id="analyticsMarginPct">—</div>
                                 </article>
                             </div>
 
@@ -177,22 +166,15 @@
                                             </select>
                                         </label>
                                         <label class="analytics-filter">
-                                            <span>From month</span>
-                                            <select id="analyticsMonthFromFilter" aria-label="Filter from SOB month">
-                                                <option value="">Apr (start)</option>
+                                            <span>Month</span>
+                                            <select id="analyticsMonthFilter" aria-label="Filter by SOB month">
+                                                <option value="">All months</option>
                                             </select>
                                         </label>
                                         <label class="analytics-filter">
-                                            <span>To month</span>
-                                            <select id="analyticsMonthToFilter" aria-label="Filter to SOB month">
-                                                <option value="">Mar (end)</option>
-                                            </select>
-                                        </label>
-                                        <label class="analytics-filter">
-                                            <span>Chart metric</span>
-                                            <select id="analyticsMetricFilter" aria-label="Filter chart metric">
-                                                <option value="gross_margin">Gross Margin</option>
-                                                <option value="net_margin">Net Margin</option>
+                                            <span>Metric</span>
+                                            <select id="analyticsMetricFilter" aria-label="Filter cost or revenue">
+                                                <option value="both">Margin (profit)</option>
                                                 <option value="cost">Cost</option>
                                                 <option value="revenue">Revenue</option>
                                             </select>
@@ -210,7 +192,7 @@
                             <div class="table-topbar analytics-table-topbar">
                                 <div>
                                     <h2 class="table-title">Enquiry Economics</h2>
-                                    <div class="table-subtitle">Gross margin (final + ongoing) and net margin (SOB-settled only)</div>
+                                    <div class="table-subtitle">Cost, revenue and gross margin (final SOB + ongoing tracking with initial quote)</div>
                                 </div>
                             </div>
 
@@ -226,14 +208,12 @@
                                             <th class="num">Cost</th>
                                             <th class="num">Revenue</th>
                                             <th class="num">Gross Margin</th>
-                                            <th class="num">Gross %</th>
-                                            <th class="num">Net Margin</th>
-                                            <th class="num">Net %</th>
+                                            <th class="num">Margin %</th>
                                         </tr>
                                     </thead>
                                     <tbody id="analyticsEnquiryTable">
                                         <tr class="analytics-loading-row">
-                                            <td colspan="11">Loading analytics…</td>
+                                            <td colspan="9">Loading analytics…</td>
                                         </tr>
                                     </tbody>
                                 </table>
