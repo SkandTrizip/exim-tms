@@ -7,6 +7,7 @@ from backend.models.enquiry import Enquiry
 from backend.models.quote import Quote
 from backend.models.document import ShipmentDocument
 from backend.services.analytics_service import get_dashboard_analytics
+from backend.services.globe_service import get_shipment_globe_data
 from backend.utils.logger import logger
 
 router = APIRouter()
@@ -156,4 +157,30 @@ def get_dashboard_analytics_endpoint(
             "available_financial_years": [],
             "enquiries": [],
             "ongoing_enquiries": [],
+        }
+
+
+@router.get("/shipment-globe")
+def get_shipment_globe_endpoint(db: Session = Depends(get_db)):
+    """
+    Origin/destination ports and routes with lat/lng for the dashboard globe.
+    Coordinates resolved from port_code master (UN/LOCODE DMS).
+    """
+    try:
+        return get_shipment_globe_data(db)
+    except Exception as e:
+        logger.error(f"Shipment globe failed: {e}")
+        db.rollback()
+        return {
+            "summary": {
+                "trips": 0,
+                "resolved_trips": 0,
+                "unresolved_trips": 0,
+                "origin_ports": 0,
+                "destination_ports": 0,
+                "routes": 0,
+            },
+            "origins": [],
+            "destinations": [],
+            "routes": [],
         }
