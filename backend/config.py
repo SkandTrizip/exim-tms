@@ -37,8 +37,8 @@ AUTH_USERS = [
     {"username": "Sachin", "full_name": "Sachin ", "password": "sachin@5789!#$", "is_admin": False},
     {"username": "Shokin", "full_name":"Shokin Saifi","password": "shokin@2538!#", "is_admin": False},
     {"username": "Operations", "full_name":"Dapen","password": "ops@4567!#", "is_admin": False},
-    {"username": "ashok.jangra@logipod.in", "full_name":"Ashok","password": "ashok@4567!#", "is_admin": False}
-    {"username": "satkar.grewal@logipod.in", "full_name":"Satkar","password": "exim@4532!#", "is_admin": False}
+    {"username": "ashok.jangra@logipod.in", "full_name":"Ashok","password": "ashok@4567!#", "is_admin": False},
+    {"username": "satkar.grewal@logipod.in", "full_name":"Satkar","password": "exim@4532!#", "is_admin": False},
     {"username": "madan.rajput@logipod.in", "full_name":"Madan","password": "madan@4568!#", "is_admin": False}
 ]
 
