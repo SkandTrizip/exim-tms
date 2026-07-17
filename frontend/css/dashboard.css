@@ -434,6 +434,35 @@
 .biz-kpi-card__value.positive { color: #047857; }
 .biz-kpi-card__value.negative { color: #b91c1c; }
 
+.biz-kpi-card__footer {
+    margin-top: auto;
+    padding-top: 10px;
+    border-top: 1px solid var(--border-light);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.biz-kpi-card__footer-label {
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.biz-kpi-card__footer-value {
+    margin-top: 2px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 14px;
+    font-weight: 800;
+    color: var(--navy-900);
+    line-height: 1.2;
+}
+
+.biz-kpi-card__footer-value.positive { color: #047857; }
+.biz-kpi-card__footer-value.negative { color: #b91c1c; }
+
 .biz-kpi-card--gauge {
     align-items: center;
     text-align: center;
@@ -535,6 +564,177 @@
 
 .analytics-chart-wrap {
     min-height: 180px;
+}
+
+.analytics-teu-section {
+    margin-top: 28px;
+    padding-top: 22px;
+    border-top: 1px solid var(--border-light);
+}
+
+.analytics-teu-section__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.analytics-teu-totals {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.analytics-teu-totals__item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 88px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    border: 1px solid var(--border-light);
+    background: #f8fafc;
+}
+
+.analytics-teu-totals__item em {
+    font-style: normal;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.analytics-teu-totals__item strong {
+    font-family: 'Outfit', sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--navy-900);
+    line-height: 1.1;
+}
+
+.analytics-teu-bar-wrap {
+    min-height: 200px;
+    margin-bottom: 18px;
+    padding: 12px 8px 4px;
+    border: 1px solid var(--border-light);
+    border-radius: 14px;
+    background: #fff;
+}
+
+.analytics-teu-bars {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 8px;
+    align-items: end;
+    height: 180px;
+    padding: 0 8px;
+}
+
+.analytics-teu-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+    height: 100%;
+}
+
+.analytics-teu-bar__value {
+    font-size: 10px;
+    font-weight: 800;
+    color: var(--navy-800);
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.analytics-teu-bar__track {
+    width: 100%;
+    max-width: 36px;
+    flex: 1 1 auto;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    min-height: 0;
+}
+
+.analytics-teu-bar__fill {
+    width: 100%;
+    border-radius: 8px 8px 4px 4px;
+    background: linear-gradient(180deg, #38bdf8 0%, #0284c7 100%);
+    min-height: 2px;
+    transition: height 0.2s ease;
+}
+
+.analytics-teu-bar__label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.analytics-teu-bar.is-empty .analytics-teu-bar__fill {
+    background: #e2e8f0;
+    min-height: 2px;
+}
+
+.analytics-teu-matrix-scroll {
+    overflow-x: auto;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    background: #fff;
+}
+
+.analytics-teu-matrix {
+    margin: 0;
+    min-width: 720px;
+}
+
+.analytics-teu-matrix th,
+.analytics-teu-matrix td {
+    white-space: nowrap;
+    font-size: 12px;
+}
+
+.analytics-teu-matrix th.num,
+.analytics-teu-matrix td.num {
+    text-align: right;
+}
+
+.analytics-teu-matrix .is-total {
+    font-weight: 800;
+    background: #f8fafc;
+}
+
+.analytics-teu-matrix .type-cell {
+    font-weight: 700;
+    color: var(--navy-900);
+}
+
+.analytics-teu-matrix .factor-pill {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    color: #0369a1;
+    background: #e0f2fe;
+}
+
+@media (max-width: 900px) {
+    .analytics-teu-bars {
+        gap: 4px;
+        height: 160px;
+    }
+
+    .analytics-teu-bar__value {
+        font-size: 9px;
+    }
 }
 
 .analytics-chart-empty {
@@ -660,6 +860,156 @@
     font-weight: 600;
 }
 
+.analytics-pending-note__action {
+    margin-left: 8px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: #c2410c;
+    font: inherit;
+    font-weight: 800;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.analytics-pending-note__action:hover,
+.analytics-pending-note__action:focus-visible {
+    color: #9a3412;
+    outline: 2px solid #fdba74;
+    outline-offset: 2px;
+}
+
+.analytics-ongoing-section {
+    margin-top: 20px;
+    padding-top: 4px;
+}
+
+.analytics-ongoing-section[hidden] {
+    display: none;
+}
+
+.analytics-status-pill {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: #fff7ed;
+    color: #c2410c;
+}
+
+.analytics-status-pill.is-settled {
+    background: #ecfdf5;
+    color: #047857;
+}
+
+.analytics-details-card {
+    margin-top: 0;
+}
+
+.analytics-details-summary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin: 0 16px 12px;
+    padding: 12px 14px;
+    border: 1px solid var(--border-light);
+    border-radius: 12px;
+    background: #f8fafc;
+}
+
+.analytics-details-summary__item {
+    min-width: 0;
+}
+
+.analytics-details-summary__label {
+    display: block;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+}
+
+.analytics-details-summary__value {
+    display: block;
+    margin-top: 4px;
+    font-family: 'Outfit', sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--navy-900);
+    line-height: 1.2;
+}
+
+.analytics-details-summary__value.positive { color: #047857; }
+.analytics-details-summary__value.negative { color: #b91c1c; }
+
+.analytics-status-filter {
+    display: inline-flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.analytics-status-chip {
+    border: 1px solid var(--border-light);
+    background: #fff;
+    color: var(--text-secondary);
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.analytics-status-chip.is-active {
+    background: #0f172a;
+    border-color: #0f172a;
+    color: #fff;
+}
+
+.analytics-status-chip:focus-visible {
+    outline: 2px solid #93c5fd;
+    outline-offset: 2px;
+}
+
+.analytics-details-table th.num,
+.analytics-details-table td.num {
+    text-align: right;
+}
+
+.list-table-card.cols-hide-enquiry [data-col="enquiry"],
+.list-table-card.cols-hide-origin [data-col="origin"],
+.list-table-card.cols-hide-destination [data-col="destination"],
+.list-table-card.cols-hide-revenue [data-col="revenue"],
+.list-table-card.cols-hide-cost [data-col="cost"],
+.list-table-card.cols-hide-margin [data-col="margin"] {
+    display: none !important;
+}
+
+@media (max-width: 900px) {
+    .analytics-details-summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin: 0 12px 12px;
+    }
+
+    .analytics-status-filter {
+        width: 100%;
+    }
+}
+
+.analytics-pie-card.is-clickable {
+    cursor: pointer;
+}
+
+.analytics-pie-card.is-clickable:hover,
+.analytics-pie-card.is-clickable:focus-visible {
+    border-color: #cbd5e1;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
+    outline: none;
+}
+
 @media (max-width: 1100px) {
     .analytics-pie-legend {
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -743,6 +1093,11 @@
     background: #f3e8ff;
     border-radius: 999px;
     padding: 5px 10px;
+}
+
+.analytics-details-card .table-tools-left {
+    flex-wrap: wrap;
+    gap: 10px;
 }
 
 .analytics-details-panel {

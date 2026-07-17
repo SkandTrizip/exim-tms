@@ -5,7 +5,8 @@ const paginationState = {
     allEnquiries: { currentPage: 1 },
     quotes: { currentPage: 1 },
     tracking: { currentPage: 1 },
-    finance: { currentPage: 1 }
+    finance: { currentPage: 1 },
+    analyticsDetails: { currentPage: 1 },
 };
 
 document.addEventListener('DOMContentLoaded', async function () {
@@ -34,8 +35,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (analyticsDetailsBtn && analyticsDetailsPanel) {
         analyticsDetailsBtn.addEventListener('click', () => {
             const expanded = analyticsDetailsBtn.getAttribute('aria-expanded') === 'true';
-            analyticsDetailsBtn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
-            analyticsDetailsPanel.hidden = expanded;
+            if (expanded) {
+                analyticsDetailsBtn.setAttribute('aria-expanded', 'false');
+                analyticsDetailsPanel.hidden = true;
+                return;
+            }
+            openAnalyticsDetailsPanel({ statusFilter: 'all' });
         });
     }
 
@@ -741,7 +746,7 @@ function initListTableUI(config) {
         input.dataset.bound = '1';
         input.addEventListener('input', () => {
             const table = tableId ? document.getElementById(tableId) : null;
-            const bypassTables = new Set(['trackingDataTable', 'enquiriesDataTable']);
+            const bypassTables = new Set(['trackingDataTable', 'enquiriesDataTable', 'analyticsDetailsDataTable']);
             if (table && bypassTables.has(table.id)) {
                 clearTimeout(listTableSearchTimers[tbodyId]);
                 listTableSearchTimers[tbodyId] = setTimeout(() => {
@@ -751,6 +756,10 @@ function initListTableUI(config) {
                     } else if (tbodyId === 'allEnquiriesTable') {
                         paginationState.allEnquiries.currentPage = 1;
                         updateAllEnquiriesTable(currentAllEnquiriesFilter);
+                    } else if (tbodyId === 'analyticsEnquiryTable') {
+                        analyticsDetailsState.search = (input.value || '').trim().toLowerCase();
+                        paginationState.analyticsDetails.currentPage = 1;
+                        renderAnalyticsDetailsTable();
                     }
                 }, LIST_TABLE_SEARCH_DEBOUNCE_MS);
                 return;
@@ -942,17 +951,38 @@ function setText(id, text) {
 
 const analyticsFilterState = {
     fy: '',
-    month: '',
-    metric: 'both',
+    monthFrom: '',
+    monthTo: '',
+    metric: 'gross_margin',
 };
 
 let analyticsAvailableMonths = [];
 let analyticsAvailableYears = [];
+const analyticsDetailsState = {
+    rows: [],
+    search: '',
+    statusFilter: 'all',
+    pageSize: 20,
+};
 
 function currentAnalyticsFyValue() {
     const now = new Date();
     const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
     return `${y}-${String(y + 1).slice(-2)}`;
+}
+
+function openAnalyticsDetailsPanel({ statusFilter = null } = {}) {
+    const btn = document.getElementById('analyticsViewDetailsBtn');
+    const panel = document.getElementById('analyticsDetailsPanel');
+    if (!btn || !panel) return;
+    btn.setAttribute('aria-expanded', 'true');
+    panel.hidden = false;
+    if (statusFilter) {
+        setAnalyticsDetailsStatusFilter(statusFilter, { render: false });
+    }
+    paginationState.analyticsDetails.currentPage = 1;
+    renderAnalyticsDetailsTable();
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function buildMarginGaugeSvg(pct) {
@@ -983,6 +1013,17 @@ function renderAnalyticsSummary(summary) {
         if (marginClass) captureEl.classList.add(marginClass);
     }
 
+    const grossMarginPct = summary.gross_margin_pct;
+    const grossMarginClass = analyticsValueClass(grossMarginPct);
+    setText('analyticsGrossMargin', formatInrLakhs(summary.gross_margin_inr));
+    setText('analyticsGrossMarginPct', formatMarginPct(grossMarginPct, 1));
+
+    const grossMarginPctEl = document.getElementById('analyticsGrossMarginPct');
+    if (grossMarginPctEl) {
+        grossMarginPctEl.classList.remove('positive', 'negative');
+        if (grossMarginClass) grossMarginPctEl.classList.add(grossMarginClass);
+    }
+
     const marginPctText = formatMarginPct(marginPct, 2);
     setText('analyticsMarginPct', marginPctText);
 
@@ -1004,17 +1045,30 @@ function renderAnalyticsSummary(summary) {
     if (fySub) {
         const label = summary.fy_label || summary.filter_fy || 'Financial year';
         const range = summary.fy_range || 'Apr – Mar';
-        fySub.textContent = `${label} · ${range} · by SOB date`;
+        const from = summary.filter_month_from;
+        const to = summary.filter_month_to;
+        let monthNote = 'all months';
+        if (from || to) {
+            monthNote = from && to && from !== to ? `${from} – ${to}` : (from || to);
+        }
+        fySub.textContent = `${label} · ${range} · ${monthNote} · by SOB date`;
     }
 
     const pendingNote = document.getElementById('analyticsPendingSobNote');
-    const pending = summary.pending_no_sob;
+    const ongoing = summary.ongoing;
     if (pendingNote) {
-        if (pending && pending.trips > 0) {
+        const showOngoing = ongoing && ongoing.trips > 0 && ongoing.included_in_gross;
+        if (showOngoing) {
             pendingNote.hidden = false;
-            pendingNote.textContent =
-                `${pending.trips} enquir${pending.trips === 1 ? 'y' : 'ies'} without SOB date · ` +
-                `Revenue ${formatInrLakhs(pending.revenue_inr)} · Capture ${formatInrLakhs(pending.capture_inr)}`;
+            pendingNote.innerHTML =
+                `${ongoing.trips} ongoing enquir${ongoing.trips === 1 ? 'y' : 'ies'} ` +
+                `(initial quote, no SOB, no final quote) · ` +
+                `Capture ${formatInrLakhs(ongoing.capture_inr)}` +
+                `<button type="button" class="analytics-pending-note__action" id="analyticsViewOngoingBtn">View list</button>`;
+            const viewBtn = document.getElementById('analyticsViewOngoingBtn');
+            if (viewBtn) {
+                viewBtn.addEventListener('click', () => openAnalyticsDetailsPanel({ statusFilter: 'ongoing' }));
+            }
         } else {
             pendingNote.hidden = true;
             pendingNote.textContent = '';
@@ -1046,31 +1100,76 @@ function populateAnalyticsFyFilter(years) {
     analyticsFilterState.fy = select.value;
 }
 
-function populateAnalyticsMonthFilter(months) {
-    const select = document.getElementById('analyticsMonthFilter');
-    if (!select) return;
-    const current = analyticsFilterState.month;
-    const options = ['<option value="">All months (Apr – Mar)</option>']
-        .concat((months || []).map((m) => {
+function populateAnalyticsMonthRangeFilters(months) {
+    const fromSelect = document.getElementById('analyticsMonthFromFilter');
+    const toSelect = document.getElementById('analyticsMonthToFilter');
+    if (!fromSelect || !toSelect) return;
+
+    const list = Array.isArray(months) ? months : [];
+    const fromOptions = ['<option value="">Apr (start)</option>']
+        .concat(list.map((m) => {
             const value = m.value || m.month || '';
             const label = m.short_label || m.label || value;
             return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
         }));
-    select.innerHTML = options.join('');
-    select.value = current && months.some((m) => (m.value || m.month) === current) ? current : '';
-    analyticsFilterState.month = select.value;
+    const toOptions = ['<option value="">Mar (end)</option>']
+        .concat(list.map((m) => {
+            const value = m.value || m.month || '';
+            const label = m.short_label || m.label || value;
+            return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+        }));
+
+    fromSelect.innerHTML = fromOptions.join('');
+    toSelect.innerHTML = toOptions.join('');
+
+    const validValues = new Set(list.map((m) => m.value || m.month));
+    fromSelect.value = analyticsFilterState.monthFrom && validValues.has(analyticsFilterState.monthFrom)
+        ? analyticsFilterState.monthFrom
+        : '';
+    toSelect.value = analyticsFilterState.monthTo && validValues.has(analyticsFilterState.monthTo)
+        ? analyticsFilterState.monthTo
+        : '';
+    analyticsFilterState.monthFrom = fromSelect.value;
+    analyticsFilterState.monthTo = toSelect.value;
+}
+
+function monthIndexInFy(monthKey, months) {
+    if (!monthKey) return -1;
+    return months.findIndex((m) => (m.value || m.month) === monthKey);
+}
+
+function filterSeriesByMonthRange(series, monthFrom, monthTo, availableMonths) {
+    const rows = Array.isArray(series) ? series : [];
+    if (!monthFrom && !monthTo) return rows;
+
+    const monthKeys = availableMonths.map((m) => m.value || m.month);
+    let startIdx = monthFrom ? monthIndexInFy(monthFrom, availableMonths) : 0;
+    let endIdx = monthTo ? monthIndexInFy(monthTo, availableMonths) : monthKeys.length - 1;
+    if (startIdx < 0) startIdx = 0;
+    if (endIdx < 0) endIdx = monthKeys.length - 1;
+    if (startIdx > endIdx) {
+        const tmp = startIdx;
+        startIdx = endIdx;
+        endIdx = tmp;
+    }
+    const allowed = new Set(monthKeys.slice(startIdx, endIdx + 1));
+    return rows.filter((r) => allowed.has(r.month));
 }
 
 function getAnalyticsSliceValue(row, metric) {
     if (metric === 'cost') return Math.max(0, Number(row.cost_inr) || 0);
     if (metric === 'revenue') return Math.max(0, Number(row.revenue_inr) || 0);
+    if (metric === 'net_margin' || metric === 'both') {
+        return Math.max(0, Number(row.capture_inr) || 0);
+    }
     return Math.max(0, Number(row.capture_inr) || 0);
 }
 
 function getAnalyticsMetricLabel(metric) {
     if (metric === 'cost') return 'Cost';
     if (metric === 'revenue') return 'Revenue';
-    return 'Margin';
+    if (metric === 'net_margin' || metric === 'both') return 'Net Margin';
+    return 'Gross Margin';
 }
 
 const ANALYTICS_PIE_COLORS = [
@@ -1090,13 +1189,15 @@ function buildAnalyticsPiePath(cx, cy, radius, startAngle, endAngle) {
     return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2} Z`;
 }
 
-function renderMonthlyAnalyticsChart(series, metric) {
+function renderMonthlyAnalyticsChart(series, metric, options = {}) {
     const wrap = document.getElementById('analyticsMonthlyChart');
     if (!wrap) return;
 
     const rows = Array.isArray(series) ? series : [];
-    const metricKey = metric || 'both';
+    const metricKey = metric || 'gross_margin';
     const metricLabel = getAnalyticsMetricLabel(metricKey);
+    const pipelineMargin = Number(options.pipelineMargin) || 0;
+    const showPipeline = metricKey === 'gross_margin' && pipelineMargin > 0;
 
     // Keep FY month order; only draw pie slices with positive value
     const ordered = rows.map((r, idx) => ({
@@ -1112,9 +1213,20 @@ function renderMonthlyAnalyticsChart(series, metric) {
         capture_inr: r.capture_inr,
     }));
 
+    if (showPipeline) {
+        ordered.push({
+            label: 'Ongoing',
+            fullLabel: 'Ongoing (initial quote, no SOB, no final quote)',
+            month: '__ongoing__',
+            trips: options.pipelineTrips || 0,
+            value: pipelineMargin,
+            color: '#94a3b8',
+        });
+    }
+
     const slices = ordered.filter((s) => s.value > 0);
     if (!slices.length) {
-        wrap.innerHTML = `<div class="analytics-chart-empty">No ${escapeHtml(metricLabel.toLowerCase())} for this financial year yet. Mark SOB dates from Apr onward.</div>`;
+        wrap.innerHTML = `<div class="analytics-chart-empty">No ${escapeHtml(metricLabel.toLowerCase())} for this filter yet. Mark SOB dates from Apr onward.</div>`;
         return;
     }
 
@@ -1139,13 +1251,14 @@ function renderMonthlyAnalyticsChart(series, metric) {
         </path>`;
     }).join('');
 
-    // Legend: only months with trips in the FY
-    const legendMonths = ordered.filter((s) => (s.trips || 0) > 0);
+    // Legend: months with trips, plus ongoing pipeline slice when shown
+    const legendMonths = ordered.filter((s) => (s.trips || 0) > 0 || s.month === '__ongoing__');
     const legend = legendMonths.map((s) => {
         const hasValue = s.value > 0;
         const pct = hasValue && total > 0 ? ((s.value / total) * 100).toFixed(1) : '0.0';
+        const clickable = s.month === '__ongoing__';
         return `
-            <li class="analytics-pie-card">
+            <li class="analytics-pie-card${clickable ? ' is-clickable' : ''}"${clickable ? ' data-ongoing-slice="1" tabindex="0" role="button" aria-label="View ongoing enquiries"' : ''}>
                 <span class="analytics-pie-swatch" style="background:${s.color}"></span>
                 <div class="analytics-pie-card-body">
                     <div class="analytics-pie-card-top">
@@ -1176,49 +1289,427 @@ function renderMonthlyAnalyticsChart(series, metric) {
             </div>
             <ul class="analytics-pie-legend">${legend}</ul>
         </div>`;
+
+    wrap.querySelectorAll('[data-ongoing-slice]').forEach((el) => {
+        const open = () => openAnalyticsDetailsPanel({ statusFilter: 'ongoing' });
+        el.addEventListener('click', open);
+        el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                open();
+            }
+        });
+    });
 }
 
-function renderAnalyticsEnquiryRows(rows) {
-    const tbody = document.getElementById('analyticsEnquiryTable');
-    if (!tbody) return;
+function analyticsRowSearchText(row) {
+    return [
+        row.enquiry_number,
+        row.client_name,
+        row.origin,
+        row.destination,
+        row.container_type,
+        row.master_number,
+        row.route,
+        row.economics_status,
+        row.revenue_inr,
+        row.cost_inr,
+        row.capture_inr,
+    ].map((v) => String(v ?? '').toLowerCase()).join(' ');
+}
 
-    if (!rows.length) {
-        tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">No economics data for this filter.</td></tr>';
+function getAnalyticsDetailsFilteredRows() {
+    const q = (analyticsDetailsState.search || '').trim().toLowerCase();
+    const status = analyticsDetailsState.statusFilter || 'all';
+    return (analyticsDetailsState.rows || []).filter((row) => {
+        if (status === 'final' && row.economics_status !== 'final') return false;
+        if (status === 'ongoing' && row.economics_status !== 'ongoing') return false;
+        if (!q) return true;
+        return analyticsRowSearchText(row).includes(q);
+    });
+}
+
+function setAnalyticsDetailsStatusFilter(status, { render = true } = {}) {
+    analyticsDetailsState.statusFilter = status || 'all';
+    document.querySelectorAll('.analytics-status-chip').forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.status === analyticsDetailsState.statusFilter);
+    });
+    const label =
+        analyticsDetailsState.statusFilter === 'ongoing' ? 'Ongoing'
+            : analyticsDetailsState.statusFilter === 'final' ? 'Settled'
+                : 'All';
+    setText('analyticsDetailsStatusText', label);
+    if (render) {
+        paginationState.analyticsDetails.currentPage = 1;
+        renderAnalyticsDetailsTable();
+    }
+}
+
+function renderAnalyticsDetailsSummary(rows) {
+    const trips = rows.length;
+    const revenue = rows.reduce((sum, r) => sum + (Number(r.revenue_inr) || 0), 0);
+    const cost = rows.reduce((sum, r) => sum + (Number(r.cost_inr) || 0), 0);
+    const margin = revenue - cost;
+    const marginClass = analyticsValueClass(margin);
+
+    setText('analyticsDetailsTrips', String(trips));
+    setText('analyticsDetailsRevenue', formatInrAmount(revenue));
+    setText('analyticsDetailsCost', formatInrAmount(cost));
+    setText('analyticsDetailsMargin', formatInrAmount(margin));
+    setText('analyticsDetailsRecordsCount', String(trips));
+
+    const marginEl = document.getElementById('analyticsDetailsMargin');
+    if (marginEl) {
+        marginEl.classList.remove('positive', 'negative');
+        if (marginClass) marginEl.classList.add(marginClass);
+    }
+}
+
+function renderAnalyticsDetailsPagination(totalItems, currentPage, pageSize) {
+    const container = document.getElementById('analyticsDetailsPagination');
+    if (!container) return;
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize) || 1);
+    const page = Math.min(Math.max(1, currentPage), totalPages);
+
+    if (totalItems === 0) {
+        container.style.display = 'none';
+        container.innerHTML = '';
         return;
     }
 
-    tbody.innerHTML = rows.map((row) => `
+    container.style.display = 'flex';
+    container.innerHTML = `
+        <div class="pagination-info" style="display: flex; align-items: center; gap: 16px;">
+            <div class="page-size-selector" style="display: flex; align-items: center; gap: 8px;">
+                <label style="margin: 0; font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Rows per page</label>
+                <select data-analytics-page-size style="padding: 2px 8px; font-size: 12px; height: 28px; min-height: 28px;">
+                    <option value="10" ${pageSize === 10 ? 'selected' : ''}>10</option>
+                    <option value="20" ${pageSize === 20 ? 'selected' : ''}>20</option>
+                    <option value="25" ${pageSize === 25 ? 'selected' : ''}>25</option>
+                    <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
+                    <option value="100" ${pageSize === 100 ? 'selected' : ''}>100</option>
+                </select>
+            </div>
+        </div>
+        <div class="pagination-controls">
+            <button class="page-btn" type="button" ${page <= 1 ? 'disabled' : ''} data-analytics-page="first" title="First page">&laquo;</button>
+            <button class="page-btn" type="button" ${page <= 1 ? 'disabled' : ''} data-analytics-page="prev" title="Previous">Previous</button>
+            <span style="padding: 0 8px; font-size: 13px; color: var(--text-secondary);">Page ${page} of ${totalPages}</span>
+            <button class="page-btn" type="button" ${page >= totalPages ? 'disabled' : ''} data-analytics-page="next" title="Next">Next</button>
+            <button class="page-btn" type="button" ${page >= totalPages ? 'disabled' : ''} data-analytics-page="last" title="Last page">&raquo;</button>
+        </div>
+    `;
+
+    if (!container.dataset.bound) {
+        container.dataset.bound = '1';
+        container.addEventListener('change', (e) => {
+            const select = e.target.closest('[data-analytics-page-size]');
+            if (!select) return;
+            analyticsDetailsState.pageSize = parseInt(select.value, 10) || 20;
+            paginationState.analyticsDetails.currentPage = 1;
+            renderAnalyticsDetailsTable();
+        });
+        container.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-analytics-page]');
+            if (!btn || btn.disabled) return;
+            const action = btn.getAttribute('data-analytics-page');
+            const current = paginationState.analyticsDetails.currentPage || 1;
+            const size = analyticsDetailsState.pageSize || 20;
+            const total = getAnalyticsDetailsFilteredRows().length;
+            const pages = Math.max(1, Math.ceil(total / size) || 1);
+            let next = current;
+            if (action === 'first') next = 1;
+            else if (action === 'prev') next = current - 1;
+            else if (action === 'next') next = current + 1;
+            else if (action === 'last') next = pages;
+            window.changeAnalyticsDetailsPage(next);
+        });
+    }
+}
+
+function renderAnalyticsEnquiryRowHtml(row) {
+    const isOngoing = row.economics_status === 'ongoing';
+    const statusLabel = isOngoing ? 'Ongoing' : 'Settled';
+    const statusClass = isOngoing ? 'analytics-status-pill' : 'analytics-status-pill is-settled';
+    return `
+            <tr class="list-row">
+                <td data-col="enquiry"><a href="#shipment/${row.enquiry_id}" class="table-link">${escapeHtml(row.enquiry_number || '—')}</a></td>
+                <td data-col="client">${escapeHtml(row.client_name || '—')}</td>
+                <td data-col="origin">${escapeHtml(row.origin || '—')}</td>
+                <td data-col="destination">${escapeHtml(row.destination || '—')}</td>
+                <td data-col="container">${escapeHtml(row.container_type || '—')}</td>
+                <td class="num" data-col="revenue">${formatInrAmount(row.revenue_inr)}</td>
+                <td class="num" data-col="cost">${formatInrAmount(row.cost_inr)}</td>
+                <td class="num ${analyticsValueClass(row.capture_inr)}" data-col="margin">${formatInrAmount(row.capture_inr)}</td>
+                <td data-col="status"><span class="${statusClass}">${statusLabel}</span></td>
+            </tr>`;
+}
+
+function renderAnalyticsDetailsTable() {
+    const tbody = document.getElementById('analyticsEnquiryTable');
+    if (!tbody) return;
+
+    const filtered = getAnalyticsDetailsFilteredRows();
+    renderAnalyticsDetailsSummary(filtered);
+
+    const pageSize = analyticsDetailsState.pageSize || 20;
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
+    let page = paginationState.analyticsDetails.currentPage || 1;
+    if (page > totalPages) page = totalPages;
+    if (page < 1) page = 1;
+    paginationState.analyticsDetails.currentPage = page;
+
+    const start = (page - 1) * pageSize;
+    const pageRows = filtered.slice(start, start + pageSize);
+
+    if (!total) {
+        tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">No economics data for this filter.</td></tr>';
+    } else {
+        tbody.innerHTML = pageRows.map((row) => renderAnalyticsEnquiryRowHtml(row)).join('');
+    }
+
+    renderAnalyticsDetailsPagination(total, page, pageSize);
+
+    const subtitle = document.getElementById('analyticsDetailsSubtitle');
+    if (subtitle) {
+        const ongoingCount = (analyticsDetailsState.rows || []).filter((r) => r.economics_status === 'ongoing').length;
+        subtitle.textContent = ongoingCount
+            ? `Settled + ongoing · ${ongoingCount} ongoing in pipeline`
+            : 'SOB-settled trips for the selected period';
+    }
+}
+
+function setAnalyticsDetailsRows(settledRows, ongoingRows) {
+    const settled = (Array.isArray(settledRows) ? settledRows : []).map((r) => ({
+        ...r,
+        economics_status: 'final',
+    }));
+    const ongoing = (Array.isArray(ongoingRows) ? ongoingRows : []).map((r) => ({
+        ...r,
+        economics_status: 'ongoing',
+    }));
+    analyticsDetailsState.rows = settled.concat(ongoing);
+    paginationState.analyticsDetails.currentPage = 1;
+    renderAnalyticsDetailsTable();
+}
+
+function bindAnalyticsDetailsUI() {
+    initListTableUI({
+        searchId: 'analyticsDetailsSearchInput',
+        exportId: 'analyticsDetailsExportBtn',
+        toggleBtnId: 'analyticsDetailsToggleColumnsBtn',
+        menuId: 'analyticsDetailsColumnsMenu',
+        dropdownId: 'analyticsDetailsColumnsDropdown',
+        cardId: 'analyticsDetailsTableCard',
+        tableId: 'analyticsDetailsDataTable',
+        tbodyId: 'analyticsEnquiryTable',
+        recordsCountId: 'analyticsDetailsRecordsCount',
+        exportName: 'enquiry-economics',
+    });
+
+    document.querySelectorAll('.analytics-status-chip').forEach((btn) => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+            setAnalyticsDetailsStatusFilter(btn.dataset.status || 'all');
+        });
+    });
+}
+
+window.changeAnalyticsDetailsPage = (page) => {
+    paginationState.analyticsDetails.currentPage = page;
+    renderAnalyticsDetailsTable();
+};
+
+function formatTeu(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '0';
+    return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+function renderTeuBarChart(series) {
+    const wrap = document.getElementById('analyticsTeuBarChart');
+    if (!wrap) return;
+
+    const rows = Array.isArray(series) ? series : [];
+    if (!rows.length) {
+        wrap.innerHTML = '<div class="analytics-chart-empty">No TEU data for this period.</div>';
+        return;
+    }
+
+    const maxTeu = Math.max(0, ...rows.map((r) => Number(r.teu) || 0));
+    const bars = rows.map((r) => {
+        const teu = Number(r.teu) || 0;
+        const pct = maxTeu > 0 ? Math.max(2, (teu / maxTeu) * 100) : 2;
+        const height = teu > 0 ? pct : 2;
+        const empty = teu <= 0;
+        return `
+            <div class="analytics-teu-bar${empty ? ' is-empty' : ''}" title="${escapeHtml(r.label || r.month)}: ${formatTeu(teu)} TEU">
+                <span class="analytics-teu-bar__value">${empty ? '' : formatTeu(teu)}</span>
+                <div class="analytics-teu-bar__track">
+                    <div class="analytics-teu-bar__fill" style="height:${height}%"></div>
+                </div>
+                <span class="analytics-teu-bar__label">${escapeHtml(r.short_label || r.label || '')}</span>
+            </div>`;
+    }).join('');
+
+    wrap.innerHTML = `<div class="analytics-teu-bars" style="grid-template-columns: repeat(${rows.length}, minmax(0, 1fr));">${bars}</div>`;
+}
+
+function renderContainerTeuMatrix(matrix, months) {
+    const head = document.getElementById('analyticsTeuMatrixHead');
+    const body = document.getElementById('analyticsTeuMatrixBody');
+    if (!head || !body) return;
+
+    const monthList = Array.isArray(months) ? months : [];
+    const rows = Array.isArray(matrix) ? matrix : [];
+
+    if (!monthList.length) {
+        head.innerHTML = '';
+        body.innerHTML = '<tr class="analytics-empty-row"><td>No container data yet.</td></tr>';
+        return;
+    }
+
+    head.innerHTML = `
+        <tr>
+            <th>Container Type</th>
+            ${monthList.map((m) => `<th class="num">${escapeHtml(m.short_label || m.label || m.value || '')}</th>`).join('')}
+            <th class="num is-total">Total TEU</th>
+        </tr>`;
+
+    if (!rows.length) {
+        body.innerHTML = `<tr class="analytics-empty-row"><td colspan="${monthList.length + 2}">No container TEUs for this period.</td></tr>`;
+        return;
+    }
+
+    const monthKeys = monthList.map((m) => m.value || m.month);
+    const colTotals = monthKeys.map(() => 0);
+    let grandTotal = 0;
+
+    const dataRows = rows.map((row) => {
+        const cells = monthKeys.map((key, idx) => {
+            const teu = Number((row.months || {})[key]) || 0;
+            colTotals[idx] += teu;
+            return `<td class="num">${teu > 0 ? formatTeu(teu) : '—'}</td>`;
+        }).join('');
+        const total = Number(row.total_teu) || 0;
+        grandTotal += total;
+        const factor = Number(row.teu_factor) || 1;
+        return `
             <tr>
-                <td><a href="#shipment/${row.enquiry_id}" class="table-link">${escapeHtml(row.enquiry_number || '—')}</a></td>
-                <td>${escapeHtml(row.master_number || '—')}</td>
-                <td>${escapeHtml(row.client_name || '—')}</td>
-                <td>${escapeHtml(row.route || '—')}</td>
-                <td>${formatSobDate(row.sob_date)}</td>
-                <td class="num">${formatInrAmount(row.cost_inr)}</td>
-                <td class="num">${formatInrAmount(row.revenue_inr)}</td>
-                <td class="num ${analyticsValueClass(row.capture_inr)}">${formatInrAmount(row.capture_inr)}</td>
-                <td class="num ${analyticsValueClass(row.margin_pct)}">${formatMarginPct(row.margin_pct)}</td>
-            </tr>
-        `).join('');
+                <td class="type-cell">
+                    ${escapeHtml(row.container_type || 'Unknown')}
+                    <span class="factor-pill">${factor}× TEU</span>
+                </td>
+                ${cells}
+                <td class="num is-total">${formatTeu(total)}</td>
+            </tr>`;
+    }).join('');
+
+    const footer = `
+        <tr class="is-total">
+            <td class="type-cell">Total</td>
+            ${colTotals.map((t) => `<td class="num">${t > 0 ? formatTeu(t) : '—'}</td>`).join('')}
+            <td class="num">${formatTeu(grandTotal)}</td>
+        </tr>`;
+
+    body.innerHTML = dataRows + footer;
+}
+
+function filterContainerMatrixByMonths(matrix, monthKeys) {
+    const keys = Array.isArray(monthKeys) ? monthKeys : [];
+    const keySet = new Set(keys);
+    return (Array.isArray(matrix) ? matrix : []).map((row) => {
+        const months = {};
+        const containers = {};
+        let totalTeu = 0;
+        let totalContainers = 0;
+        keys.forEach((key) => {
+            const teu = Number((row.months || {})[key]) || 0;
+            const count = Number((row.containers || {})[key]) || 0;
+            months[key] = teu;
+            containers[key] = count;
+            totalTeu += teu;
+            totalContainers += count;
+        });
+        return {
+            ...row,
+            months,
+            containers,
+            total_teu: Math.round(totalTeu * 100) / 100,
+            total_containers: totalContainers,
+        };
+    }).filter((row) => {
+        if (!keySet.size) return true;
+        return row.total_teu > 0 || row.total_containers > 0;
+    });
+}
+
+function renderAnalyticsTeuSection(data) {
+    const teuSeries = filterSeriesByMonthRange(
+        Array.isArray(data.monthly_teu_series) ? data.monthly_teu_series : (data.monthly_series || []),
+        analyticsFilterState.monthFrom,
+        analyticsFilterState.monthTo,
+        analyticsAvailableMonths,
+    );
+    // Prefer explicit teu series; fall back to monthly_series.teu
+    const barRows = teuSeries.map((r) => ({
+        month: r.month,
+        label: r.label,
+        short_label: r.short_label,
+        teu: r.teu != null ? r.teu : 0,
+        containers: r.containers || 0,
+        trips: r.trips || 0,
+    }));
+
+    renderTeuBarChart(barRows);
+
+    const monthKeys = barRows.map((r) => r.month);
+    const monthMeta = barRows.map((r) => ({
+        value: r.month,
+        label: r.label,
+        short_label: r.short_label,
+    }));
+    const matrix = filterContainerMatrixByMonths(
+        Array.isArray(data.container_matrix) ? data.container_matrix : [],
+        monthKeys,
+    );
+    renderContainerTeuMatrix(matrix, monthMeta);
+
+    const totalTeu = barRows.reduce((sum, r) => sum + (Number(r.teu) || 0), 0);
+    const totalContainers = barRows.reduce((sum, r) => sum + (Number(r.containers) || 0), 0);
+    setText('analyticsTotalTeu', formatTeu(totalTeu));
+    setText('analyticsTotalContainers', String(totalContainers));
 }
 
 function bindAnalyticsFilters() {
     const fySelect = document.getElementById('analyticsFyFilter');
-    const monthSelect = document.getElementById('analyticsMonthFilter');
+    const monthFromSelect = document.getElementById('analyticsMonthFromFilter');
+    const monthToSelect = document.getElementById('analyticsMonthToFilter');
     const metricSelect = document.getElementById('analyticsMetricFilter');
 
     if (fySelect && !fySelect.dataset.bound) {
         fySelect.dataset.bound = '1';
         fySelect.addEventListener('change', () => {
             analyticsFilterState.fy = fySelect.value || currentAnalyticsFyValue();
-            analyticsFilterState.month = '';
+            analyticsFilterState.monthFrom = '';
+            analyticsFilterState.monthTo = '';
             fetchDashboardAnalytics();
         });
     }
-    if (monthSelect && !monthSelect.dataset.bound) {
-        monthSelect.dataset.bound = '1';
-        monthSelect.addEventListener('change', () => {
-            analyticsFilterState.month = monthSelect.value || '';
+    if (monthFromSelect && !monthFromSelect.dataset.bound) {
+        monthFromSelect.dataset.bound = '1';
+        monthFromSelect.addEventListener('change', () => {
+            analyticsFilterState.monthFrom = monthFromSelect.value || '';
+            fetchDashboardAnalytics();
+        });
+    }
+    if (monthToSelect && !monthToSelect.dataset.bound) {
+        monthToSelect.dataset.bound = '1';
+        monthToSelect.addEventListener('change', () => {
+            analyticsFilterState.monthTo = monthToSelect.value || '';
             fetchDashboardAnalytics();
         });
     }
@@ -1226,7 +1717,7 @@ function bindAnalyticsFilters() {
         metricSelect.dataset.bound = '1';
         metricSelect.value = analyticsFilterState.metric;
         metricSelect.addEventListener('change', () => {
-            analyticsFilterState.metric = metricSelect.value || 'both';
+            analyticsFilterState.metric = metricSelect.value || 'gross_margin';
             fetchDashboardAnalytics();
         });
     }
@@ -1234,6 +1725,7 @@ function bindAnalyticsFilters() {
 
 async function fetchDashboardAnalytics() {
     bindAnalyticsFilters();
+    bindAnalyticsDetailsUI();
     if (!analyticsFilterState.fy) {
         analyticsFilterState.fy = currentAnalyticsFyValue();
     }
@@ -1246,8 +1738,9 @@ async function fetchDashboardAnalytics() {
     try {
         const params = new URLSearchParams();
         params.set('fy', analyticsFilterState.fy);
-        if (analyticsFilterState.month) params.set('month', analyticsFilterState.month);
-        if (analyticsFilterState.metric && analyticsFilterState.metric !== 'both') {
+        if (analyticsFilterState.monthFrom) params.set('month_from', analyticsFilterState.monthFrom);
+        if (analyticsFilterState.monthTo) params.set('month_to', analyticsFilterState.monthTo);
+        if (analyticsFilterState.metric) {
             params.set('metric', analyticsFilterState.metric);
         }
         const url = `${CONFIG.API_URL}/api/dashboard/analytics?${params.toString()}`;
@@ -1268,21 +1761,29 @@ async function fetchDashboardAnalytics() {
             ? data.available_financial_years
             : [];
         const series = Array.isArray(data.monthly_series) ? data.monthly_series : [];
-        analyticsAvailableMonths = (Array.isArray(data.available_months) ? data.available_months : [])
-            .filter((m) => {
-                const key = m.value || m.month;
-                const row = series.find((s) => s.month === key);
-                return row && (row.trips || 0) > 0;
-            });
+        analyticsAvailableMonths = Array.isArray(data.available_months) ? data.available_months : [];
         populateAnalyticsFyFilter(analyticsAvailableYears);
-        populateAnalyticsMonthFilter(analyticsAvailableMonths);
+        populateAnalyticsMonthRangeFilters(analyticsAvailableMonths);
 
-        const chartSeries = analyticsFilterState.month
-            ? series.filter((m) => m.month === analyticsFilterState.month)
-            : series;
-        renderMonthlyAnalyticsChart(chartSeries, analyticsFilterState.metric);
+        const chartSeries = filterSeriesByMonthRange(
+            series,
+            analyticsFilterState.monthFrom,
+            analyticsFilterState.monthTo,
+            analyticsAvailableMonths,
+        );
+        const ongoing = summary.ongoing || {};
+        const includeOngoing = !!ongoing.included_in_gross;
+        renderMonthlyAnalyticsChart(chartSeries, analyticsFilterState.metric, {
+            pipelineMargin: includeOngoing ? (ongoing.capture_inr || 0) : 0,
+            pipelineTrips: includeOngoing ? (ongoing.trips || 0) : 0,
+        });
 
-        renderAnalyticsEnquiryRows(Array.isArray(data.enquiries) ? data.enquiries : []);
+        renderAnalyticsTeuSection(data);
+
+        setAnalyticsDetailsRows(
+            Array.isArray(data.enquiries) ? data.enquiries : [],
+            Array.isArray(data.ongoing_enquiries) ? data.ongoing_enquiries : [],
+        );
     } catch (error) {
         console.error('Error fetching dashboard analytics:', error);
         if (tbody) {

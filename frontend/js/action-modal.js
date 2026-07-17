@@ -239,17 +239,34 @@ function renderShipmentClientSection(enq) {
                 <div class="detail-item"><label>From Location</label><span>${escapeHtml(enq.origin || '—')}</span></div>
                 <div class="detail-item"><label>To Location</label><span>${escapeHtml(enq.destination || '—')}</span></div>
                 <div class="detail-item"><label>Commodity</label><span>${escapeHtml(enq.commodity || '—')}</span></div>
-                <div class="detail-item"><label>Container</label><span>${escapeHtml(enq.container_type || '—')} × ${escapeHtml(String(enq.container_count || 0))}</span></div>
                 <div class="detail-item"><label>Incoterm</label><span>${escapeHtml(enq.incoterm || '—')}</span></div>
                 <div class="detail-item"><label>Client Scope</label><span>${escapeHtml(enq.client_scope || '—')}</span></div>
             </div>
         </section>`;
 }
 
+function containerTypeOptionsHtml(selected) {
+    const types = (typeof CONFIG !== 'undefined' && Array.isArray(CONFIG.containerTypes))
+        ? CONFIG.containerTypes
+        : [];
+    const selectedValue = selected || '';
+    const hasSelected = types.includes(selectedValue);
+    const extra = selectedValue && !hasSelected
+        ? `<option value="${escapeAttr(selectedValue)}" selected>${escapeHtml(selectedValue)}</option>`
+        : '';
+    const opts = types.map((t) =>
+        `<option value="${escapeAttr(t)}" ${t === selectedValue ? 'selected' : ''}>${escapeHtml(t)}</option>`
+    ).join('');
+    return `<option value="">Select container type</option>${extra}${opts}`;
+}
+
 function renderSaleModalBody(enq) {
     const stuffing = enq.stuffing_date ? String(enq.stuffing_date).split('T')[0] : '';
     const hblOn = !!enq.hbl_required;
     const hblDisplay = hblOn ? 'block' : 'none';
+    const containerCount = enq.container_count != null && enq.container_count !== ''
+        ? Number(enq.container_count)
+        : 1;
     return `
         ${renderShipmentClientSection(enq)}
         <section class="action-section">
@@ -258,6 +275,18 @@ function renderSaleModalBody(enq) {
                 Basic Sale Details
             </div>
             <div class="action-form-grid">
+                <div class="form-group">
+                    <label for="actionContainerType">Container Type</label>
+                    <select id="actionContainerType" required aria-label="Container type">
+                        ${containerTypeOptionsHtml(enq.container_type)}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="actionContainerCount">No. of Containers</label>
+                    <input type="number" id="actionContainerCount" min="1" step="1" required
+                        value="${escapeAttr(String(Number.isFinite(containerCount) && containerCount > 0 ? containerCount : 1))}"
+                        aria-label="Number of containers">
+                </div>
                 <div class="form-group">
                     <label>Stuffing Date</label>
                     <input type="date" id="actionStuffingDate" value="${escapeAttr(stuffing)}">
@@ -370,9 +399,24 @@ async function saveSaleFromModal() {
     const { enquiryId, enquiry } = actionModalState;
     if (!enquiryId || !enquiry) return;
 
+    const containerType = (document.getElementById('actionContainerType')?.value || '').trim();
+    const containerCountRaw = document.getElementById('actionContainerCount')?.value;
+    const containerCount = parseInt(containerCountRaw, 10);
+
+    if (!containerType) {
+        showModal('Missing field', 'Select a container type before saving.', 'error');
+        return;
+    }
+    if (!Number.isFinite(containerCount) || containerCount < 1) {
+        showModal('Missing field', 'Enter a container count of at least 1.', 'error');
+        return;
+    }
+
     const hblRequired = !!document.getElementById('actionHblRequired')?.checked;
     const payload = {
         ...enquiry,
+        container_type: containerType,
+        container_count: containerCount,
         stuffing_date: document.getElementById('actionStuffingDate')?.value || null,
         client_target_rate: parseFloat(document.getElementById('actionTargetRate')?.value) || 0,
         remarks: document.getElementById('actionRemarks')?.value || '',
