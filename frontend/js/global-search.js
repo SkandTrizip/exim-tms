@@ -29,7 +29,7 @@
 
     function shouldShowGlobalSearch() {
         const hash = (window.location.hash || '').toLowerCase();
-        return !!hash && hash !== '#dashboard';
+        return !!hash && hash !== '#dashboard' && hash !== '#globe';
     }
 
     function updateGlobalSearchVisibility() {

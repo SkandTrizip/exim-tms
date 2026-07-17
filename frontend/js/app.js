@@ -1802,7 +1802,9 @@ function handleRouting() {
         return;
     }
 
-    if (hash === '#enquiries') {
+    if (hash === '#globe') {
+        showGlobeView();
+    } else if (hash === '#enquiries') {
         showEnquiriesView();
     } else if (hash === '#quotes') {
         showQuotesView();
@@ -1882,6 +1884,18 @@ function showDashboardView() {
     hideAllViews();
     setActiveLink('navDashboard');
     document.getElementById('dashboardView').style.display = 'block';
+}
+
+function showGlobeView() {
+    hideAllViews();
+    setActiveLink('navGlobe');
+    const view = document.getElementById('globeView');
+    if (view) view.style.display = 'flex';
+    const content = document.getElementById('mainContent');
+    if (content) content.classList.add('content--globe');
+    if (typeof window.mountTradeGlobeView === 'function') {
+        window.mountTradeGlobeView();
+    }
 }
 
 function showEnquiriesView(filterType = null) {
@@ -2017,7 +2031,14 @@ function toggleSettingsNav(e) {
 }
 
 function hideAllViews() {
+    if (typeof window.unmountTradeGlobeView === 'function') {
+        window.unmountTradeGlobeView();
+    }
+    const content = document.getElementById('mainContent');
+    if (content) content.classList.remove('content--globe');
     document.getElementById('dashboardView').style.display = 'none';
+    const globeView = document.getElementById('globeView');
+    if (globeView) globeView.style.display = 'none';
     document.getElementById('enquiriesView').style.display = 'none';
     document.getElementById('quotesView').style.display = 'none';
     document.getElementById('trackingView').style.display = 'none';

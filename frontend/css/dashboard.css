@@ -265,6 +265,37 @@
     padding-bottom: 40px;
 }
 
+.content.content--globe {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    max-height: none;
+    padding: 0;
+    overflow: hidden;
+    box-shadow: none;
+    border: none;
+    background: transparent;
+}
+
+.main-panel:has(.content--globe) {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    max-height: 100vh;
+    padding: 12px 16px 12px;
+    overflow: hidden;
+}
+
+.app-main:has(.content--globe) {
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    height: 100vh;
+    overflow: hidden;
+}
+
 /* ---------- Page topbar ---------- */
 .page-topbar {
     display: flex;
@@ -724,6 +755,177 @@
     font-weight: 800;
     color: #0369a1;
     background: #e0f2fe;
+}
+
+/* —— Trade Globe page —— */
+.globe-view {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+}
+
+.globe-view__topbar {
+    flex: 0 0 auto;
+    margin-bottom: 12px;
+    align-items: center;
+    gap: 16px;
+}
+
+.globe-view__stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    border: 1px solid var(--border-light);
+    border-radius: 18px;
+    overflow: hidden;
+    background: #020617;
+}
+
+.globe-view__canvas {
+    position: relative;
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background:
+        radial-gradient(circle at 50% 45%, rgba(56, 189, 248, 0.12), transparent 42%),
+        #020617;
+}
+
+.globe-view__canvas > div {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.globe-view__canvas canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+.globe-view__aside {
+    border-left: 1px solid rgba(148, 163, 184, 0.2);
+    background: rgba(15, 23, 42, 0.96);
+    padding: 16px;
+    overflow: auto;
+    min-height: 0;
+}
+
+.trade-globe-overlay__layers {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.trade-globe-layer {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    background: #0f172a;
+    font-size: 12px;
+    font-weight: 700;
+    color: #e2e8f0;
+    cursor: pointer;
+    user-select: none;
+}
+
+.trade-globe-layer input {
+    accent-color: #38bdf8;
+}
+
+.trade-globe-aside-block + .trade-globe-aside-block {
+    margin-top: 18px;
+}
+
+.trade-globe-aside-block h3 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #94a3b8;
+}
+
+.trade-globe-aside-block ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 8px;
+}
+
+.trade-globe-aside-block li {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(2, 6, 23, 0.55);
+    border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.trade-globe-aside-block li strong {
+    font-size: 12px;
+    font-weight: 700;
+    color: #f1f5f9;
+}
+
+.trade-globe-aside-block li span {
+    font-size: 11px;
+    font-weight: 600;
+    color: #94a3b8;
+}
+
+.trade-globe-aside-block li.is-empty {
+    color: #64748b;
+    font-size: 12px;
+}
+
+.globe-tip {
+    font-family: 'Manrope', sans-serif;
+    font-size: 12px;
+    line-height: 1.35;
+}
+
+@media (max-width: 900px) {
+    .main-panel:has(.content--globe) {
+        height: auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .app-main:has(.content--globe) {
+        height: auto;
+        overflow: visible;
+    }
+
+    .content.content--globe {
+        height: auto;
+        overflow: visible;
+    }
+
+    .globe-view {
+        height: auto;
+        min-height: 0;
+    }
+
+    .globe-view__stage {
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(360px, 55vh) minmax(200px, auto);
+        min-height: 560px;
+    }
+
+    .globe-view__aside {
+        border-left: 0;
+        border-top: 1px solid rgba(148, 163, 184, 0.2);
+    }
 }
 
 @media (max-width: 900px) {
