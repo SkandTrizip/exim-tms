@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 from backend.models.document import ShipmentDocument
 from backend.models.enquiry_economics import EnquiryEconomics
 from backend.models.final_quote import FinalQuote, FinalQuoteContainer
+from backend.models.finance import OverheadPayment
 from backend.models.quote import Quote, QuoteContainer
 from backend.models.shipment_status import ShipmentStatus
 from backend.utils.logger import logger
@@ -151,6 +152,35 @@ def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> float:
     return round(total, 2)
 
 
+def _sum_overhead_economics(db: Session, enquiry_id: int) -> Tuple[float, float]:
+    """
+    Overhead payments booked against the enquiry.
+    Returns (cost_addition, revenue_deduction):
+      - cost_impact == "add_to_shipping_line" -> added to cost
+      - cost_impact == "deduct_from_client"   -> deducted from revenue
+    Amounts are treated as INR.
+    """
+    rows = (
+        db.query(OverheadPayment)
+        .filter(OverheadPayment.enquiry_id == enquiry_id)
+        .all()
+    )
+    cost_add = 0.0
+    revenue_deduct = 0.0
+    for row in rows:
+        try:
+            amount = float(row.amount or 0)
+        except (TypeError, ValueError):
+            continue
+        if amount <= 0:
+            continue
+        if row.cost_impact == "deduct_from_client":
+            revenue_deduct += amount
+        else:
+            cost_add += amount
+    return round(cost_add, 2), round(revenue_deduct, 2)
+
+
 def get_sob_date_for_enquiry(db: Session, enquiry_id: int) -> Optional[datetime.date]:
     """Return the SOB date from shipment_statuses, if set."""
     status = (
@@ -243,6 +273,11 @@ def compute_enquiry_economics(db: Session, enquiry_id: int) -> Tuple[float, floa
     additional = _sum_additional_line_items_inr(db, enquiry_id)
     cost += additional
     revenue += additional
+
+    # Intermittent overheads: add to shipping-line cost, or deduct from client revenue.
+    overhead_cost, overhead_deduct = _sum_overhead_economics(db, enquiry_id)
+    cost += overhead_cost
+    revenue -= overhead_deduct
 
     return round(cost, 2), round(revenue, 2)
 

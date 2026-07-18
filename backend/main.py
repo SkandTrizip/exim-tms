@@ -8,10 +8,12 @@ from fastapi.staticfiles import StaticFiles
 # Add the project root to sys.path to resolve 'backend' imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.routers import enquiry, pricing, workflow, port, exchange_rate, quote, tracking, auth, client, dashboard, invoice, finance, shipping_line, google_maps, search
+from backend.routers import enquiry, pricing, workflow, port, exchange_rate, quote, tracking, auth, client, dashboard, invoice, finance, shipping_line, google_maps, search, overhead, payee
 from backend.models.user import User
 from backend.models.invoice import Invoice
-from backend.models.finance import ShippingPayment
+from backend.models.finance import ShippingPayment, OverheadPayment
+from backend.models.overhead import Overhead
+from backend.models.payee import Payee
 from backend.models.final_quote import FinalQuote, FinalQuoteContainer, FinalQuoteCharge
 from backend.models.enquiry_economics import EnquiryEconomics
 from backend.config import get_frontend_config, UPLOAD_DIR, API_URL, ADMIN_USERS
@@ -49,6 +51,8 @@ _column_migrations = [
     ("quote_charges", "vendor_exchange_rate", "FLOAT DEFAULT 1.0"),
     ("final_quote_charges", "vendor_exchange_rate", "FLOAT DEFAULT 1.0"),
     ("enquiry_economics", "sob_date", "DATE"),
+    ("overhead_payments", "pay_to_type", "VARCHAR DEFAULT 'payee'"),
+    ("overhead_payments", "cost_impact", "VARCHAR DEFAULT 'add_to_shipping_line'"),
 ]
 with engine.connect() as _conn:
     _inspector = inspect(engine)
@@ -207,6 +211,8 @@ app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"]
 app.include_router(invoice.router, prefix="/api", tags=["Invoice"])
 app.include_router(finance.router, prefix="/api", tags=["Finance"])
 app.include_router(shipping_line.router, prefix="/api/shipping-lines", tags=["Shipping Lines"])
+app.include_router(overhead.router, prefix="/api/overheads", tags=["Overheads"])
+app.include_router(payee.router, prefix="/api/payees", tags=["Payees"])
 app.include_router(google_maps.router, prefix="/api", tags=["Google Maps"])
 app.include_router(search.router, prefix="/api", tags=["Global Search"])
 
@@ -301,6 +307,8 @@ frontend_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__f
 @app.get("/hbl-document", include_in_schema=False)
 @app.get("/client-master", include_in_schema=False)
 @app.get("/shipping-line", include_in_schema=False)
+@app.get("/overhead-master", include_in_schema=False)
+@app.get("/payee-master", include_in_schema=False)
 @app.get("/record-payment", include_in_schema=False)
 async def serve_frontend_pages(request: Request):
     page = request.url.path.strip("/")

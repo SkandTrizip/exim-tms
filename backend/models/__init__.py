@@ -12,10 +12,12 @@ from backend.models.user import User
 from backend.models.shipment_status import ShipmentStatus
 from backend.models.client_master import ClientMaster
 from backend.models.client_origin import ClientOrigin
-from backend.models.finance import ShippingPayment
+from backend.models.finance import ShippingPayment, OverheadPayment
 from backend.models.invoice import Invoice
 from backend.models.shipping_line import ShippingLine as ShippingLineModel
 from backend.models.enquiry_economics import EnquiryEconomics
+from backend.models.overhead import Overhead
+from backend.models.payee import Payee
 
 __all__ = [
     "Enquiry",
@@ -32,7 +34,10 @@ __all__ = [
     "ClientMaster",
     "ClientOrigin",
     "ShippingPayment",
+    "OverheadPayment",
     "Invoice",
     "ShippingLineModel",
     "EnquiryEconomics",
+    "Overhead",
+    "Payee",
 ]
