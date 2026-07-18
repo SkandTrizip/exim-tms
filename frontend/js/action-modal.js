@@ -59,6 +59,36 @@ const ACTION_MODAL_COPY = {
         subtitle: 'Shipping line partner details',
         primary: null
     },
+    'add-overhead': {
+        title: 'Add Overhead',
+        subtitle: 'Define an intermittent overhead charge',
+        primary: 'Save Overhead'
+    },
+    'edit-overhead': {
+        title: 'Edit Overhead',
+        subtitle: 'Update overhead charge details',
+        primary: 'Update Overhead'
+    },
+    'view-overhead': {
+        title: 'View Overhead',
+        subtitle: 'Overhead charge details',
+        primary: null
+    },
+    'add-payee': {
+        title: 'Add Payee',
+        subtitle: 'Register a party and bank details for payments',
+        primary: 'Save Payee'
+    },
+    'edit-payee': {
+        title: 'Edit Payee',
+        subtitle: 'Update payee and bank details',
+        primary: 'Update Payee'
+    },
+    'view-payee': {
+        title: 'View Payee',
+        subtitle: 'Payee and bank details',
+        primary: null
+    },
     'new-sale': {
         title: 'Create New Sale',
         subtitle: 'Enter basic shipment details to start the workflow',
@@ -453,7 +483,12 @@ async function saveSaleFromModal() {
 }
 
 function isMasterSaveMode(mode) {
-    return ['add-client', 'edit-client', 'add-shipping-line', 'edit-shipping-line'].includes(mode);
+    return [
+        'add-client', 'edit-client',
+        'add-shipping-line', 'edit-shipping-line',
+        'add-overhead', 'edit-overhead',
+        'add-payee', 'edit-payee'
+    ].includes(mode);
 }
 
 async function invokeMasterSaveFromDrawer(mode) {
@@ -465,6 +500,20 @@ async function invokeMasterSaveFromDrawer(mode) {
             throw new Error('Client form is not ready yet. Try again.');
         }
         await win.saveEmbeddedMaster();
+        return;
+    }
+    if (mode.includes('overhead')) {
+        if (typeof win.saveEmbeddedOverhead !== 'function') {
+            throw new Error('Overhead form is not ready yet. Try again.');
+        }
+        await win.saveEmbeddedOverhead();
+        return;
+    }
+    if (mode.includes('payee')) {
+        if (typeof win.saveEmbeddedPayee !== 'function') {
+            throw new Error('Payee form is not ready yet. Try again.');
+        }
+        await win.saveEmbeddedPayee();
         return;
     }
     if (typeof win.saveEmbeddedShippingLine !== 'function') {
@@ -614,6 +663,42 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
     if (mode === 'view-shipping-line' && enquiryId) {
         bodyEl.className = 'action-modal-body action-modal-body-iframe';
         bodyEl.innerHTML = renderIframeSection(`/shipping-line?embedded=1&id=${enquiryId}&view=1`);
+        return;
+    }
+
+    if (mode === 'add-overhead') {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = renderIframeSection('/overhead-master?embedded=1');
+        return;
+    }
+
+    if (mode === 'edit-overhead' && enquiryId) {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = renderIframeSection(`/overhead-master?embedded=1&id=${enquiryId}`);
+        return;
+    }
+
+    if (mode === 'view-overhead' && enquiryId) {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = renderIframeSection(`/overhead-master?embedded=1&id=${enquiryId}&view=1`);
+        return;
+    }
+
+    if (mode === 'add-payee') {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = renderIframeSection('/payee-master?embedded=1');
+        return;
+    }
+
+    if (mode === 'edit-payee' && enquiryId) {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = renderIframeSection(`/payee-master?embedded=1&id=${enquiryId}`);
+        return;
+    }
+
+    if (mode === 'view-payee' && enquiryId) {
+        bodyEl.className = 'action-modal-body action-modal-body-iframe';
+        bodyEl.innerHTML = renderIframeSection(`/payee-master?embedded=1&id=${enquiryId}&view=1`);
         return;
     }
 
@@ -767,6 +852,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 message = message || (isUpdate
                     ? `Shipping line ${name} was updated successfully.`
                     : `Shipping line ${name} was created successfully.`);
+            } else if (entity === 'overhead') {
+                title = isUpdate ? 'Overhead Updated' : 'Overhead Saved';
+                message = message || (isUpdate
+                    ? 'The overhead was updated successfully.'
+                    : 'The overhead was created and is pending verification.');
+            } else if (entity === 'payee') {
+                title = isUpdate ? 'Payee Updated' : 'Payee Saved';
+                message = message || (isUpdate
+                    ? 'The payee was updated successfully.'
+                    : 'The payee was created and is pending verification.');
             } else if (!message) {
                 message = isUpdate ? 'Changes were saved successfully.' : 'Saved successfully.';
             }

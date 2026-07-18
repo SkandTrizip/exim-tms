@@ -6,8 +6,12 @@
 const mastersState = {
     clients: [],
     shippingLines: [],
+    overheads: [],
+    payees: [],
     clientsPage: 1,
     shippingPage: 1,
+    overheadPage: 1,
+    payeePage: 1,
     pageSize: 20,
     activeList: null
 };
@@ -70,9 +74,17 @@ function openMasterDrawer(mode, id) {
     }
 }
 
+const MASTER_MODE_MAP = {
+    client: { edit: 'edit-client', view: 'view-client' },
+    shipping: { edit: 'edit-shipping-line', view: 'view-shipping-line' },
+    overhead: { edit: 'edit-overhead', view: 'view-overhead' },
+    payee: { edit: 'edit-payee', view: 'view-payee' },
+};
+
 function renderMasterRowActions(type, id, status = null) {
-    const editMode = type === 'client' ? 'edit-client' : 'edit-shipping-line';
-    const viewMode = type === 'client' ? 'view-client' : 'view-shipping-line';
+    const modes = MASTER_MODE_MAP[type] || MASTER_MODE_MAP.client;
+    const editMode = modes.edit;
+    const viewMode = modes.view;
     const statusKey = String(status || 'pending').toLowerCase();
     const canApprove = isMastersAdmin() && statusKey !== 'verified' && statusKey !== 'approved';
 
@@ -126,15 +138,21 @@ function closeMastersActionMenus() {
     });
 }
 
+const MASTER_META = {
+    client: { label: 'client master', verify: (id) => `${CONFIG.API_URL}/api/client/master/${id}/verify`, reject: (id) => `${CONFIG.API_URL}/api/client/master/${id}/reject` },
+    shipping: { label: 'shipping line', verify: (id) => `${CONFIG.API_URL}/api/shipping-lines/${id}/verify`, reject: (id) => `${CONFIG.API_URL}/api/shipping-lines/${id}/reject` },
+    overhead: { label: 'overhead', verify: (id) => `${CONFIG.API_URL}/api/overheads/${id}/verify`, reject: (id) => `${CONFIG.API_URL}/api/overheads/${id}/reject` },
+    payee: { label: 'payee', verify: (id) => `${CONFIG.API_URL}/api/payees/${id}/verify`, reject: (id) => `${CONFIG.API_URL}/api/payees/${id}/reject` },
+};
+
 async function approveMasterRecord(type, id) {
-    const label = type === 'client' ? 'client master' : 'shipping line';
+    const meta = MASTER_META[type] || MASTER_META.client;
+    const label = meta.label;
     closeMastersActionMenus();
 
     const run = async () => {
         try {
-            const url = type === 'client'
-                ? `${CONFIG.API_URL}/api/client/master/${id}/verify`
-                : `${CONFIG.API_URL}/api/shipping-lines/${id}/verify`;
+            const url = meta.verify(id);
             const res = await fetch(url, { method: 'PATCH', headers: mastersAuthHeaders() });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
@@ -158,14 +176,13 @@ async function approveMasterRecord(type, id) {
 }
 
 async function rejectMasterRecord(type, id) {
-    const label = type === 'client' ? 'client master' : 'shipping line';
+    const meta = MASTER_META[type] || MASTER_META.client;
+    const label = meta.label;
     closeMastersActionMenus();
 
     const run = async () => {
         try {
-            const url = type === 'client'
-                ? `${CONFIG.API_URL}/api/client/master/${id}/reject`
-                : `${CONFIG.API_URL}/api/shipping-lines/${id}/reject`;
+            const url = meta.reject(id);
             const res = await fetch(url, { method: 'PATCH', headers: mastersAuthHeaders() });
             if (!res.ok) {
                 const err = await res.json().catch(() => ({}));
@@ -250,22 +267,42 @@ async function fetchMastersShippingLines() {
     return res.json();
 }
 
+async function fetchMastersOverheads() {
+    const res = await fetch(`${CONFIG.API_URL}/api/overheads/`);
+    if (!res.ok) throw new Error('Failed to load overheads');
+    return res.json();
+}
+
+async function fetchMastersPayees() {
+    const res = await fetch(`${CONFIG.API_URL}/api/payees/`);
+    if (!res.ok) throw new Error('Failed to load payees');
+    return res.json();
+}
+
 async function loadMastersDashboard() {
     const badge = document.getElementById('mastersTotalBadge');
     const clientCountEl = document.getElementById('masterCardClientCount');
     const shippingCountEl = document.getElementById('masterCardShippingCount');
+    const overheadCountEl = document.getElementById('masterCardOverheadCount');
+    const payeeCountEl = document.getElementById('masterCardPayeeCount');
 
     try {
-        const [clients, shipping] = await Promise.all([
+        const [clients, shipping, overheads, payees] = await Promise.all([
             fetchMastersClients().catch(() => []),
-            fetchMastersShippingLines().catch(() => [])
+            fetchMastersShippingLines().catch(() => []),
+            fetchMastersOverheads().catch(() => []),
+            fetchMastersPayees().catch(() => [])
         ]);
         mastersState.clients = clients;
         mastersState.shippingLines = shipping;
-        const total = clients.length + shipping.length;
+        mastersState.overheads = overheads;
+        mastersState.payees = payees;
+        const total = clients.length + shipping.length + overheads.length + payees.length;
         if (badge) badge.textContent = String(total);
         if (clientCountEl) clientCountEl.textContent = `${clients.length} records`;
         if (shippingCountEl) shippingCountEl.textContent = `${shipping.length} records`;
+        if (overheadCountEl) overheadCountEl.textContent = `${overheads.length} records`;
+        if (payeeCountEl) payeeCountEl.textContent = `${payees.length} records`;
     } catch (err) {
         console.error('Masters dashboard load failed:', err);
     }
@@ -367,6 +404,98 @@ function renderShippingLinesTable() {
     }
 }
 
+function renderOverheadsTable() {
+    const tbody = document.getElementById('mastersOverheadTable');
+    const countEl = document.getElementById('mastersOverheadRecordsCount');
+    if (!tbody) return;
+
+    const input = document.getElementById('mastersOverheadSearchInput');
+    const q = (input?.value || '').trim().toLowerCase();
+    let rows = [...mastersState.overheads];
+    if (q) rows = rows.filter((o) => JSON.stringify(o).toLowerCase().includes(q));
+
+    if (countEl) countEl.textContent = String(rows.length);
+
+    const page = mastersState.overheadPage;
+    const pageSize = mastersState.pageSize;
+    const start = (page - 1) * pageSize;
+    const slice = rows.slice(start, start + pageSize);
+
+    if (slice.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--text-tertiary);font-weight:600;">No overheads found.</td></tr>';
+    } else {
+        tbody.innerHTML = slice.map((o) => `
+            <tr class="list-row">
+                <td data-col="code" class="master-code-cell">
+                    <a href="#" class="cell-enquiry-id" onclick="openMasterDrawer('view-overhead', ${o.id}); return false;">
+                        <strong>OV${String(o.id).padStart(3, '0')}</strong>
+                    </a>
+                    <span class="sub">${escapeHtml(formatMasterDate(o.created_at))}</span>
+                </td>
+                <td data-col="status">${masterStatusBadge(o.status)}</td>
+                <td data-col="name" class="cell-upper">${escapeHtml(o.overhead_name || '—')}</td>
+                <td data-col="category">${escapeHtml(o.category || '—')}</td>
+                <td data-col="currency">${escapeHtml(o.default_currency || '—')}</td>
+                <td data-col="amount">${o.default_amount != null ? escapeHtml(String(o.default_amount)) : '—'}</td>
+                <td data-col="action">${renderMasterRowActions('overhead', o.id, o.status)}</td>
+            </tr>`).join('');
+    }
+
+    renderMastersPagination('mastersOverheadPagination', rows.length, page, (p) => {
+        mastersState.overheadPage = p;
+        renderOverheadsTable();
+    }, pageSize);
+    if (typeof window.refreshListTableFilters === 'function') {
+        window.refreshListTableFilters('mastersOverheadTable');
+    }
+}
+
+function renderPayeesTable() {
+    const tbody = document.getElementById('mastersPayeeTable');
+    const countEl = document.getElementById('mastersPayeeRecordsCount');
+    if (!tbody) return;
+
+    const input = document.getElementById('mastersPayeeSearchInput');
+    const q = (input?.value || '').trim().toLowerCase();
+    let rows = [...mastersState.payees];
+    if (q) rows = rows.filter((p) => JSON.stringify(p).toLowerCase().includes(q));
+
+    if (countEl) countEl.textContent = String(rows.length);
+
+    const page = mastersState.payeePage;
+    const pageSize = mastersState.pageSize;
+    const start = (page - 1) * pageSize;
+    const slice = rows.slice(start, start + pageSize);
+
+    if (slice.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--text-tertiary);font-weight:600;">No payees found.</td></tr>';
+    } else {
+        tbody.innerHTML = slice.map((p) => `
+            <tr class="list-row">
+                <td data-col="code" class="master-code-cell">
+                    <a href="#" class="cell-enquiry-id" onclick="openMasterDrawer('view-payee', ${p.id}); return false;">
+                        <strong>PY${String(p.id).padStart(3, '0')}</strong>
+                    </a>
+                    <span class="sub">${escapeHtml(formatMasterDate(p.created_at))}</span>
+                </td>
+                <td data-col="status">${masterStatusBadge(p.status)}</td>
+                <td data-col="name" class="cell-upper">${escapeHtml(p.payee_name || '—')}</td>
+                <td data-col="type">${escapeHtml(p.payee_type || '—')}</td>
+                <td data-col="contact">${escapeHtml(p.contact_person || '—')}</td>
+                <td data-col="bank">${escapeHtml(p.bank || '—')}</td>
+                <td data-col="action">${renderMasterRowActions('payee', p.id, p.status)}</td>
+            </tr>`).join('');
+    }
+
+    renderMastersPagination('mastersPayeePagination', rows.length, page, (p) => {
+        mastersState.payeePage = p;
+        renderPayeesTable();
+    }, pageSize);
+    if (typeof window.refreshListTableFilters === 'function') {
+        window.refreshListTableFilters('mastersPayeeTable');
+    }
+}
+
 window.loadMastersClientList = async function loadMastersClientList() {
     const tbody = document.getElementById('mastersClientsTable');
     if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="padding:24px;text-align:center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
@@ -391,8 +520,32 @@ window.loadMastersShippingList = async function loadMastersShippingList() {
     }
 }
 
+window.loadMastersOverheadList = async function loadMastersOverheadList() {
+    const tbody = document.getElementById('mastersOverheadTable');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="padding:24px;text-align:center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+    try {
+        mastersState.overheads = await fetchMastersOverheads();
+        mastersState.overheadPage = 1;
+        renderOverheadsTable();
+    } catch (err) {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--error);">${escapeHtml(err.message)}</td></tr>`;
+    }
+}
+
+window.loadMastersPayeeList = async function loadMastersPayeeList() {
+    const tbody = document.getElementById('mastersPayeeTable');
+    if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="padding:24px;text-align:center;"><i class="fas fa-spinner fa-spin"></i></td></tr>';
+    try {
+        mastersState.payees = await fetchMastersPayees();
+        mastersState.payeePage = 1;
+        renderPayeesTable();
+    } catch (err) {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--error);">${escapeHtml(err.message)}</td></tr>`;
+    }
+}
+
 function hideMastersSubViews() {
-    ['mastersDashboardView', 'mastersClientListView', 'mastersShippingListView'].forEach((id) => {
+    ['mastersDashboardView', 'mastersClientListView', 'mastersShippingListView', 'mastersOverheadListView', 'mastersPayeeListView'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
@@ -440,9 +593,35 @@ window.showMastersShippingList = function showMastersShippingList() {
     loadMastersShippingList();
 };
 
+window.showMastersOverheadList = function showMastersOverheadList() {
+    hideAllViews();
+    hideMastersSubViews();
+    setActiveLink('navSettings');
+    openMastersRailGroup();
+    const view = document.getElementById('mastersOverheadListView');
+    if (view) view.style.display = 'block';
+    mastersState.activeList = 'overheads';
+    if (window.location.hash !== '#masters-overheads') window.location.hash = '#masters-overheads';
+    loadMastersOverheadList();
+};
+
+window.showMastersPayeeList = function showMastersPayeeList() {
+    hideAllViews();
+    hideMastersSubViews();
+    setActiveLink('navSettings');
+    openMastersRailGroup();
+    const view = document.getElementById('mastersPayeeListView');
+    if (view) view.style.display = 'block';
+    mastersState.activeList = 'payees';
+    if (window.location.hash !== '#masters-payees') window.location.hash = '#masters-payees';
+    loadMastersPayeeList();
+};
+
 window.refreshMastersList = function refreshMastersList() {
     if (mastersState.activeList === 'clients') loadMastersClientList();
     else if (mastersState.activeList === 'shipping') loadMastersShippingList();
+    else if (mastersState.activeList === 'overheads') loadMastersOverheadList();
+    else if (mastersState.activeList === 'payees') loadMastersPayeeList();
     else loadMastersDashboard();
 };
 
@@ -477,6 +656,36 @@ function initMastersUI() {
         shippingExport.addEventListener('click', () => exportVisibleTableToCsv('mastersShippingDataTable', 'mastersShippingTable', 'shipping_lines'));
     }
 
+    const overheadSearch = document.getElementById('mastersOverheadSearchInput');
+    if (overheadSearch && !overheadSearch.dataset.bound) {
+        overheadSearch.dataset.bound = '1';
+        overheadSearch.addEventListener('input', () => {
+            mastersState.overheadPage = 1;
+            renderOverheadsTable();
+        });
+    }
+
+    const payeeSearch = document.getElementById('mastersPayeeSearchInput');
+    if (payeeSearch && !payeeSearch.dataset.bound) {
+        payeeSearch.dataset.bound = '1';
+        payeeSearch.addEventListener('input', () => {
+            mastersState.payeePage = 1;
+            renderPayeesTable();
+        });
+    }
+
+    const overheadExport = document.getElementById('mastersOverheadExportBtn');
+    if (overheadExport && !overheadExport.dataset.bound) {
+        overheadExport.dataset.bound = '1';
+        overheadExport.addEventListener('click', () => exportVisibleTableToCsv('mastersOverheadDataTable', 'mastersOverheadTable', 'overheads'));
+    }
+
+    const payeeExport = document.getElementById('mastersPayeeExportBtn');
+    if (payeeExport && !payeeExport.dataset.bound) {
+        payeeExport.dataset.bound = '1';
+        payeeExport.addEventListener('click', () => exportVisibleTableToCsv('mastersPayeeDataTable', 'mastersPayeeTable', 'payees'));
+    }
+
     initListTableUI({
         searchId: 'mastersClientsSearchInput',
         exportId: 'mastersClientsExportBtn',
@@ -499,6 +708,30 @@ function initMastersUI() {
         tableId: 'mastersShippingDataTable',
         tbodyId: 'mastersShippingTable',
         exportName: 'shipping_lines'
+    });
+
+    initListTableUI({
+        searchId: 'mastersOverheadSearchInput',
+        exportId: 'mastersOverheadExportBtn',
+        toggleBtnId: 'mastersOverheadToggleColumnsBtn',
+        menuId: 'mastersOverheadColumnsMenu',
+        dropdownId: 'mastersOverheadColumnsDropdown',
+        cardId: 'mastersOverheadTableCard',
+        tableId: 'mastersOverheadDataTable',
+        tbodyId: 'mastersOverheadTable',
+        exportName: 'overheads'
+    });
+
+    initListTableUI({
+        searchId: 'mastersPayeeSearchInput',
+        exportId: 'mastersPayeeExportBtn',
+        toggleBtnId: 'mastersPayeeToggleColumnsBtn',
+        menuId: 'mastersPayeeColumnsMenu',
+        dropdownId: 'mastersPayeeColumnsDropdown',
+        cardId: 'mastersPayeeTableCard',
+        tableId: 'mastersPayeeDataTable',
+        tbodyId: 'mastersPayeeTable',
+        exportName: 'payees'
     });
 }
 

@@ -935,6 +935,34 @@
                                 <span style="position:absolute;bottom:52px;right:18px;font-size:11px;font-weight:700;color:var(--text-tertiary);" id="masterCardShippingCount">0 records</span>
                             </button>
 
+                            <button type="button" class="master-hub-card" onclick="showMastersOverheadList()">
+                                <div class="master-hub-card-top">
+                                    <span class="master-hub-icon overheads"><i class="fas fa-coins"></i></span>
+                                    <span class="master-hub-status">Active</span>
+                                </div>
+                                <h2 class="master-hub-title">Overheads (Intermittent)</h2>
+                                <p class="master-hub-desc">Define occasional overhead charges to book against shipments.</p>
+                                <div class="master-hub-footer">
+                                    <span class="master-hub-access">Access</span>
+                                    <span class="master-hub-arrow"><i class="fas fa-arrow-right"></i></span>
+                                </div>
+                                <span style="position:absolute;bottom:52px;right:18px;font-size:11px;font-weight:700;color:var(--text-tertiary);" id="masterCardOverheadCount">0 records</span>
+                            </button>
+
+                            <button type="button" class="master-hub-card" onclick="showMastersPayeeList()">
+                                <div class="master-hub-card-top">
+                                    <span class="master-hub-icon payees"><i class="fas fa-user-tag"></i></span>
+                                    <span class="master-hub-status">Active</span>
+                                </div>
+                                <h2 class="master-hub-title">Payee Master</h2>
+                                <p class="master-hub-desc">Manage parties and bank details for outgoing payments.</p>
+                                <div class="master-hub-footer">
+                                    <span class="master-hub-access">Access</span>
+                                    <span class="master-hub-arrow"><i class="fas fa-arrow-right"></i></span>
+                                </div>
+                                <span style="position:absolute;bottom:52px;right:18px;font-size:11px;font-weight:700;color:var(--text-tertiary);" id="masterCardPayeeCount">0 records</span>
+                            </button>
+
                             <a href="/generate-hbl" class="master-hub-card" style="text-decoration:none;color:inherit;">
                                 <div class="master-hub-card-top">
                                     <span class="master-hub-icon hbl"><i class="fas fa-file-contract"></i></span>
@@ -1095,6 +1123,154 @@
                             </table>
                             </div>
                             <div class="pagination-container" id="mastersShippingPagination"></div>
+                        </div>
+                    </div>
+
+                    <!-- Overheads (Intermittent) Master List -->
+                    <div id="mastersOverheadListView" class="view-content" style="display: none;">
+                        <div class="master-list-topbar">
+                            <div class="master-list-title-wrap">
+                                <div class="master-list-breadcrumb">
+                                    <a href="#masters" onclick="showMastersDashboard(); return false;">Masters</a>
+                                    <i class="fas fa-chevron-right"></i>
+                                    <span>Overheads</span>
+                                </div>
+                                <h1>Overheads (Intermittent)</h1>
+                            </div>
+                            <div class="master-list-actions">
+                                <button type="button" class="master-icon-btn primary" title="Add Overhead" onclick="openMasterDrawer('add-overhead')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                                <button type="button" class="master-icon-btn" title="Refresh" onclick="loadMastersOverheadList()">
+                                    <i class="fas fa-rotate-right"></i>
+                                </button>
+                                <div class="master-records-pill">
+                                    <i class="fas fa-list"></i>
+                                    <span id="mastersOverheadRecordsCount">0</span> records
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-container table-card list-table-card" id="mastersOverheadTableCard">
+                            <div class="table-tools">
+                                <div class="table-tools-left">
+                                    <div class="table-search">
+                                        <i class="fas fa-magnifying-glass"></i>
+                                        <input id="mastersOverheadSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
+                                    </div>
+                                </div>
+                                <div class="table-tools-right">
+                                    <button class="btn btn-secondary table-tool-btn" id="mastersOverheadExportBtn" type="button">
+                                        <i class="fas fa-arrow-up-from-bracket"></i> Export Data
+                                    </button>
+                                    <div class="table-dropdown" id="mastersOverheadColumnsDropdown">
+                                        <button class="btn btn-secondary table-tool-btn" type="button" id="mastersOverheadToggleColumnsBtn">
+                                            Toggle Columns <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <div class="table-dropdown-menu" id="mastersOverheadColumnsMenu" role="menu">
+                                            <label class="dropdown-item"><input type="checkbox" data-col="code" checked> Overhead Code</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="status" checked> Approval Status</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="name" checked> Overhead Name</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="category" checked> Category</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="currency" checked> Currency</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="amount" checked> Amount</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="action" checked> Actions</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="list-table-scroll">
+                            <table class="data-table list-table" id="mastersOverheadDataTable">
+                                <thead>
+                                    <tr>
+                                        <th data-col="code">Overhead Code</th>
+                                        <th data-col="status">Approval Status</th>
+                                        <th data-col="name">Overhead Name</th>
+                                        <th data-col="category">Category</th>
+                                        <th data-col="currency">Currency</th>
+                                        <th data-col="amount">Amount</th>
+                                        <th data-col="action">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mastersOverheadTable"></tbody>
+                            </table>
+                            </div>
+                            <div class="pagination-container" id="mastersOverheadPagination"></div>
+                        </div>
+                    </div>
+
+                    <!-- Payee Master List -->
+                    <div id="mastersPayeeListView" class="view-content" style="display: none;">
+                        <div class="master-list-topbar">
+                            <div class="master-list-title-wrap">
+                                <div class="master-list-breadcrumb">
+                                    <a href="#masters" onclick="showMastersDashboard(); return false;">Masters</a>
+                                    <i class="fas fa-chevron-right"></i>
+                                    <span>Payees</span>
+                                </div>
+                                <h1>Payee Details</h1>
+                            </div>
+                            <div class="master-list-actions">
+                                <button type="button" class="master-icon-btn primary" title="Add Payee" onclick="openMasterDrawer('add-payee')">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                                <button type="button" class="master-icon-btn" title="Refresh" onclick="loadMastersPayeeList()">
+                                    <i class="fas fa-rotate-right"></i>
+                                </button>
+                                <div class="master-records-pill">
+                                    <i class="fas fa-list"></i>
+                                    <span id="mastersPayeeRecordsCount">0</span> records
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="table-container table-card list-table-card" id="mastersPayeeTableCard">
+                            <div class="table-tools">
+                                <div class="table-tools-left">
+                                    <div class="table-search">
+                                        <i class="fas fa-magnifying-glass"></i>
+                                        <input id="mastersPayeeSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
+                                    </div>
+                                </div>
+                                <div class="table-tools-right">
+                                    <button class="btn btn-secondary table-tool-btn" id="mastersPayeeExportBtn" type="button">
+                                        <i class="fas fa-arrow-up-from-bracket"></i> Export Data
+                                    </button>
+                                    <div class="table-dropdown" id="mastersPayeeColumnsDropdown">
+                                        <button class="btn btn-secondary table-tool-btn" type="button" id="mastersPayeeToggleColumnsBtn">
+                                            Toggle Columns <i class="fas fa-chevron-down"></i>
+                                        </button>
+                                        <div class="table-dropdown-menu" id="mastersPayeeColumnsMenu" role="menu">
+                                            <label class="dropdown-item"><input type="checkbox" data-col="code" checked> Payee Code</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="status" checked> Approval Status</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="name" checked> Payee Name</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="type" checked> Type</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="contact" checked> Contact Person</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="bank" checked> Bank</label>
+                                            <label class="dropdown-item"><input type="checkbox" data-col="action" checked> Actions</label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="list-table-scroll">
+                            <table class="data-table list-table" id="mastersPayeeDataTable">
+                                <thead>
+                                    <tr>
+                                        <th data-col="code">Payee Code</th>
+                                        <th data-col="status">Approval Status</th>
+                                        <th data-col="name">Payee Name</th>
+                                        <th data-col="type">Type</th>
+                                        <th data-col="contact">Contact Person</th>
+                                        <th data-col="bank">Bank</th>
+                                        <th data-col="action">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="mastersPayeeTable"></tbody>
+                            </table>
+                            </div>
+                            <div class="pagination-container" id="mastersPayeePagination"></div>
                         </div>
                     </div>
 

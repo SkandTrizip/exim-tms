@@ -15,11 +15,327 @@ document.addEventListener('DOMContentLoaded', async function () {
     await fetchEnquiryDetails();
     await fetchUploadedDocuments();
     await fetchFinanceStatus();
+    await loadOverheadSection();
 
     // Initialize quick entry date
     const dateInput = document.getElementById('quick_pay_date');
     if (dateInput) dateInput.value = new Date().toISOString().split('T')[0];
 });
+
+// ── Overheads (intermittent charges) ────────────────────────────────────────
+let overheadCatalog = [];
+let payeeCatalog = [];
+let bookingOverheadId = null;
+let baseShippingLineTotal = 0;
+let overheadAddToLineTotal = 0;
+let overheadDeductClientTotal = 0;
+
+function ovpEscape(str) {
+    if (typeof escapeHtml === 'function') return escapeHtml(str == null ? '' : String(str));
+    return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function ovpAuthHeaders() {
+    const t = localStorage.getItem('token') || '';
+    return t ? { 'Content-Type': 'application/json', Authorization: `Bearer ${t}` }
+             : { 'Content-Type': 'application/json' };
+}
+
+async function loadOverheadSection() {
+    try {
+        const [ovRes, pyRes] = await Promise.all([
+            fetch(`${CONFIG.API_URL}/api/overheads/`).catch(() => null),
+            fetch(`${CONFIG.API_URL}/api/payees/`).catch(() => null)
+        ]);
+        overheadCatalog = ovRes && ovRes.ok ? await ovRes.json() : [];
+        payeeCatalog = pyRes && pyRes.ok ? await pyRes.json() : [];
+        populateOverheadSelect();
+        populatePayeeSelect();
+    } catch (e) {
+        console.error('Failed to load overhead/payee catalogs', e);
+    }
+    await fetchOverheadPayments();
+}
+
+function populateOverheadSelect() {
+    const sel = document.getElementById('ovp_overhead');
+    if (!sel) return;
+    const verified = overheadCatalog.filter(o => (o.status || '').toLowerCase() === 'verified');
+    const list = verified.length ? verified : overheadCatalog;
+    sel.innerHTML = '<option value="">Select overhead…</option>' +
+        list.map(o => `<option value="${o.id}">${ovpEscape(o.overhead_name)}${o.category ? ' · ' + ovpEscape(o.category) : ''}</option>`).join('');
+}
+
+function populatePayeeSelect() {
+    const sel = document.getElementById('ovp_payee');
+    if (!sel) return;
+    const verified = payeeCatalog.filter(p => (p.status || '').toLowerCase() === 'verified');
+    const list = verified.length ? verified : payeeCatalog;
+    sel.innerHTML = '<option value="">Select payee…</option>' +
+        list.map(p => `<option value="${p.id}">${ovpEscape(p.payee_name)}${p.bank ? ' · ' + ovpEscape(p.bank) : ''}</option>`).join('') +
+        '<option value="__new__">➕ Add new payee…</option>';
+}
+
+function onOverheadSelected() {
+    const sel = document.getElementById('ovp_overhead');
+    const ov = overheadCatalog.find(o => String(o.id) === String(sel.value));
+    if (!ov) return;
+    const amtEl = document.getElementById('ovp_amount');
+    const curEl = document.getElementById('ovp_currency');
+    if (curEl && ov.default_currency) curEl.value = ov.default_currency;
+    if (amtEl && !amtEl.value && ov.default_amount != null) amtEl.value = ov.default_amount;
+}
+
+function onPayeeSelected() {
+    const sel = document.getElementById('ovp_payee');
+    const box = document.getElementById('ovp_new_payee_box');
+    if (box) box.style.display = sel.value === '__new__' ? 'block' : 'none';
+}
+
+function ovpVal(id) {
+    const el = document.getElementById(id);
+    return el ? el.value.trim() : '';
+}
+
+async function submitOverheadPayment(btn) {
+    const overheadId = ovpVal('ovp_overhead');
+    const payeeSel = ovpVal('ovp_payee');
+    const amount = parseFloat(ovpVal('ovp_amount'));
+    const description = ovpVal('ovp_description');
+    const currency = ovpVal('ovp_currency') || 'INR';
+
+    if (!overheadId) { alert('Please select an overhead.'); return; }
+    if (isNaN(amount) || amount <= 0) { alert('Please enter a valid amount.'); return; }
+
+    const costImpact = ovpVal('ovp_cost_impact') || 'add_to_shipping_line';
+    const payload = {
+        enquiry_id: parseInt(enquiryId),
+        overhead_id: parseInt(overheadId),
+        description,
+        amount,
+        currency,
+        status: 'to_be_booked',
+        cost_impact: costImpact,
+        created_by: getFinanceUsername(),
+    };
+
+    if (payeeSel === '__new__') {
+        const npName = ovpVal('ovp_np_name');
+        if (!npName) { alert('Please enter the new payee name.'); return; }
+        payload.new_payee = {
+            payee_name: npName,
+            payee_type: ovpVal('ovp_np_type') || 'Company',
+            contact_number: ovpVal('ovp_np_contact'),
+            beneficiary_name: ovpVal('ovp_np_beneficiary'),
+            account_number: ovpVal('ovp_np_account'),
+            ifsc_code: ovpVal('ovp_np_ifsc'),
+            bank: ovpVal('ovp_np_bank'),
+            bank_branch: ovpVal('ovp_np_branch'),
+            gst_number: ovpVal('ovp_np_gst'),
+        };
+    } else if (payeeSel) {
+        payload.payee_id = parseInt(payeeSel);
+    } else {
+        alert('Please select a payee or add a new one.');
+        return;
+    }
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Adding…'; }
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/finance/overhead-payment`, {
+            method: 'POST',
+            headers: ovpAuthHeaders(),
+            body: JSON.stringify(payload)
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert('Error: ' + (err.detail || 'Failed to add overhead.'));
+            return;
+        }
+        // Reset form
+        document.getElementById('ovp_overhead').value = '';
+        document.getElementById('ovp_payee').value = '';
+        document.getElementById('ovp_amount').value = '';
+        document.getElementById('ovp_description').value = '';
+        onPayeeSelected();
+        // Reload catalogs (a new inline payee may have been created) + table
+        await loadOverheadSection();
+    } catch (e) {
+        console.error(e);
+        alert('Network error while adding overhead.');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-plus"></i> Add to Booking'; }
+    }
+}
+
+function getFinanceUsername() {
+    try {
+        const raw = localStorage.getItem('user') || '';
+        if (!raw) return 'finance';
+        const parsed = JSON.parse(raw);
+        if (typeof parsed === 'string') return parsed;
+        return parsed.username || 'finance';
+    } catch (_) {
+        return localStorage.getItem('user') || 'finance';
+    }
+}
+
+async function fetchOverheadPayments() {
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/finance/overhead-payment/${enquiryId}`);
+        if (!res.ok) return;
+        const rows = await res.json();
+        renderOverheadPaymentsTable(rows);
+    } catch (e) {
+        console.error('Failed to load overhead payments', e);
+    }
+}
+
+function overheadStatusBadge(status) {
+    const map = {
+        to_be_booked: { bg: '#fef3c7', color: '#92400e', label: 'To Be Booked' },
+        booked: { bg: '#dbeafe', color: '#1e40af', label: 'Booked' },
+        paid: { bg: '#dcfce7', color: '#166534', label: 'Paid' },
+    };
+    const s = map[status] || map.to_be_booked;
+    return `<span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:${s.bg};color:${s.color};">${s.label}</span>`;
+}
+
+function overheadImpactBadge(impact) {
+    if (impact === 'deduct_from_client') {
+        return '<span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#fef3c7;color:#b45309;">Deduct from Client</span>';
+    }
+    return '<span style="padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#e0e7ff;color:#3730a3;">Add to Line</span>';
+}
+
+function renderOverheadPaymentsTable(rows) {
+    const tbody = document.getElementById('overheadPaymentsTableBody');
+    const totalEl = document.getElementById('totalOverheadsAmount');
+    if (!tbody) return;
+
+    overheadAddToLineTotal = 0;
+    overheadDeductClientTotal = 0;
+
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="padding: 24px; text-align: center; color: var(--text-tertiary);">No overheads booked yet.</td></tr>';
+        if (totalEl) totalEl.textContent = '₹0.00';
+        updateOverheadFinancialSummary();
+        return;
+    }
+
+    let total = 0;
+    tbody.innerHTML = rows.map(r => {
+        total += (r.amount || 0);
+        if (r.cost_impact === 'deduct_from_client') overheadDeductClientTotal += (r.amount || 0);
+        else overheadAddToLineTotal += (r.amount || 0);
+        const utrDate = r.utr_number
+            ? `${ovpEscape(r.utr_number)}${r.payment_date ? '<br><span style="color:var(--text-tertiary);font-size:11px;">' + new Date(r.payment_date).toLocaleDateString('en-GB') + '</span>' : ''}`
+            : '—';
+        const isPaid = r.status === 'paid';
+        const bookBtn = isPaid
+            ? ''
+            : `<button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:11px;" onclick="openBookOverheadModal(${r.id}, '${ovpEscape(r.overhead_name)}', '${ovpEscape(r.payee_name)}', ${r.amount || 0})"><i class="fas fa-check"></i> Book</button>`;
+        return `
+            <tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:12px;color:var(--navy-800);font-weight:600;">${ovpEscape(r.overhead_name || '—')}${r.description ? '<br><span style="color:var(--text-tertiary);font-weight:400;font-size:11px;">' + ovpEscape(r.description) + '</span>' : ''}</td>
+                <td style="padding:12px;">${ovpEscape(r.payee_name || '—')}</td>
+                <td style="padding:12px;">${overheadImpactBadge(r.cost_impact)}</td>
+                <td style="padding:12px;">${overheadStatusBadge(r.status)}</td>
+                <td style="padding:12px;font-family:monospace;">${utrDate}</td>
+                <td style="padding:12px;text-align:right;font-weight:700;color:var(--navy-800);">${ovpEscape(r.currency || 'INR')} ${(r.amount || 0).toLocaleString()}</td>
+                <td style="padding:12px;text-align:center;white-space:nowrap;">
+                    ${bookBtn}
+                    <button type="button" class="btn btn-outline" style="padding:4px 8px;font-size:11px;color:var(--danger,#dc2626);border-color:#fecaca;" title="Delete" onclick="deleteOverheadPayment(${r.id})"><i class="fas fa-trash"></i></button>
+                </td>
+            </tr>`;
+    }).join('');
+
+    if (totalEl) totalEl.textContent = `₹${Math.round(total).toLocaleString()}`;
+    updateOverheadFinancialSummary();
+}
+
+/** Reflect overhead treatment in the Financial Summary (shipping-line cost / client deductions). */
+function updateOverheadFinancialSummary() {
+    const lineRow = document.getElementById('row_overhead_line');
+    const deductRow = document.getElementById('row_overhead_deduct');
+    const lineEl = document.getElementById('display_overhead_line');
+    const deductEl = document.getElementById('display_overhead_deduct');
+    const finalEl = document.getElementById('display_final_quote');
+
+    if (lineEl) lineEl.textContent = `₹${Math.round(overheadAddToLineTotal).toLocaleString()}`;
+    if (deductEl) deductEl.textContent = `₹${Math.round(overheadDeductClientTotal).toLocaleString()}`;
+    if (lineRow) lineRow.style.display = overheadAddToLineTotal > 0 ? 'grid' : 'none';
+    if (deductRow) deductRow.style.display = overheadDeductClientTotal > 0 ? 'grid' : 'none';
+
+    // Final shipping-line cost includes overheads marked "add to shipping line".
+    const finalLineCost = (baseShippingLineTotal || 0) + overheadAddToLineTotal;
+    if (finalEl) finalEl.textContent = `₹${Math.round(finalLineCost).toLocaleString()}`;
+}
+
+function openBookOverheadModal(id, overheadName, payeeName, amount) {
+    bookingOverheadId = id;
+    const summary = document.getElementById('bookOverheadSummary');
+    if (summary) summary.innerHTML = `Recording payment for <strong>${ovpEscape(overheadName)}</strong> to <strong>${ovpEscape(payeeName || '—')}</strong> (₹${(amount || 0).toLocaleString()}).`;
+    const dateEl = document.getElementById('book_ovp_date');
+    if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
+    const utrEl = document.getElementById('book_ovp_utr');
+    if (utrEl) utrEl.value = '';
+    document.getElementById('bookOverheadModal').style.display = 'block';
+}
+
+function closeBookOverheadModal() {
+    bookingOverheadId = null;
+    document.getElementById('bookOverheadModal').style.display = 'none';
+}
+
+async function confirmBookOverheadPayment(btn) {
+    if (!bookingOverheadId) return;
+    const utr = ovpVal('book_ovp_utr');
+    const date = ovpVal('book_ovp_date');
+    if (!utr || !date) { alert('Please enter both UTR number and payment date.'); return; }
+
+    if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…'; }
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/finance/overhead-payment/${bookingOverheadId}/book`, {
+            method: 'PATCH',
+            headers: ovpAuthHeaders(),
+            body: JSON.stringify({ utr_number: utr, payment_date: date, status: 'paid' })
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert('Error: ' + (err.detail || 'Failed to book payment.'));
+            return;
+        }
+        closeBookOverheadModal();
+        await fetchOverheadPayments();
+    } catch (e) {
+        console.error(e);
+        alert('Network error while booking payment.');
+    } finally {
+        if (btn) { btn.disabled = false; btn.innerHTML = 'Mark as Paid'; }
+    }
+}
+
+async function deleteOverheadPayment(id) {
+    if (!confirm('Remove this overhead line item?')) return;
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/finance/overhead-payment/${id}`, {
+            method: 'DELETE',
+            headers: ovpAuthHeaders()
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert('Error: ' + (err.detail || 'Failed to delete.'));
+            return;
+        }
+        await fetchOverheadPayments();
+    } catch (e) {
+        console.error(e);
+        alert('Network error while deleting.');
+    }
+}
 
 async function fetchEnquiryDetails() {
     try {
@@ -56,9 +372,14 @@ async function fetchEnquiryDetails() {
                         });
                     });
 
-                    // Show Shipping Line total (payment to line)
+                    // Base shipping-line total (before overheads); overheads adjust this later.
+                    baseShippingLineTotal = shippingLineTotal;
+                    const baseEl = document.getElementById('display_base_line');
+                    if (baseEl) baseEl.textContent = `₹${Math.round(shippingLineTotal).toLocaleString()}`;
                     const slEl = document.getElementById('display_final_quote');
                     if (slEl) slEl.textContent = `₹${Math.round(shippingLineTotal).toLocaleString()}`;
+                    // If overheads already loaded, reflect them in the summary.
+                    updateOverheadFinancialSummary();
 
                     // Show Vendor total (invoice to client) if element exists
                     const vendorEl = document.getElementById('display_vendor_total');

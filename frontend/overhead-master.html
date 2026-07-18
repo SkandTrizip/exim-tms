@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Overhead – ATLAS EXIM</title>
+    <link href="css/styles.css" rel="stylesheet">
+    <link href="css/modal.css" rel="stylesheet">
+    <link href="css/action-modal.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        (function () {
+            if (new URLSearchParams(location.search).get('embedded') === '1') {
+                document.documentElement.classList.add('embedded-mode');
+            }
+        })();
+    </script>
+    <style>
+        .sl-page { padding: 36px 0 60px; }
+        .card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            padding: 36px 40px;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-sm);
+        }
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 32px;
+        }
+        .page-header h1 {
+            font-size: 1.75rem;
+            color: var(--navy-800);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .page-header h1 i { color: var(--coral-500); font-size: 1.4rem; }
+        .section-label {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-tertiary);
+            margin: 8px 0 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-label i { color: var(--coral-500); }
+        .form-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px 20px;
+        }
+        @media (max-width: 960px) { .form-grid-3 { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 640px) { .form-grid-3 { grid-template-columns: 1fr; } }
+        .col-span-2 { grid-column: span 2; }
+        .col-span-3 { grid-column: 1 / -1; }
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 36px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-light);
+        }
+        .field-hint {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            margin-top: 4px;
+        }
+
+        /* Inside the drawer the global CSS zeroes container padding, which pushes
+           the "Overhead Details" title flush to the edge. Restore side spacing. */
+        html.embedded-mode .container,
+        body.embedded-mode .container {
+            padding: 0 20px !important;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <a href="/" style="display:flex;align-items:center;text-decoration:none;">
+                        <img src="Logipod_Logo.png" alt="Logipod" class="logo-img">
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="sl-page">
+        <div class="container">
+            <div class="page-header">
+                <h1><i class="fas fa-coins"></i> Add Overhead</h1>
+                <div style="font-size:13px;color:var(--text-tertiary);">
+                    Define an intermittent overhead that can be booked against shipments
+                </div>
+            </div>
+
+            <div class="wizard-panel active" id="panel1">
+                <h2 class="embedded-drawer-title">Overhead Details</h2>
+
+                <!-- Status banner (shown when viewing existing record) -->
+                <div id="statusBanner" style="display:none; align-items:center; gap:16px;
+                    border-radius:var(--radius-lg); padding:14px 20px; margin-bottom:20px; font-weight:600;"></div>
+
+                <!-- Admin Verify / Reject bar -->
+                <div id="adminActionBar" style="display:none; align-items:center; gap:12px;
+                    background:var(--navy-700); border-radius:var(--radius-lg); padding:14px 20px;
+                    margin-bottom:20px; color:white;">
+                    <i class="fas fa-shield-alt" style="font-size:1.1rem;"></i>
+                    <span style="flex:1;font-weight:600;">Admin Action</span>
+                    <button id="verifyBtn" class="btn" style="background:#10B981;color:white;border:none;padding:8px 20px;border-radius:8px;font-weight:600;cursor:pointer;">
+                        <i class="fas fa-check"></i> Verify
+                    </button>
+                    <button id="rejectBtn" class="btn" style="background:#EF4444;color:white;border:none;padding:8px 20px;border-radius:8px;font-weight:600;cursor:pointer;">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                </div>
+
+                <div class="card">
+                    <form id="overheadForm" novalidate>
+                        <div class="section-label"><i class="fas fa-briefcase"></i> Attach to Job</div>
+                        <div class="form-grid-3">
+                            <div class="form-group col-span-3">
+                                <label for="ov_enquiry_search">Job No. / Sale</label>
+                                <input type="text" id="ov_enquiry_search" list="ov_job_list"
+                                    placeholder="Search by job no. or client…" autocomplete="off"
+                                    oninput="onJobSearchInput()">
+                                <datalist id="ov_job_list"></datalist>
+                                <input type="hidden" id="ov_enquiry">
+                                <div class="field-hint">Search and select a job to book this overhead as a payment to be booked in that job's Finance section. Leave blank to only save it as a reusable overhead.</div>
+                            </div>
+
+                            <div class="form-group" id="ov_payto_group" style="display:none;">
+                                <label for="ov_pay_to_type">Pay / Bill To</label>
+                                <select id="ov_pay_to_type" onchange="onPayToTypeChange()">
+                                    <option value="">Select…</option>
+                                    <option value="shipping_line">Shipping Line</option>
+                                    <option value="payee">Payee</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group col-span-3" id="ov_impact_group" style="display:none;">
+                                <label for="ov_cost_impact">Cost Treatment</label>
+                                <select id="ov_cost_impact">
+                                    <option value="add_to_shipping_line">Add to Shipping Line cost</option>
+                                    <option value="deduct_from_client">Deduct from Client</option>
+                                </select>
+                                <div class="field-hint">Choose whether this overhead increases the shipping-line cost or is deducted from the client amount.</div>
+                            </div>
+
+                            <div class="form-group col-span-2" id="ov_shipping_group" style="display:none;">
+                                <label for="ov_shipping_search">Shipping Line</label>
+                                <input type="text" id="ov_shipping_search" list="ov_shipping_list"
+                                    placeholder="Search shipping line…" autocomplete="off">
+                                <datalist id="ov_shipping_list"></datalist>
+                            </div>
+
+                            <div class="form-group col-span-2" id="ov_payee_group" style="display:none;">
+                                <label for="ov_payee_search">Payee</label>
+                                <div style="display:flex; gap:8px; align-items:center;">
+                                    <input type="text" id="ov_payee_search" list="ov_payee_list"
+                                        placeholder="Search payee…" autocomplete="off" style="flex:1;">
+                                    <button type="button" class="btn btn-secondary" onclick="openAddPayee()"
+                                        title="Add a new payee in Payee Master" style="white-space:nowrap;">
+                                        <i class="fas fa-plus"></i> New
+                                    </button>
+                                </div>
+                                <datalist id="ov_payee_list"></datalist>
+                                <div class="field-hint">Not listed? Click “New” to add the payee in Payee Master, or type a new name to create it on save.</div>
+                            </div>
+                        </div>
+
+                        <div class="section-label"><i class="fas fa-tags"></i> Overhead Details</div>
+                        <div class="form-grid-3">
+                            <div class="form-group col-span-2">
+                                <label for="ov_name">Overhead Name <span class="required">*</span></label>
+                                <input type="text" id="ov_name" placeholder="e.g. Detention Charges" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="ov_category">Category</label>
+                                <input type="text" id="ov_category" placeholder="e.g. Detention / Documentation">
+                            </div>
+                            <div class="form-group col-span-3">
+                                <label for="ov_description">Description</label>
+                                <input type="text" id="ov_description" placeholder="Short description of when this applies">
+                            </div>
+                        </div>
+
+                        <div class="section-label"><i class="fas fa-indian-rupee-sign"></i> Amount</div>
+                        <div class="form-grid-3">
+                            <div class="form-group">
+                                <label for="ov_currency">Currency</label>
+                                <select id="ov_currency">
+                                    <option value="INR">INR</option>
+                                    <option value="USD">USD</option>
+                                    <option value="EUR">EUR</option>
+                                    <option value="GBP">GBP</option>
+                                    <option value="JPY">JPY</option>
+                                </select>
+                            </div>
+                            <div class="form-group col-span-2">
+                                <label for="ov_default_amount">Amount</label>
+                                <input type="number" id="ov_default_amount" min="0" step="0.01" placeholder="Amount for this overhead">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" onclick="window.location.href='/'">
+                                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                            </button>
+                            <button type="submit" class="btn btn-primary" id="saveOVBtn">
+                                <i class="fas fa-save"></i> Submit
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal -->
+    <div id="customModal" class="modal-overlay">
+        <div class="modal-box" style="padding:36px 32px;text-align:center;">
+            <div id="modalIcon" style="margin-bottom:8px;"></div>
+            <h3 id="modalTitle" class="modal-title" style="justify-content:center;font-size:1.25rem;"></h3>
+            <p id="modalMessage" style="color:var(--text-secondary);font-size:0.95rem;margin:8px 0 24px;"></p>
+            <button class="btn btn-primary" onclick="closeModal()" style="min-width:100px;">OK</button>
+        </div>
+    </div>
+
+    <script src="/js/config.js"></script>
+    <script src="js/overhead-master.js"></script>
+</body>
+
+</html>

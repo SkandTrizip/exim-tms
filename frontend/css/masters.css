@@ -81,6 +81,8 @@
 .master-hub-icon.clients { background: linear-gradient(135deg, #2563eb, #1d4ed8); }
 .master-hub-icon.shipping { background: linear-gradient(135deg, #0f766e, #115e59); }
 .master-hub-icon.hbl { background: linear-gradient(135deg, #7c3aed, #6d28d9); }
+.master-hub-icon.overheads { background: linear-gradient(135deg, #d97706, #b45309); }
+.master-hub-icon.payees { background: linear-gradient(135deg, #db2777, #be185d); }
 
 .master-hub-status {
     padding: 4px 10px;

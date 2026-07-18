@@ -2,7 +2,9 @@
 .quote-remarks-overlay {
     position: fixed;
     inset: 0;
-    z-index: 1210;
+    /* Must sit above the Update Quote modal (z-index 2500) since the remarks
+       popup is opened from within it while that modal stays mounted. */
+    z-index: 2700;
     background: rgba(15, 23, 42, 0.55);
     display: flex;
     align-items: center;

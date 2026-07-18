@@ -1819,6 +1819,10 @@ function handleRouting() {
         showMastersClientList();
     } else if (hash === '#masters-shipping-lines') {
         showMastersShippingList();
+    } else if (hash === '#masters-overheads') {
+        showMastersOverheadList();
+    } else if (hash === '#masters-payees') {
+        showMastersPayeeList();
     } else {
         showDashboardView();
         updateNavPricingLink();
