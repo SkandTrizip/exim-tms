@@ -7,9 +7,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Upload directory path (absolute path on the server)
-# UPLOAD_DIR = "/home/azureuser/uploads/"
+UPLOAD_DIR = "/home/azureuser/uploads/"
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", str(_PROJECT_ROOT / "uploads"))
+# UPLOAD_DIR = os.getenv("UPLOAD_DIR", str(_PROJECT_ROOT / "uploads"))
 
 # Injected into /js/config.js as CONFIG.API_URL. Use '' so the browser calls /api on the same host
 # you opened (localhost, 127.0.0.1, or a public IP). A fixed remote URL breaks local dev (Failed to fetch).
@@ -18,19 +18,19 @@ API_URL = os.getenv("API_URL", "")
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 
 # Database (used by backend/database.py)
-# POSTGRES_USER = os.getenv("POSTGRES_USER", "tmsbackend")
-# POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "sharkship@5")
-# POSTGRES_DB = os.getenv("POSTGRES_DB", "exim_prod")
-# POSTGRES_HOST = os.getenv("POSTGRES_HOST", "generalagent.postgres.database.azure.com")
-# POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
-# EXCHANGE_RATE_API_KEY = os.getenv("EXCHANGE_RATE_API_KEY", "602d23926fb209dcce76d258")
-
-POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
-POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "Skand0822%40")
-POSTGRES_DB = os.getenv("POSTGRES_DB", "exim_local")
-POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+POSTGRES_USER = os.getenv("POSTGRES_USER", "tmsbackend")
+POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "sharkship@5")
+POSTGRES_DB = os.getenv("POSTGRES_DB", "exim_prod")
+POSTGRES_HOST = os.getenv("POSTGRES_HOST", "generalagent.postgres.database.azure.com")
 POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
 EXCHANGE_RATE_API_KEY = os.getenv("EXCHANGE_RATE_API_KEY", "602d23926fb209dcce76d258")
+
+# POSTGRES_USER = os.getenv("POSTGRES_USER", "postgres")
+# POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "Skand0822%40")
+# POSTGRES_DB = os.getenv("POSTGRES_DB", "exim_local")
+# POSTGRES_HOST = os.getenv("POSTGRES_HOST", "localhost")
+# POSTGRES_PORT = os.getenv("POSTGRES_PORT", "5432")
+# EXCHANGE_RATE_API_KEY = os.getenv("EXCHANGE_RATE_API_KEY", "602d23926fb209dcce76d258")
 
 # SQLAlchemy pool tuning (override via env if needed)
 DB_POOL_SIZE = int(os.getenv("DB_POOL_SIZE", "10"))
