@@ -337,6 +337,25 @@ async function deleteOverheadPayment(id) {
     }
 }
 
+/** Sum On-Your-Account charges from quote/final-quote containers into INR totals. */
+function computeQuoteTotalsInr(containers) {
+    let shippingLineTotal = 0;
+    let vendorTotal = 0;
+    (containers || []).forEach(c => {
+        (c.charges || []).forEach(ch => {
+            if (ch.account_type !== 'On Your Account') return;
+            shippingLineTotal += (ch.final_inr_amount || 0);
+            const vRate = ch.vendor_rate || 0;
+            const qty = ch.quantity || 0;
+            const ex = ch.vendor_exchange_rate ?? ch.exchange_rate ?? 1;
+            const vTot = qty * vRate;
+            const vInr = ch.charged_on === 'Per BL' ? vTot : (ch.currency !== 'INR' ? vTot * ex : vTot);
+            vendorTotal += vInr;
+        });
+    });
+    return { shippingLineTotal, vendorTotal };
+}
+
 async function fetchEnquiryDetails() {
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/enquiry/${enquiryId}`);
@@ -353,24 +372,22 @@ async function fetchEnquiryDetails() {
                 if (accepted) {
                     document.getElementById('display_shipping_line').textContent = accepted.shipping_line || '---';
 
-                    // Compute Shipping Line Total (what we pay = qty × rate × ex_rate)
-                    // Compute Vendor Total (what we charge client = vendor_rate × qty × ex_rate)
-                    let shippingLineTotal = 0;
-                    let vendorTotal = 0;
-                    (accepted.containers || []).forEach(c => {
-                        (c.charges || []).forEach(ch => {
-                            if (ch.account_type === 'On Your Account') {
-                                shippingLineTotal += (ch.final_inr_amount || 0);
-                                // vendor total: vendor_rate × qty × ex_rate (same formula)
-                                const vRate = ch.vendor_rate || 0;
-                                const qty = ch.quantity || 0;
-                                const ex = ch.vendor_exchange_rate ?? ch.exchange_rate ?? 1;
-                                const vTot = qty * vRate;
-                                const vInr = ch.charged_on === 'Per BL' ? vTot : (ch.currency !== 'INR' ? vTot * ex : vTot);
-                                vendorTotal += vInr;
+                    // Use the post-SI final quote amount when available; otherwise
+                    // fall back to the accepted (initial) quote.
+                    let quoteContainers = accepted.containers || [];
+                    try {
+                        const finalRes = await fetch(`${CONFIG.API_URL}/api/quotes/${accepted.id}/final`);
+                        if (finalRes.ok) {
+                            const finalQuote = await finalRes.json();
+                            if (finalQuote && (finalQuote.containers || []).length) {
+                                quoteContainers = finalQuote.containers;
                             }
-                        });
-                    });
+                        }
+                    } catch (e) {
+                        console.warn('Final quote unavailable, using accepted quote for finance totals.', e);
+                    }
+
+                    const { shippingLineTotal, vendorTotal } = computeQuoteTotalsInr(quoteContainers);
 
                     // Base shipping-line total (before overheads); overheads adjust this later.
                     baseShippingLineTotal = shippingLineTotal;
@@ -385,7 +402,7 @@ async function fetchEnquiryDetails() {
                     const vendorEl = document.getElementById('display_vendor_total');
                     if (vendorEl) vendorEl.textContent = `₹${Math.round(vendorTotal).toLocaleString()}`;
 
-                    // Pre-fill payment amount with shipping line total
+                    // Pre-fill payment amount with the final quote amount (overheads excluded).
                     const payAmtEl = document.getElementById('quick_pay_amount');
                     if (payAmtEl && !payAmtEl.value) payAmtEl.value = Math.round(shippingLineTotal);
                 }
