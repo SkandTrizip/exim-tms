@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 # Add the project root to sys.path to resolve 'backend' imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.routers import enquiry, pricing, workflow, port, exchange_rate, quote, tracking, auth, client, dashboard, invoice, finance, shipping_line, google_maps, search, overhead, payee
+from backend.routers import enquiry, pricing, workflow, port, exchange_rate, quote, tracking, auth, client, dashboard, invoice, finance, shipping_line, google_maps, search, overhead, payee, pdf
 from backend.models.user import User
 from backend.models.invoice import Invoice
 from backend.models.finance import ShippingPayment, OverheadPayment
@@ -215,6 +215,7 @@ app.include_router(overhead.router, prefix="/api/overheads", tags=["Overheads"])
 app.include_router(payee.router, prefix="/api/payees", tags=["Payees"])
 app.include_router(google_maps.router, prefix="/api", tags=["Google Maps"])
 app.include_router(search.router, prefix="/api", tags=["Global Search"])
+app.include_router(pdf.router, prefix="/api", tags=["PDF"])
 
 @app.get("/api")
 async def root():
