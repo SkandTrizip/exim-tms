@@ -5,6 +5,7 @@ psycopg2-binary
 python-dotenv
 requests
 reportlab
+weasyprint
 passlib[bcrypt]
 python-multipart
 python-jose[cryptography]

@@ -43,7 +43,7 @@ DB_POOL_TIMEOUT = int(os.getenv("DB_POOL_TIMEOUT", "30"))
 DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "600"))
 
 AUTH_USERS = [
-    {"username": "Rohit", "full_name": "Rohit", "password": "rohit@3145", "is_admin": False},
+    {"username": "Rohit", "full_name": "Rohit", "password": "rohit@3145", "is_admin": True},
     {"username": "admin", "full_name": "Rohit", "password": "logipod@488!", "is_admin": True},
     {"username": "Sachin", "full_name": "Sachin ", "password": "sachin@5789!#$", "is_admin": False},
     {"username": "Shokin", "full_name":"Shokin Saifi","password": "shokin@2538!#", "is_admin": False},
@@ -51,7 +51,9 @@ AUTH_USERS = [
     {"username": "ashok.jangra@logipod.in", "full_name":"Ashok","password": "ashok@4567!#", "is_admin": False},
     {"username": "satkar.grewal@logipod.in", "full_name":"Satkar","password": "exim@4532!#", "is_admin": False},
     {"username": "madan.rajput@logipod.in", "full_name":"Madan","password": "madan@4568!#", "is_admin": False},
-    {"username": "ca@logipod.in", "full_name":"Shobhit","password": "ca@4569!#", "is_admin": False}
+    {"username": "ca@logipod.in", "full_name":"Shobhit","password": "ca@4569!#", "is_admin": False},
+    {"username": "Sales", "full_name":"Sales","password": "sales@4567!#", "is_admin": False},
+
 ]
 
 # Admin usernames (case-insensitive check is done in code)
