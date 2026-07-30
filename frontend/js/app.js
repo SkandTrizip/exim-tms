@@ -1051,7 +1051,7 @@ function renderAnalyticsSummary(summary) {
         if (from || to) {
             monthNote = from && to && from !== to ? `${from} – ${to}` : (from || to);
         }
-        fySub.textContent = `${label} · ${range} · ${monthNote} · by SOB date`;
+        fySub.textContent = `${label} · ${range} · ${monthNote} · by SI date (from Jul)`;
     }
 
     const pendingNote = document.getElementById('analyticsPendingSobNote');
@@ -1062,7 +1062,7 @@ function renderAnalyticsSummary(summary) {
             pendingNote.hidden = false;
             pendingNote.innerHTML =
                 `${ongoing.trips} ongoing enquir${ongoing.trips === 1 ? 'y' : 'ies'} ` +
-                `(initial quote, no SOB, no final quote) · ` +
+                `(SI submitted, no final quote) · ` +
                 `Capture ${formatInrLakhs(ongoing.capture_inr)}` +
                 `<button type="button" class="analytics-pending-note__action" id="analyticsViewOngoingBtn">View list</button>`;
             const viewBtn = document.getElementById('analyticsViewOngoingBtn');
@@ -1106,16 +1106,16 @@ function populateAnalyticsMonthRangeFilters(months) {
     if (!fromSelect || !toSelect) return;
 
     const list = Array.isArray(months) ? months : [];
-    const fromOptions = ['<option value="">Apr (start)</option>']
+    const fromOptions = ['<option value="">All</option>']
         .concat(list.map((m) => {
             const value = m.value || m.month || '';
-            const label = m.short_label || m.label || value;
+            const label = m.label || m.short_label || value;
             return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
         }));
-    const toOptions = ['<option value="">Mar (end)</option>']
+    const toOptions = ['<option value="">All</option>']
         .concat(list.map((m) => {
             const value = m.value || m.month || '';
-            const label = m.short_label || m.label || value;
+            const label = m.label || m.short_label || value;
             return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
         }));
 
@@ -1123,12 +1123,15 @@ function populateAnalyticsMonthRangeFilters(months) {
     toSelect.innerHTML = toOptions.join('');
 
     const validValues = new Set(list.map((m) => m.value || m.month));
-    fromSelect.value = analyticsFilterState.monthFrom && validValues.has(analyticsFilterState.monthFrom)
+    let monthFrom = analyticsFilterState.monthFrom && validValues.has(analyticsFilterState.monthFrom)
         ? analyticsFilterState.monthFrom
         : '';
-    toSelect.value = analyticsFilterState.monthTo && validValues.has(analyticsFilterState.monthTo)
+    let monthTo = analyticsFilterState.monthTo && validValues.has(analyticsFilterState.monthTo)
         ? analyticsFilterState.monthTo
         : '';
+    ({ monthFrom, monthTo } = clampAnalyticsMonthRange(monthFrom, monthTo, list));
+    fromSelect.value = monthFrom;
+    toSelect.value = monthTo;
     analyticsFilterState.monthFrom = fromSelect.value;
     analyticsFilterState.monthTo = toSelect.value;
 }
@@ -1138,19 +1141,37 @@ function monthIndexInFy(monthKey, months) {
     return months.findIndex((m) => (m.value || m.month) === monthKey);
 }
 
+/** Clamp To so it cannot be before From in FY order (Apr→Mar). */
+function clampAnalyticsMonthRange(monthFrom, monthTo, availableMonths) {
+    if (!monthFrom || !monthTo) {
+        return { monthFrom: monthFrom || '', monthTo: monthTo || '' };
+    }
+    const startIdx = monthIndexInFy(monthFrom, availableMonths);
+    const endIdx = monthIndexInFy(monthTo, availableMonths);
+    if (startIdx >= 0 && endIdx >= 0 && endIdx < startIdx) {
+        return { monthFrom, monthTo: monthFrom };
+    }
+    return { monthFrom, monthTo };
+}
+
 function filterSeriesByMonthRange(series, monthFrom, monthTo, availableMonths) {
     const rows = Array.isArray(series) ? series : [];
     if (!monthFrom && !monthTo) return rows;
 
-    const monthKeys = availableMonths.map((m) => m.value || m.month);
-    let startIdx = monthFrom ? monthIndexInFy(monthFrom, availableMonths) : 0;
-    let endIdx = monthTo ? monthIndexInFy(monthTo, availableMonths) : monthKeys.length - 1;
-    if (startIdx < 0) startIdx = 0;
-    if (endIdx < 0) endIdx = monthKeys.length - 1;
-    if (startIdx > endIdx) {
-        const tmp = startIdx;
-        startIdx = endIdx;
-        endIdx = tmp;
+    // One bound only → that single month
+    if (monthFrom && !monthTo) {
+        return rows.filter((r) => r.month === monthFrom);
+    }
+    if (monthTo && !monthFrom) {
+        return rows.filter((r) => r.month === monthTo);
+    }
+
+    const monthKeys = (availableMonths || []).map((m) => m.value || m.month);
+    const startIdx = monthIndexInFy(monthFrom, availableMonths);
+    const endIdx = monthIndexInFy(monthTo, availableMonths);
+    // Unknown keys or backward range → match nothing (do not expand to full FY)
+    if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) {
+        return [];
     }
     const allowed = new Set(monthKeys.slice(startIdx, endIdx + 1));
     return rows.filter((r) => allowed.has(r.month));
@@ -1216,7 +1237,7 @@ function renderMonthlyAnalyticsChart(series, metric, options = {}) {
     if (showPipeline) {
         ordered.push({
             label: 'Ongoing',
-            fullLabel: 'Ongoing (initial quote, no SOB, no final quote)',
+            fullLabel: 'Ongoing (SI submitted, no final quote)',
             month: '__ongoing__',
             trips: options.pipelineTrips || 0,
             value: pipelineMargin,
@@ -1226,7 +1247,7 @@ function renderMonthlyAnalyticsChart(series, metric, options = {}) {
 
     const slices = ordered.filter((s) => s.value > 0);
     if (!slices.length) {
-        wrap.innerHTML = `<div class="analytics-chart-empty">No ${escapeHtml(metricLabel.toLowerCase())} for this filter yet. Mark SOB dates from Apr onward.</div>`;
+        wrap.innerHTML = `<div class="analytics-chart-empty">No ${escapeHtml(metricLabel.toLowerCase())} for this filter yet. Final quotes with SI from Jul onward will appear here.</div>`;
         return;
     }
 
@@ -1273,7 +1294,7 @@ function renderMonthlyAnalyticsChart(series, metric, options = {}) {
     }).join('');
 
     if (!legendMonths.length) {
-        wrap.innerHTML = `<div class="analytics-chart-empty">No trips with SOB in this financial year yet.</div>`;
+        wrap.innerHTML = `<div class="analytics-chart-empty">No trips in this financial year yet.</div>`;
         return;
     }
 
@@ -1702,14 +1723,32 @@ function bindAnalyticsFilters() {
     if (monthFromSelect && !monthFromSelect.dataset.bound) {
         monthFromSelect.dataset.bound = '1';
         monthFromSelect.addEventListener('change', () => {
-            analyticsFilterState.monthFrom = monthFromSelect.value || '';
+            let monthFrom = monthFromSelect.value || '';
+            let monthTo = analyticsFilterState.monthTo || '';
+            ({ monthFrom, monthTo } = clampAnalyticsMonthRange(
+                monthFrom,
+                monthTo,
+                analyticsAvailableMonths,
+            ));
+            analyticsFilterState.monthFrom = monthFrom;
+            analyticsFilterState.monthTo = monthTo;
+            if (monthToSelect) monthToSelect.value = monthTo;
             fetchDashboardAnalytics();
         });
     }
     if (monthToSelect && !monthToSelect.dataset.bound) {
         monthToSelect.dataset.bound = '1';
         monthToSelect.addEventListener('change', () => {
-            analyticsFilterState.monthTo = monthToSelect.value || '';
+            let monthFrom = analyticsFilterState.monthFrom || '';
+            let monthTo = monthToSelect.value || '';
+            ({ monthFrom, monthTo } = clampAnalyticsMonthRange(
+                monthFrom,
+                monthTo,
+                analyticsAvailableMonths,
+            ));
+            analyticsFilterState.monthFrom = monthFrom;
+            analyticsFilterState.monthTo = monthTo;
+            monthToSelect.value = monthTo;
             fetchDashboardAnalytics();
         });
     }
@@ -1755,6 +1794,8 @@ async function fetchDashboardAnalytics() {
 
         const data = await response.json();
         const summary = data.summary || {};
+        analyticsFilterState.monthFrom = summary.filter_month_from || '';
+        analyticsFilterState.monthTo = summary.filter_month_to || '';
         renderAnalyticsSummary(summary);
 
         analyticsAvailableYears = Array.isArray(data.available_financial_years)
@@ -1765,6 +1806,7 @@ async function fetchDashboardAnalytics() {
         populateAnalyticsFyFilter(analyticsAvailableYears);
         populateAnalyticsMonthRangeFilters(analyticsAvailableMonths);
 
+        // Series is already month-filtered by the API; keep a client pass as safety
         const chartSeries = filterSeriesByMonthRange(
             series,
             analyticsFilterState.monthFrom,

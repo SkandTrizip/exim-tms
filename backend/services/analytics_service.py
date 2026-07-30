@@ -10,13 +10,18 @@ from sqlalchemy.orm import Session
 from backend.models.enquiry import Enquiry
 from backend.models.enquiry_economics import EnquiryEconomics
 from backend.models.final_quote import FinalQuote
-from backend.models.quote import Quote
 from backend.models.shipment_status import ShipmentStatus
 
 _MONTH_NAMES = (
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 )
+
+# From July 2026 onward: attribute by SI date; net needs final quote;
+# ongoing/gross pipeline = SI submitted without final quote.
+# Before that: any economics row counts (no SI / final-quote gate),
+# and June-created jobs stay out of July even if SI was marked later.
+_MODERN_MARGIN_CUTOFF = date(2026, 7, 1)
 
 # Indian FY month order: Apr → Mar
 _FY_MONTH_ORDER = (4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3)
@@ -37,6 +42,9 @@ def _month_key(d) -> Optional[str]:
 def _month_label(key: str, *, short: bool = False) -> str:
     try:
         year, month = key.split("-")
+    except (ValueError, IndexError):
+        return key
+    try:
         name = _MONTH_NAMES[int(month) - 1]
         return name if short else f"{name} {year}"
     except (ValueError, IndexError):
@@ -116,25 +124,96 @@ def teu_for_enquiry(container_type: Optional[str], container_count) -> float:
     return round(count * teu_factor_for_container_type(container_type), 2)
 
 
+def _as_date(value) -> Optional[date]:
+    if not value:
+        return None
+    return value.date() if hasattr(value, "date") else value
+
+
 def _month_in_fy_range(
     month_key: Optional[str],
     month_from: Optional[str],
     month_to: Optional[str],
     fy_months: List[str],
 ) -> bool:
-    """True when month_key falls within [month_from, month_to] in FY order."""
+    """True when month_key falls within the selected month filter.
+
+    - Neither bound set → all FY months
+    - Only one bound set → that single month
+    - Both set → inclusive forward range in FY order (Apr→Mar)
+    - If from is after to in FY order → invalid, matches nothing
+    """
     if not month_key or month_key not in fy_months:
         return False
     if not month_from and not month_to:
         return True
-    idx = fy_months.index(month_key)
-    start_idx = fy_months.index(month_from) if month_from in fy_months else 0
-    end_idx = (
-        fy_months.index(month_to) if month_to in fy_months else len(fy_months) - 1
-    )
+    if month_from and not month_to:
+        return month_key == month_from
+    if month_to and not month_from:
+        return month_key == month_to
+    if month_from not in fy_months or month_to not in fy_months:
+        return False
+    start_idx = fy_months.index(month_from)
+    end_idx = fy_months.index(month_to)
     if start_idx > end_idx:
-        start_idx, end_idx = end_idx, start_idx
+        return False
+    idx = fy_months.index(month_key)
     return start_idx <= idx <= end_idx
+
+
+def _normalize_month_bounds(
+    month_from: Optional[str],
+    month_to: Optional[str],
+    fy_months: List[str],
+) -> Tuple[Optional[str], Optional[str]]:
+    """Drop unknown keys; leave backward ranges intact for empty-match handling."""
+    range_from = month_from if month_from in fy_months else None
+    range_to = month_to if month_to in fy_months else None
+    return range_from, range_to
+
+
+def _resolve_attribution(
+    *,
+    economics: EnquiryEconomics,
+    shipment: Optional[ShipmentStatus],
+    enquiry: Enquiry,
+) -> Tuple[Optional[date], bool, Optional[date]]:
+    """
+    Return (attribution_date, is_legacy, si_date).
+
+    Legacy (enquiry created before July 2026):
+      Month = SOB → created_at (keeps June jobs out of July even if SI is later).
+      No final-quote / SI gate for margin.
+
+    Modern (created on/after July 2026):
+      Month = SI submitted date.
+      Net requires final quote; ongoing = SI without final quote.
+    """
+    created = _as_date(getattr(enquiry, "created_at", None))
+    is_legacy = created is not None and created < _MODERN_MARGIN_CUTOFF
+
+    si_date = _as_date(getattr(economics, "si_date", None))
+    if si_date is None and shipment is not None:
+        si_date = _as_date(shipment.si_submitted)
+
+    sob_date = _as_date(getattr(economics, "sob_date", None))
+    if sob_date is None and shipment is not None:
+        sob_date = _as_date(shipment.sob)
+
+    if is_legacy:
+        # Prefer pre-July dates so June-created jobs never land in July+.
+        candidates = [d for d in (sob_date, created, si_date) if d is not None]
+        pre_july = [d for d in candidates if d < _MODERN_MARGIN_CUTOFF]
+        if pre_july:
+            # Prefer SOB among pre-July dates, then created, then SI.
+            for preferred in (sob_date, created, si_date):
+                if preferred is not None and preferred < _MODERN_MARGIN_CUTOFF:
+                    return preferred, True, si_date
+        # No pre-July date at all — fall back to created/SOB/SI.
+        attr = sob_date or created or si_date
+        return attr, True, si_date
+
+    return si_date, False, si_date
 
 
 def get_dashboard_analytics(
@@ -147,16 +226,21 @@ def get_dashboard_analytics(
     fy: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Build analytics summary, per-enquiry rows, and FY month-wise series by SOB date.
+    Build analytics summary, per-enquiry rows, and FY month-wise series.
 
-    Net metrics (capture_inr / margin_pct) use SOB-settled rows only.
-    Gross margin = net margin + ongoing trips, where ongoing means:
-      accepted initial quote, no SOB yet, and no final quote.
+    From July 2026 (enquiries created on/after 2026-07-01):
+      Net = final-quote trips, attributed by SI submitted date.
+      Gross = net + ongoing (SI submitted, no final quote).
+      June-created enquiries are excluded from July+ months.
+
+    Before July 2026 (legacy):
+      Any economics row counts toward margin — no final-quote / SI gate.
+      Month attribution: SOB → created_at (capped before July).
 
     Filters:
       - fy: '2026-27' Indian financial year (Apr–Mar)
-      - month: 'YYYY-MM' — single SOB month (legacy; overrides month_from/month_to)
-      - month_from / month_to: inclusive SOB month range within FY
+      - month: 'YYYY-MM' — single month (legacy; overrides month_from/month_to)
+      - month_from / month_to: inclusive month range within FY
       - metric: 'cost' | 'revenue' | 'both' | 'net_margin' | 'gross_margin'
     """
     metric_key = (metric or "both").lower()
@@ -174,6 +258,8 @@ def get_dashboard_analytics(
     fy_start = parse_financial_year(fy)
     fy_start_date, fy_end_date = financial_year_bounds(fy_start)
     fy_months = financial_year_month_keys(fy_start)
+    range_from, range_to = _normalize_month_bounds(range_from, range_to, fy_months)
+    has_month_filter = bool(range_from or range_to)
 
     rows_q = (
         db.query(EnquiryEconomics, Enquiry, ShipmentStatus)
@@ -184,6 +270,17 @@ def get_dashboard_analytics(
         .all()
     )
 
+    all_enquiry_ids = [enquiry.id for _, enquiry, _ in rows_q]
+    final_ids: set[int] = set()
+    if all_enquiry_ids:
+        final_ids = {
+            row[0]
+            for row in db.query(FinalQuote.enquiry_id)
+            .filter(FinalQuote.enquiry_id.in_(all_enquiry_ids))
+            .distinct()
+            .all()
+        }
+
     all_rows: List[Dict[str, Any]] = []
     fy_years_seen = {fy_start}
 
@@ -193,14 +290,24 @@ def get_dashboard_analytics(
         capture = round(revenue - cost, 2)
         master_number = (shipment.master_number or "").strip() if shipment else ""
 
-        sob_date = economics.sob_date
-        if sob_date is None and shipment and shipment.sob:
-            sob = shipment.sob
-            sob_date = sob.date() if hasattr(sob, "date") else sob
+        attr_date, is_legacy, si_date = _resolve_attribution(
+            economics=economics,
+            shipment=shipment,
+            enquiry=enquiry,
+        )
+        attr_month = _month_key(attr_date)
+        if attr_date:
+            fy_years_seen.add(_fy_start_for_date(attr_date))
 
-        sob_month = _month_key(sob_date)
-        if sob_date:
-            fy_years_seen.add(_fy_start_for_date(sob_date))
+        has_final = enquiry.id in final_ids
+        if is_legacy:
+            status = "final"
+        elif has_final and si_date is not None:
+            status = "final"
+        elif si_date is not None and not has_final:
+            status = "ongoing"
+        else:
+            status = "pending"
 
         all_rows.append({
             "enquiry_id": enquiry.id,
@@ -217,48 +324,61 @@ def get_dashboard_analytics(
             "revenue_inr": revenue,
             "capture_inr": capture,
             "margin_pct": _margin_pct(revenue, cost),
-            "sob_date": sob_date.isoformat() if sob_date else None,
-            "sob_month": sob_month,
-            "economics_status": "final" if sob_date else "pending",
+            "si_date": attr_date.isoformat() if attr_date else None,
+            "si_month": attr_month,
+            # Kept for older clients; month attribution key.
+            "sob_date": attr_date.isoformat() if attr_date else None,
+            "sob_month": attr_month,
+            "has_final_quote": has_final,
+            "is_legacy": is_legacy,
+            "economics_status": status,
         })
 
-    # Restrict working set to selected FY (SOB in Apr–Mar); keep no-SOB for pending/ongoing
+    def _in_selected_fy(row: Dict[str, Any]) -> bool:
+        if not row.get("si_date"):
+            return False
+        return fy_start_date <= date.fromisoformat(row["si_date"]) <= fy_end_date
+
+    # Settled / net rows
     fy_rows = [
         r for r in all_rows
-        if r["sob_date"]
-        and fy_start_date <= date.fromisoformat(r["sob_date"]) <= fy_end_date
+        if r.get("economics_status") == "final" and _in_selected_fy(r)
     ]
-    pending_rows = [r for r in all_rows if not r.get("sob_date")]
+    if has_month_filter:
+        fy_rows = [
+            r
+            for r in fy_rows
+            if _month_in_fy_range(r.get("si_month"), range_from, range_to, fy_months)
+        ]
 
-    # Ongoing: accepted initial quote, no SOB, no final quote yet
-    pending_enquiry_ids = [r["enquiry_id"] for r in pending_rows]
-    accepted_ids = set()
-    final_ids = set()
-    if pending_enquiry_ids:
-        accepted_ids = {
-            row[0]
-            for row in db.query(Quote.enquiry_id)
-            .filter(
-                Quote.enquiry_id.in_(pending_enquiry_ids),
-                Quote.status == "accepted",
+    # Ongoing (gross pipeline, modern only): SI submitted, no final quote
+    ongoing_rows = [
+        r for r in all_rows
+        if r.get("economics_status") == "ongoing" and _in_selected_fy(r)
+    ]
+    if has_month_filter:
+        ongoing_rows = [
+            r
+            for r in ongoing_rows
+            if _month_in_fy_range(r.get("si_month"), range_from, range_to, fy_months)
+        ]
+    pending_rows = [r for r in all_rows if r.get("economics_status") == "pending"]
+
+    if has_month_filter:
+        if range_from and not range_to:
+            series_months = [range_from]
+        elif range_to and not range_from:
+            series_months = [range_to]
+        elif range_from and range_to:
+            start_idx = fy_months.index(range_from)
+            end_idx = fy_months.index(range_to)
+            series_months = (
+                fy_months[start_idx : end_idx + 1] if start_idx <= end_idx else []
             )
-            .distinct()
-            .all()
-        }
-        final_ids = {
-            row[0]
-            for row in db.query(FinalQuote.enquiry_id)
-            .filter(FinalQuote.enquiry_id.in_(pending_enquiry_ids))
-            .distinct()
-            .all()
-        }
-
-    ongoing_rows = []
-    for r in pending_rows:
-        if r["enquiry_id"] in accepted_ids and r["enquiry_id"] not in final_ids:
-            row = dict(r)
-            row["economics_status"] = "ongoing"
-            ongoing_rows.append(row)
+        else:
+            series_months = list(fy_months)
+    else:
+        series_months = list(fy_months)
 
     buckets: Dict[str, Dict[str, float]] = {
         key: {
@@ -269,11 +389,11 @@ def get_dashboard_analytics(
             "teu": 0.0,
             "containers": 0,
         }
-        for key in fy_months
+        for key in series_months
     }
 
     for row in fy_rows:
-        key = row["sob_month"]
+        key = row["si_month"]
         if key not in buckets:
             continue
         b = buckets[key]
@@ -302,9 +422,8 @@ def get_dashboard_analytics(
     }
     ongoing["margin_pct"] = _margin_pct(ongoing["revenue_inr"], ongoing["cost_inr"])
 
-    # Full FY calendar (Apr→Mar), including zero months for consistent ordering
     monthly_series: List[Dict[str, Any]] = []
-    for key in fy_months:
+    for key in series_months:
         b = buckets[key]
         cost = round(b["cost_inr"], 2)
         revenue = round(b["revenue_inr"], 2)
@@ -323,28 +442,27 @@ def get_dashboard_analytics(
             "containers": int(b["containers"]),
         })
 
-    # Container type × month TEU matrix (SOB-settled FY rows)
     matrix_types: Dict[str, Dict[str, float]] = defaultdict(
-        lambda: {m: 0.0 for m in fy_months}
+        lambda: {m: 0.0 for m in series_months}
     )
     matrix_counts: Dict[str, Dict[str, int]] = defaultdict(
-        lambda: {m: 0 for m in fy_months}
+        lambda: {m: 0 for m in series_months}
     )
     for row in fy_rows:
         ctype = (row.get("container_type") or "Unknown").strip() or "Unknown"
-        month = row.get("sob_month")
-        if not month or month not in fy_months:
+        month_key = row.get("si_month")
+        if not month_key or month_key not in series_months:
             continue
-        matrix_types[ctype][month] += float(row.get("teu") or 0)
-        matrix_counts[ctype][month] += int(row.get("container_count") or 0)
+        matrix_types[ctype][month_key] += float(row.get("teu") or 0)
+        matrix_counts[ctype][month_key] += int(row.get("container_count") or 0)
 
     container_matrix = []
     for ctype in sorted(matrix_types.keys(), key=lambda t: (t == "Unknown", t)):
         month_teus = {
-            m: round(matrix_types[ctype][m], 2) for m in fy_months
+            m: round(matrix_types[ctype][m], 2) for m in series_months
         }
         month_containers = {
-            m: int(matrix_counts[ctype][m]) for m in fy_months
+            m: int(matrix_counts[ctype][m]) for m in series_months
         }
         container_matrix.append({
             "container_type": ctype,
@@ -369,17 +487,7 @@ def get_dashboard_analytics(
         for m in monthly_series
     ]
 
-    # Apply table/KPI filters within FY (SOB-settled only for net)
-    has_month_filter = bool(range_from or range_to)
-    if has_month_filter:
-        filtered = [
-            r
-            for r in fy_rows
-            if _month_in_fy_range(r.get("sob_month"), range_from, range_to, fy_months)
-        ]
-    else:
-        filtered = fy_rows
-
+    filtered = fy_rows
     for row in filtered:
         row["economics_status"] = "final"
 
@@ -395,11 +503,11 @@ def get_dashboard_analytics(
         2,
     )
 
-    # Gross margin = net (SOB-settled) + ongoing pipeline; skip ongoing when month-filtered
-    include_ongoing = not has_month_filter
-    ongoing_cost = ongoing["cost_inr"] if include_ongoing else 0.0
-    ongoing_revenue = ongoing["revenue_inr"] if include_ongoing else 0.0
-    ongoing_capture = ongoing["capture_inr"] if include_ongoing else 0.0
+    # Gross = net + ongoing (SI submitted, no final quote), including month-filtered
+    include_ongoing = True
+    ongoing_cost = ongoing["cost_inr"]
+    ongoing_revenue = ongoing["revenue_inr"]
+    ongoing_capture = ongoing["capture_inr"]
     gross_cost = round(total_cost + ongoing_cost, 2)
     gross_revenue = round(total_revenue + ongoing_revenue, 2)
     gross_margin = round(capture_total + ongoing_capture, 2)
@@ -419,8 +527,12 @@ def get_dashboard_analytics(
         cum_trips.append(i)
 
     available_months = [
-        {"value": m["month"], "label": m["label"], "short_label": m["short_label"]}
-        for m in monthly_series
+        {
+            "value": key,
+            "label": _month_label(key),
+            "short_label": _month_label(key, short=True),
+        }
+        for key in fy_months
     ]
 
     available_financial_years = [
@@ -431,7 +543,6 @@ def get_dashboard_analytics(
         }
         for y in sorted(fy_years_seen, reverse=True)
     ]
-    # Ensure current selected FY is always listed
     selected_label = financial_year_label(fy_start)
     if not any(y["value"] == selected_label for y in available_financial_years):
         available_financial_years.insert(
@@ -483,5 +594,5 @@ def get_dashboard_analytics(
         "available_months": available_months,
         "available_financial_years": available_financial_years,
         "enquiries": filtered,
-        "ongoing_enquiries": ongoing_rows if include_ongoing else [],
+        "ongoing_enquiries": ongoing_rows,
     }

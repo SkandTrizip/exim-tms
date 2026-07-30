@@ -181,6 +181,12 @@ def _sum_overhead_economics(db: Session, enquiry_id: int) -> Tuple[float, float]
     return round(cost_add, 2), round(revenue_deduct, 2)
 
 
+def _status_date(value) -> Optional[datetime.date]:
+    if not value:
+        return None
+    return value.date() if isinstance(value, datetime.datetime) else value
+
+
 def get_sob_date_for_enquiry(db: Session, enquiry_id: int) -> Optional[datetime.date]:
     """Return the SOB date from shipment_statuses, if set."""
     status = (
@@ -188,10 +194,21 @@ def get_sob_date_for_enquiry(db: Session, enquiry_id: int) -> Optional[datetime.
         .filter(ShipmentStatus.enquiry_id == enquiry_id)
         .first()
     )
-    if not status or not status.sob:
+    if not status:
         return None
-    sob = status.sob
-    return sob.date() if isinstance(sob, datetime.datetime) else sob
+    return _status_date(status.sob)
+
+
+def get_si_date_for_enquiry(db: Session, enquiry_id: int) -> Optional[datetime.date]:
+    """Return the SI submitted date from shipment_statuses, if set."""
+    status = (
+        db.query(ShipmentStatus)
+        .filter(ShipmentStatus.enquiry_id == enquiry_id)
+        .first()
+    )
+    if not status:
+        return None
+    return _status_date(status.si_submitted)
 
 
 def has_quote_economics_source(db: Session, enquiry_id: int) -> bool:
@@ -299,6 +316,7 @@ def sync_enquiry_economics(
 
     cost_inr, revenue_inr = compute_enquiry_economics(db, enquiry_id)
     sob_date = get_sob_date_for_enquiry(db, enquiry_id)
+    si_date = get_si_date_for_enquiry(db, enquiry_id)
     now = datetime.datetime.utcnow()
 
     record = (
@@ -312,6 +330,7 @@ def sync_enquiry_economics(
             cost_inr=cost_inr,
             revenue_inr=revenue_inr,
             sob_date=sob_date,
+            si_date=si_date,
             created_at=now,
             updated_at=now,
         )
@@ -320,6 +339,7 @@ def sync_enquiry_economics(
         record.cost_inr = cost_inr
         record.revenue_inr = revenue_inr
         record.sob_date = sob_date
+        record.si_date = si_date
         record.updated_at = now
 
     if commit:
@@ -327,11 +347,13 @@ def sync_enquiry_economics(
         db.refresh(record)
 
     logger.info(
-        "Synced enquiry economics enquiry_id=%s cost_inr=%s revenue_inr=%s sob_date=%s",
+        "Synced enquiry economics enquiry_id=%s cost_inr=%s revenue_inr=%s "
+        "sob_date=%s si_date=%s",
         enquiry_id,
         cost_inr,
         revenue_inr,
         sob_date,
+        si_date,
     )
     return record
 
@@ -343,6 +365,16 @@ def sync_enquiry_economics_sob_date(
     commit: bool = False,
 ) -> Optional[EnquiryEconomics]:
     """Update only sob_date on an existing economics row (or no-op if none)."""
+    return sync_enquiry_economics_milestone_dates(db, enquiry_id, commit=commit)
+
+
+def sync_enquiry_economics_milestone_dates(
+    db: Session,
+    enquiry_id: int,
+    *,
+    commit: bool = False,
+) -> Optional[EnquiryEconomics]:
+    """Update sob_date and si_date on an existing economics row (or no-op if none)."""
     record = (
         db.query(EnquiryEconomics)
         .filter(EnquiryEconomics.enquiry_id == enquiry_id)
@@ -351,8 +383,8 @@ def sync_enquiry_economics_sob_date(
     if record is None:
         return None
 
-    sob_date = get_sob_date_for_enquiry(db, enquiry_id)
-    record.sob_date = sob_date
+    record.sob_date = get_sob_date_for_enquiry(db, enquiry_id)
+    record.si_date = get_si_date_for_enquiry(db, enquiry_id)
     record.updated_at = datetime.datetime.utcnow()
 
     if commit:
