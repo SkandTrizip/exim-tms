@@ -7,9 +7,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Upload directory path (absolute path on the server)
-# UPLOAD_DIR = "/home/azureuser/uploads/"
+UPLOAD_DIR = "/home/azureuser/uploads/"
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", str(_PROJECT_ROOT / "uploads"))
+# UPLOAD_DIR = os.getenv("UPLOAD_DIR", str(_PROJECT_ROOT / "uploads"))
 
 # Injected into /js/config.js as CONFIG.API_URL. Use '' so the browser calls /api on the same host
 # you opened (localhost, 127.0.0.1, or a public IP). A fixed remote URL breaks local dev (Failed to fetch).
