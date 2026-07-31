@@ -2844,13 +2844,6 @@ function renderEnquiryActions(e, quoteStatus = null) {
                     <i class="fas fa-edit"></i> Edit Quotes
                 </button>
             `;
-            if ((e.stage || 1) >= 2) {
-                html += `
-                    <button class="actions-item confirm-item confirm-action" onclick="openActionModal('confirm-quote', ${e.id})">
-                        <i class="fas fa-check-double"></i> Confirm Quote
-                    </button>
-                `;
-            }
         }
     }
 
