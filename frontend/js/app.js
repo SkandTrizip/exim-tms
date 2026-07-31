@@ -1007,6 +1007,7 @@ function renderAnalyticsSummary(summary) {
     setText('analyticsRecordsBadge', `${total} Records`);
 
     setText('analyticsRevenue', formatInrLakhs(summary.total_revenue_inr));
+    setText('analyticsGrossRevenue', formatInrLakhs(summary.gross_revenue_inr));
     setText('analyticsCost', formatInrLakhs(summary.total_cost_inr));
     setText('analyticsCostMarginPill', `Net Margin: ${formatMarginPct(marginPct, 1)}`);
     setText('analyticsCapture', formatInrLakhs(summary.capture_inr));
@@ -1017,26 +1018,7 @@ function renderAnalyticsSummary(summary) {
         if (marginClass) captureEl.classList.add(marginClass);
     }
 
-    const grossMarginPct = summary.gross_margin_pct;
-    const grossMarginClass = analyticsValueClass(grossMarginPct);
-    const grossMarginText = formatInrLakhs(summary.gross_margin_inr);
-    const grossCostText = formatInrLakhs(summary.gross_cost_inr);
-    setText('analyticsGrossMargin', grossMarginText);
-    setText('analyticsGrossMarginPct', formatMarginPct(grossMarginPct, 1));
-    setText('analyticsCostGrossMargin', grossMarginText);
-    setText('analyticsGrossCost', grossCostText);
-
-    const grossMarginPctEl = document.getElementById('analyticsGrossMarginPct');
-    if (grossMarginPctEl) {
-        grossMarginPctEl.classList.remove('positive', 'negative');
-        if (grossMarginClass) grossMarginPctEl.classList.add(grossMarginClass);
-    }
-
-    const costGrossMarginEl = document.getElementById('analyticsCostGrossMargin');
-    if (costGrossMarginEl) {
-        costGrossMarginEl.classList.remove('positive', 'negative');
-        if (grossMarginClass) costGrossMarginEl.classList.add(grossMarginClass);
-    }
+    setText('analyticsGrossCost', formatInrLakhs(summary.gross_cost_inr));
 
     const marginPctText = formatMarginPct(marginPct, 2);
     setText('analyticsMarginPct', marginPctText);

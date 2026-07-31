@@ -79,7 +79,15 @@ function ensureUpdateQuoteModalShell() {
                         <div id="uqInitialTables"></div>
                         <div class="uq-totals-grid" style="margin-top:12px;">
                             <div class="uq-total-card">
-                                <label>Initial Quote Total (INR)</label>
+                                <label><i class="fas fa-ship"></i> Shipping Line Total (INR)</label>
+                                <div class="amount" id="uqInitialLineTotal" style="color:#2563eb">₹0</div>
+                            </div>
+                            <div class="uq-total-card">
+                                <label><i class="fas fa-plane"></i> Client Rate Total (INR)</label>
+                                <div class="amount" id="uqInitialClientTotal" style="color:#374151">₹0</div>
+                            </div>
+                            <div class="uq-total-card highlight">
+                                <label><i class="fas fa-money-bill-wave"></i> Initial Quote Total (INR)</label>
                                 <div class="amount" id="uqInitialTotal">₹0</div>
                             </div>
                         </div>
@@ -127,6 +135,18 @@ function notifyTrackingIframeFinalQuoteSaved(finalQuote) {
     } catch (_) { /* ignore */ }
 }
 
+/** Client ROE: copy shipping-line Ex. Rate when Cl. Ex. is missing or placeholder 1 on non-INR. */
+function resolveUqClientExRate(currency, exchangeRate, vendorExchangeRate) {
+    const curr = String(currency || 'INR').toUpperCase();
+    if (curr === 'INR') return 1;
+    const lineEx = formatUqExRate(exchangeRate ?? 1);
+    if (vendorExchangeRate == null || vendorExchangeRate === '') return lineEx;
+    const vex = formatUqExRate(vendorExchangeRate);
+    if (vex <= 0) return lineEx;
+    if (vex === 1 && lineEx !== 1) return lineEx;
+    return vex;
+}
+
 function calcChargeInr(ch) {
     const qty = parseFloat(ch.quantity ?? ch.qty) || 0;
     const rate = parseFloat(ch.rate) || 0;
@@ -138,8 +158,12 @@ function calcChargeInr(ch) {
 
 function calcClientInr(ch) {
     const qty = parseFloat(ch.quantity ?? ch.qty) || 0;
-    const vendorEx = parseFloat(ch.vendor_exchange_rate ?? ch.exchange_rate ?? ch.ex) || 1;
     const curr = String(ch.currency ?? ch.curr ?? 'INR').toUpperCase();
+    const vendorEx = resolveUqClientExRate(
+        curr,
+        ch.exchange_rate ?? ch.ex,
+        ch.vendor_exchange_rate
+    );
     const vendor = ch.vendor_rate != null && ch.vendor_rate !== ''
         ? (parseFloat(ch.vendor_rate) || 0)
         : (parseFloat(ch.rate) || 0);
@@ -166,34 +190,50 @@ function mapApiQuoteToContainers(quote) {
             container_type: c.container_type,
             charges: [...(c.charges || [])]
                 .sort((a, b) => (a.charge_sequence ?? 0) - (b.charge_sequence ?? 0))
-                .map((ch) => ({
-                    charge_description: ch.charge_description,
-                    account_type: ch.account_type || 'On Your Account',
-                    currency: ch.currency || 'USD',
-                    charged_on: ch.charged_on || 'Per Container',
-                    quantity: ch.quantity ?? 1,
-                    rate: ch.rate ?? 0,
-                    exchange_rate: formatUqExRate(ch.exchange_rate ?? 1),
-                    vendor_rate: ch.vendor_rate != null ? ch.vendor_rate : ch.rate ?? 0,
-                    vendor_exchange_rate: formatUqExRate(ch.vendor_exchange_rate ?? ch.exchange_rate ?? 1),
-                })),
+                .map((ch) => {
+                    const currency = ch.currency || 'USD';
+                    const exchangeRate = formatUqExRate(ch.exchange_rate ?? 1);
+                    return {
+                        charge_description: ch.charge_description,
+                        account_type: ch.account_type || 'On Your Account',
+                        currency,
+                        charged_on: ch.charged_on || 'Per Container',
+                        quantity: ch.quantity ?? 1,
+                        rate: ch.rate ?? 0,
+                        exchange_rate: exchangeRate,
+                        vendor_rate: ch.vendor_rate != null ? ch.vendor_rate : ch.rate ?? 0,
+                        vendor_exchange_rate: resolveUqClientExRate(
+                            currency,
+                            exchangeRate,
+                            ch.vendor_exchange_rate
+                        ),
+                    };
+                }),
         }));
 }
 
 function mapSnapshotContainersToEditable(snapshot) {
     return (snapshot?.containers || []).map((c) => ({
         container_type: c.container_type,
-        charges: (c.charges || []).map((ch) => ({
-            charge_description: ch.charge_description || '',
-            account_type: ch.account_type || 'On Your Account',
-            currency: ch.currency || 'USD',
-            charged_on: ch.charged_on || 'Per Container',
-            quantity: ch.quantity ?? 1,
-            rate: ch.rate ?? 0,
-            exchange_rate: ch.exchange_rate ?? 1,
-            vendor_rate: ch.vendor_rate != null ? ch.vendor_rate : ch.rate ?? 0,
-            vendor_exchange_rate: ch.vendor_exchange_rate ?? ch.exchange_rate ?? 1,
-        })),
+        charges: (c.charges || []).map((ch) => {
+            const currency = ch.currency || 'USD';
+            const exchangeRate = formatUqExRate(ch.exchange_rate ?? 1);
+            return {
+                charge_description: ch.charge_description || '',
+                account_type: ch.account_type || 'On Your Account',
+                currency,
+                charged_on: ch.charged_on || 'Per Container',
+                quantity: ch.quantity ?? 1,
+                rate: ch.rate ?? 0,
+                exchange_rate: exchangeRate,
+                vendor_rate: ch.vendor_rate != null ? ch.vendor_rate : ch.rate ?? 0,
+                vendor_exchange_rate: resolveUqClientExRate(
+                    currency,
+                    exchangeRate,
+                    ch.vendor_exchange_rate
+                ),
+            };
+        }),
     }));
 }
 
@@ -248,10 +288,10 @@ function renderInitialTable(containers) {
                             <td>${ch.quantity ?? ''}</td>
                             <td>${ch.rate ?? ''}</td>
                             <td>${displayUqExRate(ch.exchange_rate ?? 1)}</td>
-                            <td class="inr-cell">₹${Math.round(ch.shipping_line_inr ?? calcChargeInr(ch)).toLocaleString()}</td>
+                            <td class="inr-cell">₹${Math.round(calcChargeInr(ch)).toLocaleString()}</td>
                             <td>${ch.vendor_rate ?? ch.rate ?? ''}</td>
-                            <td>${displayUqExRate(ch.vendor_exchange_rate ?? ch.exchange_rate ?? 1)}</td>
-                            <td class="inr-cell" style="color:#374151">₹${Math.round(ch.client_rate_inr ?? calcClientInr(ch)).toLocaleString()}</td>
+                            <td>${displayUqExRate(resolveUqClientExRate(ch.currency, ch.exchange_rate, ch.vendor_exchange_rate))}</td>
+                            <td class="inr-cell" style="color:#374151">₹${Math.round(calcClientInr(ch)).toLocaleString()}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -351,9 +391,9 @@ function renderFinalRow(ch, cIdx, rIdx, defaultQty) {
     const qty = on === 'Per BL' ? 1 : (ch.quantity ?? defaultQty);
     const curr = String(ch.currency || 'USD').toUpperCase();
     const ex = formatUqExRate(ch.exchange_rate || getUqExchangeRate(ch.currency));
-    const vendorEx = formatUqExRate(ch.vendor_exchange_rate ?? ch.exchange_rate ?? getUqExchangeRate(ch.currency));
+    const vendorEx = resolveUqClientExRate(curr, ex, ch.vendor_exchange_rate);
     const inr = calcChargeInr({ ...ch, quantity: qty, exchange_rate: ex });
-    const clientInr = calcClientInr({ ...ch, quantity: qty, vendor_exchange_rate: vendorEx });
+    const clientInr = calcClientInr({ ...ch, quantity: qty, exchange_rate: ex, vendor_exchange_rate: vendorEx });
     const exReadonly = curr === 'INR';
     return `
         <tr data-cidx="${cIdx}" data-ridx="${rIdx}">
@@ -399,9 +439,19 @@ function bindFinalRowEvents(host) {
             updateFinalTotals();
         };
         row.querySelectorAll('input, select').forEach((el) => {
+            if (el.classList.contains('uq-ex')) return;
             el.addEventListener('input', sync);
             el.addEventListener('change', sync);
         });
+        // Keep Cl. Ex. in sync with shipping-line Ex. Rate when Ex. Rate is edited.
+        row.querySelector('.uq-ex')?.addEventListener('input', (e) => {
+            const vendorExEl = row.querySelector('.uq-vendor-ex');
+            if (vendorExEl && !vendorExEl.readOnly) {
+                vendorExEl.value = displayUqExRate(e.target.value);
+            }
+            sync();
+        });
+        row.querySelector('.uq-ex')?.addEventListener('change', sync);
         row.querySelector('.uq-on')?.addEventListener('change', (e) => {
             e.target.title = e.target.value;
             const qtyEl = row.querySelector('.uq-qty');
@@ -468,19 +518,30 @@ function updateRowInr(row) {
     if (clientCell) clientCell.textContent = '₹' + Math.round(calcClientInr(ch)).toLocaleString();
 }
 
+function updateInitialTotals(containers) {
+    const line = sumContainersInr(containers, false);
+    const client = sumContainersInr(containers, true);
+    const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '₹' + val.toLocaleString();
+    };
+    set('uqInitialLineTotal', line);
+    set('uqInitialClientTotal', client);
+    set('uqInitialTotal', line);
+}
+
 function updateFinalTotals() {
     const line = sumContainersInr(uqState.finalContainers, false);
     const client = sumContainersInr(uqState.finalContainers, true);
     const initialContainers = uqState.initialQuote
         ? mapApiQuoteToContainers(uqState.initialQuote)
         : [];
-    const initial = sumContainersInr(initialContainers, false);
+    updateInitialTotals(initialContainers);
 
     const set = (id, val) => {
         const el = document.getElementById(id);
         if (el) el.textContent = '₹' + val.toLocaleString();
     };
-    set('uqInitialTotal', initial);
     set('uqFinalLineTotal', line);
     set('uqFinalClientTotal', client);
     set('uqFinalQuoteAmount', line);
@@ -602,7 +663,9 @@ async function openUpdateQuoteModalInternal(quote, options = {}) {
         if (loading) loading.style.display = 'none';
         if (content) content.style.display = 'block';
 
-        renderInitialTable(mapApiQuoteToContainers(initialQuote));
+        const initialContainers = mapApiQuoteToContainers(initialQuote);
+        renderInitialTable(initialContainers);
+        updateInitialTotals(initialContainers);
         renderFinalTables();
         updateFinalTotals();
     } catch (err) {

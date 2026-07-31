@@ -787,7 +787,8 @@ async function savePricingData(silent = false) {
                     quantity: parseFloat(ch.qty) || 1,
                     rate: parseFloat(ch.rate) || 0,
                     exchange_rate: parseFloat(ch.ex) || 1,
-                    vendor_rate: parseFloat(ch.vendor_rate) || 0
+                    vendor_rate: parseFloat(ch.vendor_rate) || 0,
+                    vendor_exchange_rate: parseFloat(ch.ex) || 1,
                 }))
             }))
         };

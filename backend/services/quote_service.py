@@ -32,7 +32,10 @@ def _quote_to_snapshot_dict(quote: Quote) -> dict:
             curr = (ch.currency or "INR").upper()
             inr = qty * rate * ex if curr != "INR" else qty * rate
             vendor = ch.vendor_rate if ch.vendor_rate is not None else ch.rate
-            vendor_ex = ch.vendor_exchange_rate if ch.vendor_exchange_rate is not None else ex
+            # Prefer shipping-line ROE when client ROE is missing or placeholder 1 on non-INR
+            vendor_ex = ch.vendor_exchange_rate
+            if vendor_ex is None or (curr != "INR" and float(vendor_ex or 0) == 1.0 and float(ex or 1) != 1.0):
+                vendor_ex = ex
             vendor_tot = qty * (vendor or 0)
             vendor_inr = vendor_tot * vendor_ex if curr != "INR" else vendor_tot
             charges.append({

@@ -95,6 +95,15 @@ def _copy_source_to_final(db: Session, source: Quote) -> FinalQuote:
                 src_charge.currency or "INR",
                 src_charge.exchange_rate or 1,
             )
+            line_ex = src_charge.exchange_rate or 1
+            curr = (src_charge.currency or "INR").upper()
+            vendor_ex = src_charge.vendor_exchange_rate
+            if vendor_ex is None or (
+                curr != "INR"
+                and float(vendor_ex or 0) == 1.0
+                and float(line_ex or 1) != 1.0
+            ):
+                vendor_ex = line_ex
             db_charge = FinalQuoteCharge(
                 container_id=db_container.id,
                 final_quote_id=final.id,
@@ -109,7 +118,7 @@ def _copy_source_to_final(db: Session, source: Quote) -> FinalQuote:
                 exchange_rate=src_charge.exchange_rate,
                 final_inr_amount=calculated_inr,
                 vendor_rate=src_charge.vendor_rate,
-                vendor_exchange_rate=src_charge.vendor_exchange_rate or src_charge.exchange_rate,
+                vendor_exchange_rate=vendor_ex,
                 charge_sequence=seq,
             )
             db.add(db_charge)
