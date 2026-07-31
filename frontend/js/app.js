@@ -1020,6 +1020,22 @@ function renderAnalyticsSummary(summary) {
 
     setText('analyticsGrossCost', formatInrLakhs(summary.gross_cost_inr));
 
+    const grossMarginPct = summary.gross_margin_pct;
+    const grossMarginClass = analyticsValueClass(grossMarginPct);
+    setText('analyticsGrossMargin', formatInrLakhs(summary.gross_margin_inr));
+    setText('analyticsGrossMarginPct', formatMarginPct(grossMarginPct, 2));
+
+    const grossMarginEl = document.getElementById('analyticsGrossMargin');
+    if (grossMarginEl) {
+        grossMarginEl.classList.remove('positive', 'negative');
+        if (grossMarginClass) grossMarginEl.classList.add(grossMarginClass);
+    }
+    const grossMarginPctEl = document.getElementById('analyticsGrossMarginPct');
+    if (grossMarginPctEl) {
+        grossMarginPctEl.classList.remove('positive', 'negative');
+        if (grossMarginClass) grossMarginPctEl.classList.add(grossMarginClass);
+    }
+
     const marginPctText = formatMarginPct(marginPct, 2);
     setText('analyticsMarginPct', marginPctText);
 

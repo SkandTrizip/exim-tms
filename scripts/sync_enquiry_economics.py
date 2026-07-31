@@ -17,8 +17,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from backend.database import SessionLocal
-from backend.models.final_quote import FinalQuote
-from backend.models.document import ShipmentDocument
 from backend.services.enquiry_economics_service import compute_enquiry_economics, sync_enquiry_economics
 
 
@@ -26,15 +24,9 @@ def enquiry_ids_to_sync(db, enquiry_id: int | None) -> list[int]:
     if enquiry_id is not None:
         return [enquiry_id]
 
-    from_final = {row[0] for row in db.query(FinalQuote.enquiry_id).distinct().all()}
-    from_additional = {
-        row[0]
-        for row in db.query(ShipmentDocument.enquiry_id)
-        .filter(ShipmentDocument.document_type == "additionalInvoice")
-        .distinct()
-        .all()
-    }
-    return sorted(from_final | from_additional)
+    from backend.services.enquiry_economics_service import eligible_enquiry_ids_for_economics
+
+    return eligible_enquiry_ids_for_economics(db)
 
 
 def main() -> int:

@@ -500,15 +500,30 @@
 
 .biz-kpi-card--trips .biz-kpi-card__footer-value,
 .biz-kpi-card--cost .biz-kpi-card__footer-value,
-.biz-kpi-card--revenue .biz-kpi-card__footer-value {
+.biz-kpi-card--revenue .biz-kpi-card__footer-value,
+.biz-kpi-card--margin .biz-kpi-card__footer-value,
+.biz-kpi-card--gauge .biz-kpi-card__footer-value {
     font-size: 13px;
     font-weight: 700;
 }
 
 .biz-kpi-card--trips .biz-kpi-card__footer-label,
 .biz-kpi-card--cost .biz-kpi-card__footer-label,
-.biz-kpi-card--revenue .biz-kpi-card__footer-label {
+.biz-kpi-card--revenue .biz-kpi-card__footer-label,
+.biz-kpi-card--margin .biz-kpi-card__footer-label,
+.biz-kpi-card--gauge .biz-kpi-card__footer-label {
     font-size: 9px;
+}
+
+.biz-kpi-card--gauge .biz-kpi-card__footer {
+    width: 100%;
+    text-align: center;
+}
+
+.biz-kpi-card--gauge .biz-kpi-card__footer-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
 }
 
 .biz-kpi-card--gauge {
