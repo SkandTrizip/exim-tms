@@ -150,6 +150,16 @@
                                     </div>
                                     <div class="biz-kpi-card__label">Trips</div>
                                     <div class="biz-kpi-card__value" id="analyticsTripsValue">—</div>
+                                    <div class="biz-kpi-card__footer">
+                                        <div class="biz-kpi-card__footer-item">
+                                            <div class="biz-kpi-card__footer-label">Active</div>
+                                            <div class="biz-kpi-card__footer-value" id="analyticsTripsActive">—</div>
+                                        </div>
+                                        <div class="biz-kpi-card__footer-item">
+                                            <div class="biz-kpi-card__footer-label">Completed</div>
+                                            <div class="biz-kpi-card__footer-value" id="analyticsTripsCompleted">—</div>
+                                        </div>
+                                    </div>
                                 </article>
 
                                 <article class="biz-kpi-card biz-kpi-card--revenue">
@@ -168,6 +178,16 @@
                                     </div>
                                     <div class="biz-kpi-card__label">Net Freight Cost</div>
                                     <div class="biz-kpi-card__value" id="analyticsCost">—</div>
+                                    <div class="biz-kpi-card__footer">
+                                        <div class="biz-kpi-card__footer-item">
+                                            <div class="biz-kpi-card__footer-label">Gross Margin</div>
+                                            <div class="biz-kpi-card__footer-value" id="analyticsCostGrossMargin">—</div>
+                                        </div>
+                                        <div class="biz-kpi-card__footer-item">
+                                            <div class="biz-kpi-card__footer-label">Gross Cost</div>
+                                            <div class="biz-kpi-card__footer-value" id="analyticsGrossCost">—</div>
+                                        </div>
+                                    </div>
                                 </article>
 
                                 <article class="biz-kpi-card biz-kpi-card--margin">
@@ -205,83 +225,6 @@
                                 </button>
                                 <span class="biz-records-badge" id="analyticsRecordsBadge">— Records</span>
                             </div>
-
-                            <div class="analytics-projection" id="analyticsProjectionPanel">
-                                <div class="analytics-projection__header">
-                                    <div>
-                                        <h3 class="analytics-projection__title">Month-wise Margin &amp; Profit</h3>
-                                        <p class="analytics-projection__sub" id="analyticsFySubtitle">Financial year Apr – Mar (by SI date from Jul)</p>
-                                    </div>
-                                    <div class="analytics-filters">
-                                        <label class="analytics-filter">
-                                            <span>Financial Year</span>
-                                            <select id="analyticsFyFilter" aria-label="Filter by financial year">
-                                                <option value="2026-27">FY 2026-27</option>
-                                            </select>
-                                        </label>
-                                        <label class="analytics-filter">
-                                            <span>From month</span>
-                                            <select id="analyticsMonthFromFilter" aria-label="Filter from SI month">
-                                                <option value="">All</option>
-                                            </select>
-                                        </label>
-                                        <label class="analytics-filter">
-                                            <span>To month</span>
-                                            <select id="analyticsMonthToFilter" aria-label="Filter to SI month">
-                                                <option value="">All</option>
-                                            </select>
-                                        </label>
-                                        <label class="analytics-filter">
-                                            <span>Chart metric</span>
-                                            <select id="analyticsMetricFilter" aria-label="Filter chart metric">
-                                                <option value="gross_margin">Gross Margin</option>
-                                                <option value="net_margin">Net Margin</option>
-                                                <option value="cost">Cost</option>
-                                                <option value="revenue">Revenue</option>
-                                            </select>
-                                        </label>
-                                    </div>
-                                </div>
-                                <div class="analytics-chart-wrap" id="analyticsMonthlyChart" role="img" aria-label="Monthly cost, revenue and margin chart">
-                                    <div class="analytics-chart-empty">No economics data yet.</div>
-                                </div>
-                                <p class="analytics-pending-note" id="analyticsPendingSobNote" hidden></p>
-
-                                <div class="analytics-teu-section" id="analyticsTeuSection">
-                                    <div class="analytics-teu-section__header">
-                                        <div>
-                                            <h3 class="analytics-projection__title">Container TEU Matrix</h3>
-                                            <p class="analytics-projection__sub">
-                                                20′ = 1 TEU · 40′/45′ (incl. HC) = 2 TEU · by SI month from Jul
-                                            </p>
-                                        </div>
-                                        <div class="analytics-teu-totals" aria-label="TEU totals">
-                                            <span class="analytics-teu-totals__item">
-                                                <em>Total TEUs</em>
-                                                <strong id="analyticsTotalTeu">0</strong>
-                                            </span>
-                                            <span class="analytics-teu-totals__item">
-                                                <em>Containers</em>
-                                                <strong id="analyticsTotalContainers">0</strong>
-                                            </span>
-                                        </div>
-                                    </div>
-                                    <div class="analytics-teu-bar-wrap" id="analyticsTeuBarChart" role="img" aria-label="Month-wise total TEUs bar chart">
-                                        <div class="analytics-chart-empty">No TEU data for this period.</div>
-                                    </div>
-                                    <div class="analytics-teu-matrix-scroll">
-                                        <table class="data-table analytics-teu-matrix" id="analyticsTeuMatrixTable">
-                                            <thead id="analyticsTeuMatrixHead"></thead>
-                                            <tbody id="analyticsTeuMatrixBody">
-                                                <tr class="analytics-empty-row">
-                                                    <td>No container data yet.</td>
-                                                </tr>
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                </div>
-                            </div>
-                        </section>
 
                         <div id="analyticsDetailsPanel" class="analytics-details-panel" hidden>
                             <div class="table-container table-card list-table-card analytics-details-card" id="analyticsDetailsTableCard">
@@ -381,6 +324,83 @@
                                 <div class="pagination-container analytics-details-pagination" id="analyticsDetailsPagination"></div>
                             </div>
                         </div>
+
+                            <div class="analytics-projection" id="analyticsProjectionPanel">
+                                <div class="analytics-projection__header">
+                                    <div>
+                                        <h3 class="analytics-projection__title">Month-wise Margin &amp; Profit</h3>
+                                        <p class="analytics-projection__sub" id="analyticsFySubtitle">Financial year Apr – Mar (by SI date from Jul)</p>
+                                    </div>
+                                    <div class="analytics-filters">
+                                        <label class="analytics-filter">
+                                            <span>Financial Year</span>
+                                            <select id="analyticsFyFilter" aria-label="Filter by financial year">
+                                                <option value="2026-27">FY 2026-27</option>
+                                            </select>
+                                        </label>
+                                        <label class="analytics-filter">
+                                            <span>From month</span>
+                                            <select id="analyticsMonthFromFilter" aria-label="Filter from SI month">
+                                                <option value="">All</option>
+                                            </select>
+                                        </label>
+                                        <label class="analytics-filter">
+                                            <span>To month</span>
+                                            <select id="analyticsMonthToFilter" aria-label="Filter to SI month">
+                                                <option value="">All</option>
+                                            </select>
+                                        </label>
+                                        <label class="analytics-filter">
+                                            <span>Chart metric</span>
+                                            <select id="analyticsMetricFilter" aria-label="Filter chart metric">
+                                                <option value="gross_margin">Gross Margin</option>
+                                                <option value="net_margin">Net Margin</option>
+                                                <option value="cost">Cost</option>
+                                                <option value="revenue">Revenue</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="analytics-chart-wrap" id="analyticsMonthlyChart" role="img" aria-label="Monthly cost, revenue and margin chart">
+                                    <div class="analytics-chart-empty">No economics data yet.</div>
+                                </div>
+                                <p class="analytics-pending-note" id="analyticsPendingSobNote" hidden></p>
+
+                                <div class="analytics-teu-section" id="analyticsTeuSection">
+                                    <div class="analytics-teu-section__header">
+                                        <div>
+                                            <h3 class="analytics-projection__title">Container TEU Matrix</h3>
+                                            <p class="analytics-projection__sub">
+                                                20′ = 1 TEU · 40′/45′ (incl. HC) = 2 TEU · by SI month from Jul
+                                            </p>
+                                        </div>
+                                        <div class="analytics-teu-totals" aria-label="TEU totals">
+                                            <span class="analytics-teu-totals__item">
+                                                <em>Total TEUs</em>
+                                                <strong id="analyticsTotalTeu">0</strong>
+                                            </span>
+                                            <span class="analytics-teu-totals__item">
+                                                <em>Containers</em>
+                                                <strong id="analyticsTotalContainers">0</strong>
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div class="analytics-teu-bar-wrap" id="analyticsTeuBarChart" role="img" aria-label="Month-wise total TEUs bar chart">
+                                        <div class="analytics-chart-empty">No TEU data for this period.</div>
+                                    </div>
+                                    <div class="analytics-teu-matrix-scroll">
+                                        <table class="data-table analytics-teu-matrix" id="analyticsTeuMatrixTable">
+                                            <thead id="analyticsTeuMatrixHead"></thead>
+                                            <tbody id="analyticsTeuMatrixBody">
+                                                <tr class="analytics-empty-row">
+                                                    <td>No container data yet.</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
 
                         <section class="section-card">
                             <div class="section-header">

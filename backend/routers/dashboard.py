@@ -150,6 +150,8 @@ def get_dashboard_analytics_endpoint(
                 "capture_inr": 0,
                 "gross_margin_inr": 0,
                 "gross_margin_pct": None,
+                "gross_cost_inr": 0,
+                "gross_revenue_inr": 0,
                 "margin_pct": None,
             },
             "monthly_series": [],

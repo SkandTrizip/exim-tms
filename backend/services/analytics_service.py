@@ -569,6 +569,8 @@ def get_dashboard_analytics(
             "total_containers": total_containers,
             "gross_margin_inr": gross_margin,
             "gross_margin_pct": _margin_pct(gross_revenue, gross_cost),
+            "gross_cost_inr": gross_cost,
+            "gross_revenue_inr": gross_revenue,
             "filter_month": month,
             "filter_month_from": range_from,
             "filter_month_to": range_to,

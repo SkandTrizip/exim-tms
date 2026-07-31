@@ -994,12 +994,16 @@ function buildMarginGaugeSvg(pct) {
 }
 
 function renderAnalyticsSummary(summary) {
-    const total = summary.total_enquiries ?? 0;
+    const completed = summary.total_enquiries ?? 0;
+    const active = (summary.ongoing && summary.ongoing.trips) ? summary.ongoing.trips : 0;
+    const total = completed + active;
     const marginPct = summary.margin_pct;
     const marginClass = analyticsValueClass(marginPct);
 
     setText('analyticsTripsBadge', `${total} Total`);
     setText('analyticsTripsValue', String(total));
+    setText('analyticsTripsActive', String(active));
+    setText('analyticsTripsCompleted', String(completed));
     setText('analyticsRecordsBadge', `${total} Records`);
 
     setText('analyticsRevenue', formatInrLakhs(summary.total_revenue_inr));
@@ -1015,13 +1019,23 @@ function renderAnalyticsSummary(summary) {
 
     const grossMarginPct = summary.gross_margin_pct;
     const grossMarginClass = analyticsValueClass(grossMarginPct);
-    setText('analyticsGrossMargin', formatInrLakhs(summary.gross_margin_inr));
+    const grossMarginText = formatInrLakhs(summary.gross_margin_inr);
+    const grossCostText = formatInrLakhs(summary.gross_cost_inr);
+    setText('analyticsGrossMargin', grossMarginText);
     setText('analyticsGrossMarginPct', formatMarginPct(grossMarginPct, 1));
+    setText('analyticsCostGrossMargin', grossMarginText);
+    setText('analyticsGrossCost', grossCostText);
 
     const grossMarginPctEl = document.getElementById('analyticsGrossMarginPct');
     if (grossMarginPctEl) {
         grossMarginPctEl.classList.remove('positive', 'negative');
         if (grossMarginClass) grossMarginPctEl.classList.add(grossMarginClass);
+    }
+
+    const costGrossMarginEl = document.getElementById('analyticsCostGrossMargin');
+    if (costGrossMarginEl) {
+        costGrossMarginEl.classList.remove('positive', 'negative');
+        if (grossMarginClass) costGrossMarginEl.classList.add(grossMarginClass);
     }
 
     const marginPctText = formatMarginPct(marginPct, 2);

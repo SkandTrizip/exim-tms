@@ -494,6 +494,17 @@
 .biz-kpi-card__footer-value.positive { color: #047857; }
 .biz-kpi-card__footer-value.negative { color: #b91c1c; }
 
+.biz-kpi-card--trips .biz-kpi-card__footer-value,
+.biz-kpi-card--cost .biz-kpi-card__footer-value {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.biz-kpi-card--trips .biz-kpi-card__footer-label,
+.biz-kpi-card--cost .biz-kpi-card__footer-label {
+    font-size: 9px;
+}
+
 .biz-kpi-card--gauge {
     align-items: center;
     text-align: center;
@@ -1303,7 +1314,7 @@
 }
 
 .analytics-details-panel {
-    margin-bottom: 16px;
+    margin: 12px 0 16px;
 }
 
 .analytics-details-panel[hidden] {
