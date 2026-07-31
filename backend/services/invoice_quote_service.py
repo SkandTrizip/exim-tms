@@ -138,9 +138,12 @@ def taxable_inr_for_additional_amount(
     amount: float,
     currency: str,
     containers: List[Any],
+    exchange_rate: Optional[float] = None,
 ) -> Tuple[float, float, float]:
     """
-    Convert additional-invoice amount to INR using invoice ROE.
+    Convert additional-invoice amount to INR.
+    Prefer explicit exchange_rate (ROE saved on the additional invoice);
+    otherwise fall back to client ROE from quote/final-quote lines.
     Returns (curr_amt, roe_display, taxable_amt_inr).
     """
     curr = (currency or "INR").upper()
@@ -148,10 +151,22 @@ def taxable_inr_for_additional_amount(
     if curr == "INR":
         return curr_amt, 1.0, curr_amt
 
-    roe_display = client_roe_for_currency(containers, curr)
+    roe_display: Optional[float] = None
+    if exchange_rate is not None:
+        try:
+            roe_val = float(exchange_rate)
+        except (TypeError, ValueError):
+            roe_val = 0.0
+        if roe_val > 0:
+            roe_display = round(roe_val, 2)
+
+    if roe_display is None:
+        roe_display = client_roe_for_currency(containers, curr)
+
     if roe_display is None:
         raise ValueError(
-            f"Missing client exchange rate for additional invoice ({curr}). "
-            "Set Client Ex. Rate on a matching currency line in the quote before generating the invoice."
+            f"Missing ROE for additional invoice ({curr}). "
+            "Enter ROE when uploading the additional invoice, or set Client Ex. Rate "
+            "on a matching currency line in the quote."
         )
     return curr_amt, roe_display, curr_amt * roe_display

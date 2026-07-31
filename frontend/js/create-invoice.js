@@ -259,11 +259,13 @@ async function loadAdditionalInvoiceDocs(presetAdditionalDocId = '') {
         const meta = d.metadata_info || {};
         const curr = (meta.currency || 'INR').toUpperCase();
         const amt = meta.amount != null && meta.amount !== '' ? Number(meta.amount) : null;
+        const roe = meta.roe != null && meta.roe !== '' ? Number(meta.roe) : null;
         const amtPart = Number.isFinite(amt)
             ? ` · ${curr} ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
             : '';
+        const roePart = Number.isFinite(roe) && roe > 0 ? ` · ROE ${roe}` : '';
         const desc = meta.charge_details ? ` · ${meta.charge_details}` : '';
-        const label = `Doc #${d.id}${desc}${amtPart} • ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}`;
+        const label = `Doc #${d.id}${desc}${amtPart}${roePart} • ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}`;
         opts.push(`<option value="${String(d.id)}">${label}</option>`);
     }
     select.innerHTML = opts.join('');

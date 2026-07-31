@@ -660,10 +660,11 @@ def generate_invoice_pdf(
                 curr_amt = 0.0
 
             curr = (metadata.get("currency") or "INR").upper()
+            meta_roe = metadata.get("roe", metadata.get("exchange_rate"))
             try:
                 curr_amt, roe_display, taxable_amt = (
                     invoice_quote_service.taxable_inr_for_additional_amount(
-                        curr_amt, curr, containers
+                        curr_amt, curr, containers, exchange_rate=meta_roe
                     )
                 )
             except ValueError as exc:

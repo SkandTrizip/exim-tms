@@ -161,20 +161,21 @@ def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> float:
         if amount <= 0:
             continue
         curr = (metadata.get("currency") or "INR").upper()
+        meta_roe = metadata.get("roe", metadata.get("exchange_rate"))
         try:
             _, _, taxable_inr = invoice_quote_service.taxable_inr_for_additional_amount(
-                amount, curr, containers
+                amount, curr, containers, exchange_rate=meta_roe
             )
             total += taxable_inr
         except ValueError:
-            # No matching quote ROE yet — keep foreign amount out of INR totals
+            # No ROE yet — keep foreign amount out of INR totals
             # rather than treating USD as INR. INR lines still count (roe=1).
             if curr == "INR":
                 total += amount
             else:
                 logger.warning(
                     "Skipping additional invoice INR conversion enquiry_id=%s doc_id=%s "
-                    "currency=%s — missing client ROE on quote",
+                    "currency=%s — missing ROE",
                     enquiry_id,
                     doc.id,
                     curr,

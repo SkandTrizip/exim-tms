@@ -233,13 +233,16 @@ async function fetchUploadedDocuments(enquiryId) {
                         if (metadata.amount || metadata.charge_details) {
                             const curr = (metadata.currency || 'INR').toUpperCase();
                             const amt = parseFloat(metadata.amount || 0);
+                            const roe = parseFloat(metadata.roe != null ? metadata.roe : (curr === 'INR' ? 1 : 0));
                             const amtLabel = curr === 'INR'
                                 ? `₹${amt.toLocaleString()}`
                                 : `${curr} ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+                            const roeLabel = Number.isFinite(roe) && roe > 0 ? roe.toFixed(2) : '—';
                             metaHtml = `
-                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #e2e8f0; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; font-size: 10px; color: #64748b;">
+                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #e2e8f0; display: grid; grid-template-columns: 2fr 1fr 0.8fr 1fr; gap: 8px; font-size: 10px; color: #64748b;">
                                     <span><strong>Desc:</strong> ${metadata.charge_details || '-'}</span>
                                     <span><strong>HSN:</strong> ${metadata.hsn_sac || '-'}</span>
+                                    <span><strong>ROE:</strong> ${roeLabel}</span>
                                     <span style="text-align: right; font-weight: 700; color: var(--navy-800);">${amtLabel}</span>
                                 </div>
                             `;
@@ -1192,15 +1195,40 @@ function handleAdditionalInvoiceUpload(input) {
 }
 
 
+function onAdditionalInvoiceCurrencyChange() {
+    const curr = (document.getElementById('add_inv_currency')?.value || 'INR').toUpperCase();
+    const roeInput = document.getElementById('add_inv_roe');
+    if (!roeInput) return;
+    if (curr === 'INR') {
+        roeInput.value = '1';
+        roeInput.readOnly = true;
+        roeInput.style.background = '#f1f5f9';
+    } else {
+        roeInput.readOnly = false;
+        roeInput.style.background = 'white';
+        if (!roeInput.value || parseFloat(roeInput.value) === 1) {
+            roeInput.value = '';
+            roeInput.placeholder = 'Enter ROE';
+        }
+    }
+}
+
 async function saveAdditionalInvoiceDetails() {
     const chargeDetails = document.getElementById('add_inv_charge_details')?.value;
     const hsnSac = document.getElementById('add_inv_hsn_sac')?.value;
     const amount = document.getElementById('add_inv_amount')?.value;
     const currency = (document.getElementById('add_inv_currency')?.value || 'INR').toUpperCase();
+    const roeRaw = document.getElementById('add_inv_roe')?.value;
     const fileInput = document.getElementById('additionalInvoiceUpload');
 
     if (!chargeDetails || !hsnSac || !amount) {
         alert("Please fill in Charge Details, HSN/SAC Code, and Amount");
+        return;
+    }
+
+    const roe = currency === 'INR' ? 1 : parseFloat(roeRaw);
+    if (!Number.isFinite(roe) || roe <= 0) {
+        alert("Please enter a valid ROE (greater than 0) for non-INR currencies");
         return;
     }
 
@@ -1221,6 +1249,7 @@ async function saveAdditionalInvoiceDetails() {
         hsn_sac: hsnSac,
         amount: amount,
         currency: currency,
+        roe: roe,
     };
     formData.append('metadata', JSON.stringify(metadataObj));
 
@@ -1255,6 +1284,12 @@ async function saveAdditionalInvoiceDetails() {
             document.getElementById('add_inv_amount').value = '';
             const currSelect = document.getElementById('add_inv_currency');
             if (currSelect) currSelect.value = 'INR';
+            const roeInput = document.getElementById('add_inv_roe');
+            if (roeInput) {
+                roeInput.value = '1';
+                roeInput.readOnly = true;
+                roeInput.style.background = '#f1f5f9';
+            }
 
             // Refresh documents list
             document.getElementById('additionalInvoicesList').innerHTML = '';
