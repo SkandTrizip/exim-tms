@@ -454,8 +454,7 @@
     border-left: none !important;
 }
 
-/* Show vendor total summary card only in confirm mode */
-body.confirm-mode .vendor-total-card {
+.vendor-total-card {
     display: flex !important;
 }
 

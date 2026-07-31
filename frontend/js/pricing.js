@@ -15,7 +15,7 @@ function getChargeCurrencies() {
         ? CONFIG.CHARGE_CURRENCIES
         : ['USD', 'EUR', 'GBP', 'JPY', 'INR'];
 }
-let isConfirmMode = false;  // controls vendor rate column visibility
+let isConfirmMode = false;  // true when confirm-flow UI locks non-rate fields
 /** URL `mode=` so we can keep the calculator open for Confirm Quote flows even after a quote is already accepted */
 let pricingPageMode = '';
 let _confirmUiSetupTimer = null;
@@ -192,8 +192,8 @@ function initViewMode() {
 
 function initConfirmMode() {
     console.log('🛡️ Entering Confirm Mode — shipping line rate & client rate editable');
-    isConfirmMode = true;                          // show vendor column in newly rendered rows
-    document.body.classList.add('confirm-mode');   // show vendor total card via CSS
+    isConfirmMode = true;
+    document.body.classList.add('confirm-mode');
 
     initPricingTable(false, true);
 
@@ -249,7 +249,14 @@ function initConfirmMode() {
 
 function confirmQuoteFromPage() {
     if (activeQuoteIndex < 0 || activeQuoteIndex >= pricingQuotes.length) return;
-    finalizeSelectedQuote(activeQuoteIndex);
+    const quote = pricingQuotes[activeQuoteIndex];
+    const quoteName = quote?.name || 'This quote';
+    showModal(
+        'Confirm Quote',
+        `<strong>${quoteName}</strong> will be locked after confirmation. You will not be able to edit rates from Quotes & Pricing. Do you want to continue?`,
+        'warning',
+        () => finalizeSelectedQuote(activeQuoteIndex, { alreadyConfirmed: true })
+    );
 }
 
 function renderSelectionGrid() {
@@ -601,13 +608,13 @@ function renderContainerSection(data, index) {
                         <th class="col-amt">Rate</th>
                         <th class="col-ex">Ex. Rate</th>
                         <th class="col-inr">Shipping Line (INR)</th>
-                        ${isConfirmMode ? '<th class="col-vendor">Client Rate</th>' : ''}
+                        <th class="col-vendor">Client Rate</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="${isConfirmMode ? 9 : 8}" style="padding: 0;">
+                        <td colspan="9" style="padding: 0;">
                             <button type="button" class="btn-add-integrated" style="padding: 10px !important; font-size: 0.7rem;" onclick="addPricingRowToSection(this)">
                                 <i class="fas fa-plus-circle"></i> Add Charge Item
                             </button>
@@ -670,7 +677,7 @@ function addPricingRowToTbody(tbody, data = {}) {
         <td><input type="number" class="p-rate" value="${data.rate || ''}" min="0" oninput="if(this.value<0)this.value=0; syncVendorRate(this); calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td><input type="number" class="p-ex" value="${defaultEx}" min="0" oninput="if(this.value<0)this.value=0; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td class="col-inr" style="position:relative; font-weight:600; color:#1e3a8a;"><span class="p-inr-val">₹0</span>${deleteBtn}</td>
-        ${isConfirmMode ? `<td class="col-vendor"><input type="number" class="p-vendor" value="${defaultVendorRate}" data-manual="${vendorManual}" min="0" placeholder="0" oninput="if(this.value<0)this.value=0; this.dataset.manual='true'; const tr=this.closest('tr'); if(tr) tr.dataset.vendorRate=this.value; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>` : ''}
+        <td class="col-vendor"><input type="number" class="p-vendor" value="${defaultVendorRate}" data-manual="${vendorManual}" min="0" placeholder="0" oninput="if(this.value<0)this.value=0; this.dataset.manual='true'; const tr=this.closest('tr'); if(tr) tr.dataset.vendorRate=this.value; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
     `;
     const vrPersist = hasStoredVendor ? String(data.vendor_rate) : String(data.rate ?? '');
     row.dataset.vendorRate = vrPersist;
@@ -899,8 +906,8 @@ function isFirstTimeQuoteConfirmation() {
 
 function promptFinalizeQuoteConfirmation(quote, remarks = null) {
     showModal(
-        'Confirm Selection',
-        `Are you sure you want to finalize <strong>${quote.name}</strong> (${quote.line})? This will lock the pricing sheet.`,
+        'Confirm Quote',
+        `<strong>${quote.name}</strong> (${quote.line || '-'}) will be locked after confirmation. You will not be able to edit rates from Quotes & Pricing. Do you want to continue?`,
         'warning',
         async () => {
             await executeFinalizeQuote(quote, remarks);
@@ -908,13 +915,17 @@ function promptFinalizeQuoteConfirmation(quote, remarks = null) {
     );
 }
 
-async function finalizeSelectedQuote(idx) {
+async function finalizeSelectedQuote(idx, options = {}) {
     const quote = pricingQuotes[idx];
     activeQuoteIndex = idx;
 
     closeModal();
 
     if (isFirstTimeQuoteConfirmation()) {
+        if (options.alreadyConfirmed) {
+            await executeFinalizeQuote(quote);
+            return;
+        }
         promptFinalizeQuoteConfirmation(quote);
         return;
     }
@@ -923,7 +934,11 @@ async function finalizeSelectedQuote(idx) {
         title: 'Remarks before finalizing quote',
         confirmLabel: 'Continue',
         onConfirm: (remarks) => {
-            promptFinalizeQuoteConfirmation(quote, remarks);
+            if (options.alreadyConfirmed) {
+                executeFinalizeQuote(quote, remarks);
+            } else {
+                promptFinalizeQuoteConfirmation(quote, remarks);
+            }
         },
     });
 }
