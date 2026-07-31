@@ -256,7 +256,14 @@ async function loadAdditionalInvoiceDocs(presetAdditionalDocId = '') {
     // populate dropdown
     const opts = ['<option value="">Select uploaded additional invoice…</option>'];
     for (const d of (additionalDocs || [])) {
-        const label = `Doc #${d.id} • ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}`;
+        const meta = d.metadata_info || {};
+        const curr = (meta.currency || 'INR').toUpperCase();
+        const amt = meta.amount != null && meta.amount !== '' ? Number(meta.amount) : null;
+        const amtPart = Number.isFinite(amt)
+            ? ` · ${curr} ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })}`
+            : '';
+        const desc = meta.charge_details ? ` · ${meta.charge_details}` : '';
+        const label = `Doc #${d.id}${desc}${amtPart} • ${d.created_at ? new Date(d.created_at).toLocaleString() : ''}`;
         opts.push(`<option value="${String(d.id)}">${label}</option>`);
     }
     select.innerHTML = opts.join('');
@@ -419,6 +426,10 @@ async function generateInvoice(type = 'draft') {
         });
         if (customerInvNo) params.append('customer_invoice_no', customerInvNo);
         if (irnValue) params.append('irn', irnValue);
+        const addDocId = getSelectedAdditionalDocId();
+        if ((params.get('item_type') || '') === 'additional' && addDocId) {
+            params.append('additional_doc_id', String(addDocId));
+        }
 
         const pdfUrl = `${CONFIG.API_URL}/api/invoice/generate/${enquiryId}?${params.toString()}`;
         window.open(pdfUrl, '_blank');

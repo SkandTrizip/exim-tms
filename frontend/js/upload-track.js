@@ -231,11 +231,16 @@ async function fetchUploadedDocuments(enquiryId) {
                     if (listEl) {
                         let metaHtml = "";
                         if (metadata.amount || metadata.charge_details) {
+                            const curr = (metadata.currency || 'INR').toUpperCase();
+                            const amt = parseFloat(metadata.amount || 0);
+                            const amtLabel = curr === 'INR'
+                                ? `₹${amt.toLocaleString()}`
+                                : `${curr} ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
                             metaHtml = `
                                 <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #e2e8f0; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; font-size: 10px; color: #64748b;">
                                     <span><strong>Desc:</strong> ${metadata.charge_details || '-'}</span>
                                     <span><strong>HSN:</strong> ${metadata.hsn_sac || '-'}</span>
-                                    <span style="text-align: right; font-weight: 700; color: var(--navy-800);">₹${parseFloat(metadata.amount || 0).toLocaleString()}</span>
+                                    <span style="text-align: right; font-weight: 700; color: var(--navy-800);">${amtLabel}</span>
                                 </div>
                             `;
                         }
@@ -1191,6 +1196,7 @@ async function saveAdditionalInvoiceDetails() {
     const chargeDetails = document.getElementById('add_inv_charge_details')?.value;
     const hsnSac = document.getElementById('add_inv_hsn_sac')?.value;
     const amount = document.getElementById('add_inv_amount')?.value;
+    const currency = (document.getElementById('add_inv_currency')?.value || 'INR').toUpperCase();
     const fileInput = document.getElementById('additionalInvoiceUpload');
 
     if (!chargeDetails || !hsnSac || !amount) {
@@ -1213,7 +1219,8 @@ async function saveAdditionalInvoiceDetails() {
     const metadataObj = {
         charge_details: chargeDetails,
         hsn_sac: hsnSac,
-        amount: amount
+        amount: amount,
+        currency: currency,
     };
     formData.append('metadata', JSON.stringify(metadataObj));
 
@@ -1246,6 +1253,8 @@ async function saveAdditionalInvoiceDetails() {
             document.getElementById('add_inv_charge_details').value = '';
             document.getElementById('add_inv_hsn_sac').value = '';
             document.getElementById('add_inv_amount').value = '';
+            const currSelect = document.getElementById('add_inv_currency');
+            if (currSelect) currSelect.value = 'INR';
 
             // Refresh documents list
             document.getElementById('additionalInvoicesList').innerHTML = '';

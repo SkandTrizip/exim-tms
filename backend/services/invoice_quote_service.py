@@ -90,6 +90,27 @@ def client_exchange_rate_for_invoice(charge) -> Optional[float]:
     return None
 
 
+def client_roe_for_currency(containers: List[Any], currency: str) -> Optional[float]:
+    """
+    Client ROE for a currency from On-Your-Account quote/final-quote lines.
+    Prefers vendor (client) exchange rate used when invoicing.
+    """
+    curr = (currency or "INR").upper()
+    if curr == "INR":
+        return 1.0
+
+    for container in containers or []:
+        for charge in container.charges or []:
+            if getattr(charge, "account_type", None) != "On Your Account":
+                continue
+            if (getattr(charge, "currency", None) or "INR").upper() != curr:
+                continue
+            roe = client_exchange_rate_for_invoice(charge)
+            if roe is not None and roe > 0:
+                return roe
+    return None
+
+
 def taxable_inr_for_invoice_charge(
     charge,
     vendor_rate: float,
@@ -111,3 +132,26 @@ def taxable_inr_for_invoice_charge(
         roe_display = 1.0
         taxable_amt = curr_amt
     return curr_amt, roe_display, taxable_amt
+
+
+def taxable_inr_for_additional_amount(
+    amount: float,
+    currency: str,
+    containers: List[Any],
+) -> Tuple[float, float, float]:
+    """
+    Convert additional-invoice amount to INR using invoice ROE.
+    Returns (curr_amt, roe_display, taxable_amt_inr).
+    """
+    curr = (currency or "INR").upper()
+    curr_amt = float(amount or 0)
+    if curr == "INR":
+        return curr_amt, 1.0, curr_amt
+
+    roe_display = client_roe_for_currency(containers, curr)
+    if roe_display is None:
+        raise ValueError(
+            f"Missing client exchange rate for additional invoice ({curr}). "
+            "Set Client Ex. Rate on a matching currency line in the quote before generating the invoice."
+        )
+    return curr_amt, roe_display, curr_amt * roe_display

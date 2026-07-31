@@ -133,7 +133,12 @@ def _sum_final_quote_economics(final_quote: FinalQuote) -> Tuple[float, float]:
 
 
 def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> float:
-    """Additional invoice documents: same INR amount added to both cost and revenue."""
+    """
+    Additional invoice documents: amount converted to INR (currency × invoice ROE)
+    and added equally to both cost and revenue.
+    """
+    from backend.services import invoice_quote_service
+
     docs = (
         db.query(ShipmentDocument)
         .filter(
@@ -142,13 +147,38 @@ def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> float:
         )
         .all()
     )
+    if not docs:
+        return 0.0
+
+    containers, _ = invoice_quote_service.get_invoice_charge_containers(db, enquiry_id)
     total = 0.0
     for doc in docs:
         metadata = doc.metadata_info or {}
         try:
-            total += float(metadata.get("amount", 0) or 0)
+            amount = float(metadata.get("amount", 0) or 0)
         except (TypeError, ValueError):
             continue
+        if amount <= 0:
+            continue
+        curr = (metadata.get("currency") or "INR").upper()
+        try:
+            _, _, taxable_inr = invoice_quote_service.taxable_inr_for_additional_amount(
+                amount, curr, containers
+            )
+            total += taxable_inr
+        except ValueError:
+            # No matching quote ROE yet — keep foreign amount out of INR totals
+            # rather than treating USD as INR. INR lines still count (roe=1).
+            if curr == "INR":
+                total += amount
+            else:
+                logger.warning(
+                    "Skipping additional invoice INR conversion enquiry_id=%s doc_id=%s "
+                    "currency=%s — missing client ROE on quote",
+                    enquiry_id,
+                    doc.id,
+                    curr,
+                )
     return round(total, 2)
 
 

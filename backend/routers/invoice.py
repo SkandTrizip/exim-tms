@@ -288,6 +288,7 @@ def generate_invoice_pdf(
     irn: str = None,
     customer_invoice_no: Optional[str] = None,
     item_type: str = "all",      # 'all', 'main', or 'additional'
+    additional_doc_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     # 1. Fetch Data
@@ -628,6 +629,10 @@ def generate_invoice_pdf(
             ShipmentDocument.enquiry_id == enquiry_id,
             ShipmentDocument.document_type == "additionalInvoice"
         ).all()
+        if item_type == "additional" and additional_doc_id is not None:
+            additional_docs = [
+                d for d in additional_docs if int(d.id) == int(additional_doc_id)
+            ]
 
         for add_doc in additional_docs:
             metadata = add_doc.metadata_info or {}
@@ -653,10 +658,16 @@ def generate_invoice_pdf(
                 curr_amt = float(metadata.get("amount", 0))
             except (ValueError, TypeError):
                 curr_amt = 0.0
-                
-            curr = "INR"
-            roe_display = 1.0
-            taxable_amt = curr_amt
+
+            curr = (metadata.get("currency") or "INR").upper()
+            try:
+                curr_amt, roe_display, taxable_amt = (
+                    invoice_quote_service.taxable_inr_for_additional_amount(
+                        curr_amt, curr, containers
+                    )
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
 
             igst_amt = taxable_amt * (gst_pct / 100.0)
             total_inr = taxable_amt + igst_amt
