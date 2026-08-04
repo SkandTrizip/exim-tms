@@ -37,19 +37,31 @@ function resetSaveQuoteButtonAppearance() {
 /** Show Confirm This Quote while drafts exist; hide once accepted. */
 function syncConfirmQuoteButtonVisibility() {
     const confirmBtn = document.getElementById('confirmQuoteBtn');
-    if (!confirmBtn) return;
+    const saveBtn = document.querySelector('.form-actions button[onclick="savePricing()"]');
     const hasAccepted = pricingQuotes.some(isQuoteAcceptedStatus);
     const hasQuotes = pricingQuotes.length > 0;
-    if (!hasAccepted && hasQuotes && pricingPageMode !== 'view') {
-        confirmBtn.style.display = 'inline-flex';
-        confirmBtn.disabled = false;
-        confirmBtn.innerHTML =
-            'Confirm This Quote <i class="fas fa-check-circle" style="margin-left: 8px;"></i>';
-        confirmBtn.style.background = '';
-        confirmBtn.style.opacity = '1';
-        confirmBtn.style.cursor = 'pointer';
-    } else if (hasAccepted) {
-        confirmBtn.style.display = 'none';
+
+    if (confirmBtn) {
+        if (!hasAccepted && hasQuotes && pricingPageMode !== 'view') {
+            confirmBtn.style.display = 'inline-flex';
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML =
+                'Confirm This Quote <i class="fas fa-check-circle" style="margin-left: 8px;"></i>';
+            confirmBtn.style.background = '';
+            confirmBtn.style.opacity = '1';
+            confirmBtn.style.cursor = 'pointer';
+        } else {
+            confirmBtn.style.display = 'none';
+        }
+    }
+
+    // After confirmation, Edit Quote must not offer Save / Confirm.
+    if (saveBtn) {
+        if (hasAccepted || pricingPageMode === 'view') {
+            saveBtn.style.display = 'none';
+        } else {
+            saveBtn.style.display = '';
+        }
     }
 }
 
@@ -201,22 +213,19 @@ function initConfirmMode() {
 
     resetSaveQuoteButtonAppearance();
 
-    // Hide administrative actions; allow Save once a quote exists so totals can persist from Confirm flow.
-    const saveBtn = document.querySelector('button[onclick="savePricing()"]');
+    // Hide administrative actions in confirm flow until a quote exists.
     const addQuoteBtn = document.querySelector('button[onclick="addNewQuote()"]');
-    if (saveBtn) saveBtn.style.display = hasAccepted ? '' : 'none';
     if (addQuoteBtn) addQuoteBtn.style.display = 'none';
 
+    syncConfirmQuoteButtonVisibility();
+
+    // Confirm flow: never show Save Quote (only Confirm This Quote).
+    const saveBtn = document.querySelector('button[onclick="savePricing()"]');
+    if (saveBtn) saveBtn.style.display = 'none';
+
     const confirmBtn = document.getElementById('confirmQuoteBtn');
-    if (confirmBtn) {
-        if (hasAccepted) {
-            confirmBtn.style.display = 'none';
-        } else {
-            confirmBtn.style.display = 'flex';
-            confirmBtn.disabled = false;
-            confirmBtn.innerHTML = 'Confirm This Quote <i class="fas fa-check-circle" style="margin-left: 8px;"></i>';
-            confirmBtn.style.background = '';
-        }
+    if (confirmBtn && hasAccepted) {
+        confirmBtn.style.display = 'none';
     }
 
     // Lock everything EXCEPT shipping line rate / ex. rate + client rate columns
@@ -444,13 +453,10 @@ function initPricingTable(forceEdit = false, forceView = false) {
 
             applyLockedQuoteViewChrome();
 
-            // Sync action button
-            const btn = document.getElementById('confirmQuoteBtn');
-            if (btn) {
-                btn.innerHTML = 'Quote Confirmed <i class="fas fa-check-circle" style="margin-left:8px;"></i>';
-                btn.style.background = 'var(--success)';
-                btn.disabled = true;
-            }
+            // Sync action button — confirmed quotes leave Edit Quote without Save/Confirm
+            syncConfirmQuoteButtonVisibility();
+            const formActionsConfirm = document.querySelector('.form-actions');
+            if (formActionsConfirm) formActionsConfirm.style.display = 'none';
         } else {
             loadQuote(activeQuoteIndex);
         }
@@ -986,6 +992,10 @@ async function executeFinalizeQuote(quote, remarks) {
         renderConfirmedTable(quote, remarks);
 
         clearPricingSavedLock();
+        pricingPageMode = 'view';
+        syncConfirmQuoteButtonVisibility();
+        const formActions = document.querySelector('.form-actions');
+        if (formActions) formActions.style.display = 'none';
 
         showPostConfirmOptions(quote);
     } catch (e) {
