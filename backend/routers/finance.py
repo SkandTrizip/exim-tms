@@ -9,7 +9,7 @@ from backend.models.enquiry_economics import EnquiryEconomics
 from backend.services.enquiry_economics_service import (
     sync_enquiry_economics,
     serialize_overhead_payment,
-    get_ocean_freight_exchange_rate,
+    _overhead_conversion_rate,
 )
 from pydantic import BaseModel
 from typing import Optional, List, Union
@@ -181,13 +181,19 @@ def create_overhead_payment(payment: OverheadPaymentCreate, db: Session = Depend
         )
 
     currency = (payment.currency or "INR").upper()
+    cost_impact = payment.cost_impact or "add_to_shipping_line"
     if currency != "INR":
-        roe = get_ocean_freight_exchange_rate(db, payment.enquiry_id)
+        roe = _overhead_conversion_rate(db, payment.enquiry_id, cost_impact)
         if roe is None or roe <= 0:
+            rate_label = (
+                "client (Cl. Ex.) rate"
+                if cost_impact == "deduct_from_client"
+                else "shipping-line exchange rate"
+            )
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    f"Cannot book {currency} overhead — Ocean Freight exchange rate "
+                    f"Cannot book {currency} overhead — Ocean Freight {rate_label} "
                     "not found on the final quote for this job."
                 ),
             )

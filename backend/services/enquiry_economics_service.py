@@ -183,23 +183,56 @@ def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> float:
     return round(total, 2)
 
 
-def get_ocean_freight_exchange_rate(db: Session, enquiry_id: int) -> Optional[float]:
-    """Exchange rate from the Ocean Freight charge on this enquiry's final quote."""
+def _get_ocean_freight_charge(db: Session, enquiry_id: int):
+    """Ocean Freight charge row from this enquiry's final quote, if present."""
     final_quote = _load_final_quote_for_enquiry(db, enquiry_id)
     if not final_quote:
         return None
     for container in final_quote.containers or []:
         for charge in container.charges or []:
             desc = (charge.charge_description or "").strip().lower()
-            if desc != "ocean freight":
-                continue
-            try:
-                ex = float(charge.exchange_rate or 0)
-            except (TypeError, ValueError):
-                continue
-            if ex > 0:
-                return ex
+            if desc == "ocean freight":
+                return charge
     return None
+
+
+def get_ocean_freight_exchange_rate(db: Session, enquiry_id: int) -> Optional[float]:
+    """Shipping-line Ex. Rate from Ocean Freight on the final quote."""
+    charge = _get_ocean_freight_charge(db, enquiry_id)
+    if not charge:
+        return None
+    try:
+        ex = float(charge.exchange_rate or 0)
+    except (TypeError, ValueError):
+        return None
+    return ex if ex > 0 else None
+
+
+def get_ocean_freight_client_exchange_rate(db: Session, enquiry_id: int) -> Optional[float]:
+    """Client (Cl. Ex.) rate from Ocean Freight on the final quote."""
+    charge = _get_ocean_freight_charge(db, enquiry_id)
+    if not charge:
+        return None
+    curr = (charge.currency or "INR").upper()
+    if curr == "INR":
+        return 1.0
+    roe = _client_exchange_rate(
+        charge.currency,
+        charge.exchange_rate,
+        getattr(charge, "vendor_exchange_rate", None),
+    )
+    return roe if roe and roe > 0 else None
+
+
+def _overhead_conversion_rate(
+    db: Session,
+    enquiry_id: int,
+    cost_impact: Optional[str],
+) -> Optional[float]:
+    """ROE for overhead conversion: shipping-line rate vs client rate by treatment."""
+    if cost_impact == "deduct_from_client":
+        return get_ocean_freight_client_exchange_rate(db, enquiry_id)
+    return get_ocean_freight_exchange_rate(db, enquiry_id)
 
 
 def overhead_amount_inr(
@@ -207,10 +240,14 @@ def overhead_amount_inr(
     enquiry_id: int,
     amount,
     currency: Optional[str],
+    cost_impact: Optional[str] = "add_to_shipping_line",
 ) -> float:
     """
     Convert an overhead line to INR.
-    INR amounts pass through; USD/EUR/etc. use Ocean Freight ROE from final quote.
+    INR amounts pass through.
+    Foreign currency uses Ocean Freight ROE from final quote:
+      - add_to_shipping_line -> shipping-line Ex. Rate
+      - deduct_from_client   -> client (Cl. Ex.) rate
     """
     try:
         amt = float(amount or 0)
@@ -223,13 +260,14 @@ def overhead_amount_inr(
     if curr == "INR":
         return round(amt, 2)
 
-    roe = get_ocean_freight_exchange_rate(db, enquiry_id)
+    roe = _overhead_conversion_rate(db, enquiry_id, cost_impact)
     if roe is None or roe <= 0:
         logger.warning(
-            "Overhead INR conversion skipped enquiry_id=%s currency=%s — "
+            "Overhead INR conversion skipped enquiry_id=%s currency=%s impact=%s — "
             "Ocean Freight ROE missing on final quote",
             enquiry_id,
             curr,
+            cost_impact,
         )
         return 0.0
     return round(amt * roe, 2)
@@ -237,8 +275,12 @@ def overhead_amount_inr(
 
 def serialize_overhead_payment(db: Session, row: OverheadPayment) -> dict:
     """API payload for an overhead payment including INR conversion."""
-    roe = get_ocean_freight_exchange_rate(db, row.enquiry_id)
-    amount_inr = overhead_amount_inr(db, row.enquiry_id, row.amount, row.currency)
+    line_roe = get_ocean_freight_exchange_rate(db, row.enquiry_id)
+    client_roe = get_ocean_freight_client_exchange_rate(db, row.enquiry_id)
+    applied_roe = _overhead_conversion_rate(db, row.enquiry_id, row.cost_impact)
+    amount_inr = overhead_amount_inr(
+        db, row.enquiry_id, row.amount, row.currency, row.cost_impact
+    )
     payment_date = row.payment_date
     created_at = row.created_at
     modified_at = row.modified_at
@@ -255,7 +297,9 @@ def serialize_overhead_payment(db: Session, row: OverheadPayment) -> dict:
         "amount": row.amount,
         "currency": row.currency,
         "amount_inr": amount_inr,
-        "ocean_freight_roe": roe,
+        "ocean_freight_roe": line_roe,
+        "ocean_freight_client_roe": client_roe,
+        "applied_roe": applied_roe,
         "status": row.status,
         "utr_number": row.utr_number,
         "payment_date": payment_date.isoformat() if payment_date else None,
@@ -271,7 +315,8 @@ def _sum_overhead_economics(db: Session, enquiry_id: int) -> Tuple[float, float]
     Returns (cost_addition, revenue_deduction):
       - cost_impact == "add_to_shipping_line" -> added to cost
       - cost_impact == "deduct_from_client"   -> deducted from revenue
-    Foreign currency amounts convert via Ocean Freight ROE on the final quote.
+    Foreign currency amounts convert via Ocean Freight on the final quote:
+      add_to_shipping_line -> shipping-line Ex. Rate; deduct_from_client -> client Cl. Ex.
     """
     rows = (
         db.query(OverheadPayment)
@@ -281,7 +326,9 @@ def _sum_overhead_economics(db: Session, enquiry_id: int) -> Tuple[float, float]
     cost_add = 0.0
     revenue_deduct = 0.0
     for row in rows:
-        inr_amount = overhead_amount_inr(db, enquiry_id, row.amount, row.currency)
+        inr_amount = overhead_amount_inr(
+            db, enquiry_id, row.amount, row.currency, row.cost_impact
+        )
         if inr_amount <= 0:
             continue
         if row.cost_impact == "deduct_from_client":
