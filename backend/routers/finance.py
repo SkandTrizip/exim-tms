@@ -6,7 +6,11 @@ from backend.models.shipment_status import ShipmentStatus
 from backend.models.overhead import Overhead
 from backend.models.payee import Payee
 from backend.models.enquiry_economics import EnquiryEconomics
-from backend.services.enquiry_economics_service import sync_enquiry_economics
+from backend.services.enquiry_economics_service import (
+    sync_enquiry_economics,
+    serialize_overhead_payment,
+    get_ocean_freight_exchange_rate,
+)
 from pydantic import BaseModel
 from typing import Optional, List, Union
 from datetime import date, datetime
@@ -176,6 +180,18 @@ def create_overhead_payment(payment: OverheadPaymentCreate, db: Session = Depend
             detail="Final quote must be submitted for this job before adding overheads.",
         )
 
+    currency = (payment.currency or "INR").upper()
+    if currency != "INR":
+        roe = get_ocean_freight_exchange_rate(db, payment.enquiry_id)
+        if roe is None or roe <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Cannot book {currency} overhead — Ocean Freight exchange rate "
+                    "not found on the final quote for this job."
+                ),
+            )
+
     overhead_name = payment.overhead_name
     if payment.overhead_id and not overhead_name:
         ov = db.query(Overhead).filter(Overhead.id == payment.overhead_id).first()
@@ -214,17 +230,18 @@ def create_overhead_payment(payment: OverheadPaymentCreate, db: Session = Depend
         record.id, record.enquiry_id, record.overhead_name, record.payee_name, record.amount, record.cost_impact,
     )
     _resync_economics(db, record.enquiry_id)
-    return record
+    return serialize_overhead_payment(db, record)
 
 
 @router.get("/overhead-payment/{enquiry_id}")
 def get_overhead_payments(enquiry_id: int, db: Session = Depends(get_db)):
-    return (
+    rows = (
         db.query(OverheadPayment)
         .filter(OverheadPayment.enquiry_id == enquiry_id)
         .order_by(OverheadPayment.created_at)
         .all()
     )
+    return [serialize_overhead_payment(db, row) for row in rows]
 
 
 @router.patch("/overhead-payment/{id}/book")
@@ -240,7 +257,7 @@ def book_overhead_payment(id: int, data: OverheadPaymentBook, db: Session = Depe
     db.commit()
     db.refresh(record)
     _resync_economics(db, record.enquiry_id)
-    return record
+    return serialize_overhead_payment(db, record)
 
 
 @router.delete("/overhead-payment/{id}")

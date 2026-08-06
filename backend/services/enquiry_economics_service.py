@@ -183,13 +183,95 @@ def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> float:
     return round(total, 2)
 
 
+def get_ocean_freight_exchange_rate(db: Session, enquiry_id: int) -> Optional[float]:
+    """Exchange rate from the Ocean Freight charge on this enquiry's final quote."""
+    final_quote = _load_final_quote_for_enquiry(db, enquiry_id)
+    if not final_quote:
+        return None
+    for container in final_quote.containers or []:
+        for charge in container.charges or []:
+            desc = (charge.charge_description or "").strip().lower()
+            if desc != "ocean freight":
+                continue
+            try:
+                ex = float(charge.exchange_rate or 0)
+            except (TypeError, ValueError):
+                continue
+            if ex > 0:
+                return ex
+    return None
+
+
+def overhead_amount_inr(
+    db: Session,
+    enquiry_id: int,
+    amount,
+    currency: Optional[str],
+) -> float:
+    """
+    Convert an overhead line to INR.
+    INR amounts pass through; USD/EUR/etc. use Ocean Freight ROE from final quote.
+    """
+    try:
+        amt = float(amount or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if amt <= 0:
+        return 0.0
+
+    curr = (currency or "INR").upper()
+    if curr == "INR":
+        return round(amt, 2)
+
+    roe = get_ocean_freight_exchange_rate(db, enquiry_id)
+    if roe is None or roe <= 0:
+        logger.warning(
+            "Overhead INR conversion skipped enquiry_id=%s currency=%s — "
+            "Ocean Freight ROE missing on final quote",
+            enquiry_id,
+            curr,
+        )
+        return 0.0
+    return round(amt * roe, 2)
+
+
+def serialize_overhead_payment(db: Session, row: OverheadPayment) -> dict:
+    """API payload for an overhead payment including INR conversion."""
+    roe = get_ocean_freight_exchange_rate(db, row.enquiry_id)
+    amount_inr = overhead_amount_inr(db, row.enquiry_id, row.amount, row.currency)
+    payment_date = row.payment_date
+    created_at = row.created_at
+    modified_at = row.modified_at
+    return {
+        "id": row.id,
+        "enquiry_id": row.enquiry_id,
+        "overhead_id": row.overhead_id,
+        "overhead_name": row.overhead_name,
+        "payee_id": row.payee_id,
+        "payee_name": row.payee_name,
+        "pay_to_type": row.pay_to_type,
+        "cost_impact": row.cost_impact,
+        "description": row.description,
+        "amount": row.amount,
+        "currency": row.currency,
+        "amount_inr": amount_inr,
+        "ocean_freight_roe": roe,
+        "status": row.status,
+        "utr_number": row.utr_number,
+        "payment_date": payment_date.isoformat() if payment_date else None,
+        "created_by": row.created_by,
+        "created_at": created_at.isoformat() if created_at else None,
+        "modified_at": modified_at.isoformat() if modified_at else None,
+    }
+
+
 def _sum_overhead_economics(db: Session, enquiry_id: int) -> Tuple[float, float]:
     """
     Overhead payments booked against the enquiry.
     Returns (cost_addition, revenue_deduction):
       - cost_impact == "add_to_shipping_line" -> added to cost
       - cost_impact == "deduct_from_client"   -> deducted from revenue
-    Amounts are treated as INR.
+    Foreign currency amounts convert via Ocean Freight ROE on the final quote.
     """
     rows = (
         db.query(OverheadPayment)
@@ -199,16 +281,13 @@ def _sum_overhead_economics(db: Session, enquiry_id: int) -> Tuple[float, float]
     cost_add = 0.0
     revenue_deduct = 0.0
     for row in rows:
-        try:
-            amount = float(row.amount or 0)
-        except (TypeError, ValueError):
-            continue
-        if amount <= 0:
+        inr_amount = overhead_amount_inr(db, enquiry_id, row.amount, row.currency)
+        if inr_amount <= 0:
             continue
         if row.cost_impact == "deduct_from_client":
-            revenue_deduct += amount
+            revenue_deduct += inr_amount
         else:
-            cost_add += amount
+            cost_add += inr_amount
     return round(cost_add, 2), round(revenue_deduct, 2)
 
 

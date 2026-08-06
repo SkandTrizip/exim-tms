@@ -20,7 +20,6 @@ GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "")
 # Shared HTML → PDF API (WeasyPrint). Set PDF_API_KEY in .env for external callers.
 PDF_API_KEY = os.getenv("PDF_API_KEY", "")
 PDF_MAX_HTML_BYTES = int(os.getenv("PDF_MAX_HTML_BYTES", str(1000 * 1024)))  # 1000 KB
-
 # Database (used by backend/database.py)
 POSTGRES_USER = os.getenv("POSTGRES_USER", "tmsbackend")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD", "sharkship@5")
@@ -53,6 +52,7 @@ AUTH_USERS = [
     {"username": "madan.rajput@logipod.in", "full_name":"Madan","password": "madan@4568!#", "is_admin": False},
     {"username": "ca@logipod.in", "full_name":"Shobhit","password": "ca@4569!#", "is_admin": False},
     {"username": "Sales", "full_name":"Sales","password": "sales@4567!#", "is_admin": False},
+    {"username": "ashish@logipod.in", "full_name":"Ashish","password": "Ashish@4567!#", "is_admin": False},
 
 ]
 

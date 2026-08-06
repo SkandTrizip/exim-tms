@@ -29,6 +29,33 @@ let bookingOverheadId = null;
 let baseShippingLineTotal = 0;
 let overheadAddToLineTotal = 0;
 let overheadDeductClientTotal = 0;
+let oceanFreightRoe = null;
+
+function overheadInrAmount(row) {
+    if (row.amount_inr != null && !Number.isNaN(Number(row.amount_inr))) {
+        return Number(row.amount_inr);
+    }
+    const curr = String(row.currency || 'INR').toUpperCase();
+    const amount = Number(row.amount) || 0;
+    if (curr === 'INR') return amount;
+    if (oceanFreightRoe && oceanFreightRoe > 0) return Math.round(amount * oceanFreightRoe);
+    return 0;
+}
+
+function formatOverheadAmountCell(row) {
+    const curr = ovpEscape(row.currency || 'INR');
+    const amount = Number(row.amount) || 0;
+    const inr = overheadInrAmount(row);
+    if (String(row.currency || 'INR').toUpperCase() === 'INR') {
+        return `₹${inr.toLocaleString()}`;
+    }
+    const roeNote = row.ocean_freight_roe
+        ? `<br><span style="color:var(--text-tertiary);font-size:11px;font-weight:500;">₹${inr.toLocaleString()} @ ${Number(row.ocean_freight_roe).toFixed(2)}</span>`
+        : (inr > 0
+            ? `<br><span style="color:var(--text-tertiary);font-size:11px;font-weight:500;">₹${inr.toLocaleString()}</span>`
+            : '<br><span style="color:#b45309;font-size:11px;font-weight:500;">ROE missing</span>');
+    return `${curr} ${amount.toLocaleString()}${roeNote}`;
+}
 
 function ovpEscape(str) {
     if (typeof escapeHtml === 'function') return escapeHtml(str == null ? '' : String(str));
@@ -227,16 +254,20 @@ function renderOverheadPaymentsTable(rows) {
 
     let total = 0;
     tbody.innerHTML = rows.map(r => {
-        total += (r.amount || 0);
-        if (r.cost_impact === 'deduct_from_client') overheadDeductClientTotal += (r.amount || 0);
-        else overheadAddToLineTotal += (r.amount || 0);
+        if (r.ocean_freight_roe != null && r.ocean_freight_roe > 0) {
+            oceanFreightRoe = Number(r.ocean_freight_roe);
+        }
+        const inrAmount = overheadInrAmount(r);
+        total += inrAmount;
+        if (r.cost_impact === 'deduct_from_client') overheadDeductClientTotal += inrAmount;
+        else overheadAddToLineTotal += inrAmount;
         const utrDate = r.utr_number
             ? `${ovpEscape(r.utr_number)}${r.payment_date ? '<br><span style="color:var(--text-tertiary);font-size:11px;">' + new Date(r.payment_date).toLocaleDateString('en-GB') + '</span>' : ''}`
             : '—';
         const isPaid = r.status === 'paid';
         const bookBtn = isPaid
             ? ''
-            : `<button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:11px;" onclick="openBookOverheadModal(${r.id}, '${ovpEscape(r.overhead_name)}', '${ovpEscape(r.payee_name)}', ${r.amount || 0})"><i class="fas fa-check"></i> Book</button>`;
+            : `<button type="button" class="btn btn-outline" style="padding:4px 10px;font-size:11px;" onclick="openBookOverheadModal(${r.id}, '${ovpEscape(r.overhead_name)}', '${ovpEscape(r.payee_name)}', ${inrAmount})"><i class="fas fa-check"></i> Book</button>`;
         return `
             <tr style="border-bottom:1px solid #f1f5f9;">
                 <td style="padding:12px;color:var(--navy-800);font-weight:600;">${ovpEscape(r.overhead_name || '—')}${r.description ? '<br><span style="color:var(--text-tertiary);font-weight:400;font-size:11px;">' + ovpEscape(r.description) + '</span>' : ''}</td>
@@ -244,7 +275,7 @@ function renderOverheadPaymentsTable(rows) {
                 <td style="padding:12px;">${overheadImpactBadge(r.cost_impact)}</td>
                 <td style="padding:12px;">${overheadStatusBadge(r.status)}</td>
                 <td style="padding:12px;font-family:monospace;">${utrDate}</td>
-                <td style="padding:12px;text-align:right;font-weight:700;color:var(--navy-800);">${ovpEscape(r.currency || 'INR')} ${(r.amount || 0).toLocaleString()}</td>
+                <td style="padding:12px;text-align:right;font-weight:700;color:var(--navy-800);">${formatOverheadAmountCell(r)}</td>
                 <td style="padding:12px;text-align:center;white-space:nowrap;">
                     ${bookBtn}
                     <button type="button" class="btn btn-outline" style="padding:4px 8px;font-size:11px;color:var(--danger,#dc2626);border-color:#fecaca;" title="Delete" onclick="deleteOverheadPayment(${r.id})"><i class="fas fa-trash"></i></button>
@@ -338,6 +369,17 @@ async function deleteOverheadPayment(id) {
 }
 
 /** Sum On-Your-Account charges from quote/final-quote containers into INR totals. */
+function findOceanFreightRoe(containers) {
+    for (const c of containers || []) {
+        for (const ch of c.charges || []) {
+            if (String(ch.charge_description || '').trim().toLowerCase() !== 'ocean freight') continue;
+            const ex = Number(ch.exchange_rate);
+            if (Number.isFinite(ex) && ex > 0) return ex;
+        }
+    }
+    return null;
+}
+
 function computeQuoteTotalsInr(containers) {
     let shippingLineTotal = 0;
     let vendorTotal = 0;
@@ -388,6 +430,8 @@ async function fetchEnquiryDetails() {
                     }
 
                     const { shippingLineTotal, vendorTotal } = computeQuoteTotalsInr(quoteContainers);
+                    const roe = findOceanFreightRoe(quoteContainers);
+                    if (roe != null) oceanFreightRoe = roe;
 
                     // Base shipping-line total (before overheads); overheads adjust this later.
                     baseShippingLineTotal = shippingLineTotal;
