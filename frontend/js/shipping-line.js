@@ -26,20 +26,51 @@ function authHeaders() {
     return t ? { 'Authorization': `Bearer ${t}` } : {};
 }
 
-// ── Boot ─────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('shippingLineForm').addEventListener('submit', handleSubmit);
+function isEmbeddedMaster() {
+    return document.documentElement.classList.contains('embedded-mode');
+}
 
-    // If opened with ?id=N it's a view/verify page
+function notifyMasterSaved(entity) {
+    if (isEmbeddedMaster() && window.parent !== window) {
+        window.parent.postMessage({ type: 'master-saved', entity }, '*');
+    }
+}
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get('id');
-    if (id) {
-        loadAndShowRecord(parseInt(id));
+    const embedded = params.get('embedded') === '1';
+    const isViewMode = params.get('view') === '1';
+
+    if (embedded) {
+        document.documentElement.classList.add('embedded-mode');
+        document.body.classList.add('embedded-mode', 'sl-embedded');
+        switchTab(1);
     }
 
-    // Load existing items into table
-    loadShippingLines();
+    document.getElementById('shippingLineForm').addEventListener('submit', handleSubmit);
+
+    const id = params.get('id');
+    if (id) {
+        await editShippingLine(parseInt(id, 10));
+        if (isViewMode) applyEmbeddedViewMode();
+    } else if (!embedded) {
+        loadShippingLines();
+    }
+    hideEmbeddedDrawerBackButtons();
 });
+
+function applyEmbeddedViewMode() {
+    document.querySelectorAll('#shippingLineForm input, #shippingLineForm select, #shippingLineForm textarea').forEach((el) => {
+        if (el.type === 'file' || el.type === 'hidden') return;
+        el.disabled = true;
+        if (el.tagName !== 'SELECT') el.readOnly = true;
+    });
+    const saveBtn = document.getElementById('saveSLBtn');
+    if (saveBtn) saveBtn.style.display = 'none';
+    const adminBar = document.getElementById('adminActionBar');
+    if (adminBar) adminBar.style.display = 'none';
+}
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 function switchTab(n) {
@@ -139,6 +170,11 @@ async function handleSubmit(e) {
                 headers: authHeaders(),
                 body: formData
             });
+        }
+
+        if (isEmbeddedMaster()) {
+            notifyMasterSaved('shipping');
+            return;
         }
 
         showModal('success', `Shipping Line ${editingSLId ? 'Updated' : 'Submitted'}!`,
@@ -455,6 +491,11 @@ function val(id) {
     const el = document.getElementById(id);
     return el ? el.value.trim() : '';
 }
+
+async function saveEmbeddedShippingLine() {
+    await handleSubmit({ preventDefault() {} });
+}
+window.saveEmbeddedShippingLine = saveEmbeddedShippingLine;
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
 let _cb = null;

@@ -1,15 +1,29 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct
+from typing import Optional
 from backend.database import get_db
 from backend.models.enquiry import Enquiry
 from backend.models.quote import Quote
 from backend.models.document import ShipmentDocument
+from backend.services.analytics_service import get_dashboard_analytics
+from backend.services.globe_service import get_shipment_globe_data
+from backend.utils.logger import logger
 
 router = APIRouter()
 
+def _count_or_zero(db, label: str, query_fn):
+    """Run a count query; log and return 0 if the DB schema is out of sync."""
+    try:
+        return query_fn()
+    except Exception as e:
+        logger.error(f"Dashboard stat '{label}' failed: {e}")
+        db.rollback()
+        return 0
+
+
 @router.get("/stats")
-async def get_dashboard_stats(db: Session = Depends(get_db)):
+def get_dashboard_stats(db: Session = Depends(get_db)):
     """
     Get dashboard statistics:
     1. Total Enquiry
@@ -17,78 +31,76 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     3. Pending for Client Confirmation (Has 'sent' quote but no 'accepted' quote)
     4. Booking Secured (Documents uploaded)
     """
-    
-    # 1. Total Enquiry
-    total_enquiries = db.query(Enquiry).count()
-
-    # Define subqueries for status checks
-    # Enquiries that have at least one quote in 'sent' or 'accepted' status
-    # If an enquiry has NO quotes, or only 'draft' quotes, it is NOT in this list.
-    enquiries_passed_pricing = db.query(Quote.enquiry_id)\
-        .filter(Quote.status.in_(['sent', 'accepted']))\
-        .distinct()
-
-    # Enquiries that have at least one 'accepted' quote
-    enquiries_accepted = db.query(Quote.enquiry_id)\
-        .filter(Quote.status == 'accepted')\
-        .distinct()
-
-    # 2. Pending at Pricing
-    # Logic: Enquiries that have NO quotes associated with them.
-    pending_at_pricing = db.query(Enquiry).outerjoin(Quote).filter(Quote.id == None).count()
-
-    # Enquiries that have at least one quote (any status)
-    enquiries_with_quotes = db.query(Quote.enquiry_id).distinct()
-
-    # 3. Pending for Client Confirmation
-    # Logic: Enquiries that have at least one quote created but none 'accepted' yet.
-    pending_confirmation = db.query(Enquiry)\
-        .filter(Enquiry.id.in_(enquiries_with_quotes))\
-        .filter(Enquiry.id.notin_(enquiries_accepted))\
-        .count()
-
-    # 4. Booking Pending (was Booking Secured)
-    # Logic: Enquiries in Operational Stage (Stage >= 3) where booking is NOT yet confirmed.
     from backend.models.shipment_status import ShipmentStatus
 
-    booking_pending = db.query(Enquiry).outerjoin(ShipmentStatus).filter(
-        Enquiry.stage >= 3,
-        ShipmentStatus.booking_confirmed == None
-    ).count()
-    
-    # New Stats from ShipmentStatus (Pending Items)
-    
-    # Logic: Enquiries in Operational Stage (Stage >= 3) where the milestone is NOT yet achieved.
-    # We outerjoin because if ShipmentStatus dict doesn't exist, it is definitely pending.
-    
-    si_pending = db.query(Enquiry).outerjoin(ShipmentStatus).filter(
-        Enquiry.stage >= 3, 
-        ShipmentStatus.si_submitted == None
-    ).count()
-    
-    bl_pending = db.query(Enquiry).outerjoin(ShipmentStatus).filter(
-        Enquiry.stage >= 3, 
-        ShipmentStatus.bl_received == None
-    ).count()
-    
-    sob_pending = db.query(Enquiry).outerjoin(ShipmentStatus).filter(
-        Enquiry.stage >= 3, 
-        ShipmentStatus.sob == None
-    ).count()
+    # 1. Total Enquiry (exclude voided sales from overview counts)
+    total_enquiries = _count_or_zero(
+        db,
+        "total_enquiries",
+        lambda: db.query(Enquiry).filter(Enquiry.is_void == False).count(),
+    )
 
-    from backend.models.invoice import Invoice
-    invoices_raised = db.query(Invoice).count()
+    active_enquiry = Enquiry.is_void == False
+
+    # 2. Pending at Pricing — no quotes yet
+    pending_at_pricing = _count_or_zero(
+        db,
+        "pending_at_pricing",
+        lambda: db.query(Enquiry).outerjoin(Quote).filter(active_enquiry, Quote.id == None).count(),
+    )
+
+    enquiries_with_quotes = db.query(Quote.enquiry_id).distinct()
+    enquiries_accepted = db.query(Quote.enquiry_id).filter(Quote.status == 'accepted').distinct()
+
+    # 3. Pending for Client Confirmation
+    pending_confirmation = _count_or_zero(
+        db,
+        "pending_confirmation",
+        lambda: db.query(Enquiry)
+        .filter(active_enquiry)
+        .filter(Enquiry.id.in_(enquiries_with_quotes))
+        .filter(Enquiry.id.notin_(enquiries_accepted))
+        .count(),
+    )
+
+    def _ops_pending(milestone_col):
+        return lambda: db.query(Enquiry).outerjoin(ShipmentStatus).filter(
+            active_enquiry,
+            Enquiry.stage >= 3,
+            milestone_col == None,
+        ).count()
+
+    booking_pending = _count_or_zero(db, "booking_pending", _ops_pending(ShipmentStatus.booking_confirmed))
+    si_pending = _count_or_zero(db, "si_pending", _ops_pending(ShipmentStatus.si_submitted))
+    bl_pending = _count_or_zero(db, "bl_pending", _ops_pending(ShipmentStatus.bl_received))
+    sob_pending = _count_or_zero(db, "sob_pending", _ops_pending(ShipmentStatus.sob))
+
+    try:
+        from backend.models.invoice import Invoice
+        invoices_raised = db.query(Invoice).count()
+    except Exception as e:
+        logger.error(f"Error querying invoices_raised: {e}")
+        invoices_raised = 0
     
-    payment_pending = db.query(Enquiry).outerjoin(ShipmentStatus).filter(
-        Enquiry.stage >= 3,
-        ShipmentStatus.inv_raised != None,
-        ShipmentStatus.pay_client == None
-    ).count()
+    payment_pending = _count_or_zero(
+        db,
+        "payment_pending",
+        lambda: db.query(Enquiry).outerjoin(ShipmentStatus).filter(
+            active_enquiry,
+            Enquiry.stage >= 3,
+            ShipmentStatus.inv_raised != None,
+            ShipmentStatus.pay_client == None,
+        ).count(),
+    )
 
     from backend.models.finance import ShippingPayment
     payments_made = db.query(ShippingPayment).count()
 
-    received_payments = db.query(Invoice).filter(Invoice.is_paid == True).count()
+    try:
+        received_payments = db.query(Invoice).filter(Invoice.is_paid == True).count()
+    except Exception as e:
+        logger.error(f"Error querying received_payments: {e}")
+        received_payments = 0
 
     return {
         "total_enquiries": total_enquiries,
@@ -103,3 +115,74 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         "payments_made": payments_made,
         "received_payments": received_payments
     }
+
+
+@router.get("/analytics")
+def get_dashboard_analytics_endpoint(
+    month: Optional[str] = None,
+    month_from: Optional[str] = None,
+    month_to: Optional[str] = None,
+    metric: str = "both",
+    fy: Optional[str] = None,
+    db: Session = Depends(get_db),
+):
+    """
+    Cost, revenue, margin and per-enquiry economics by Indian FY (Apr–Mar).
+    Optional filters: fy, month / month_from+month_to, metric=cost|revenue|net_margin|gross_margin.
+    """
+    try:
+        return get_dashboard_analytics(
+            db,
+            month=month or None,
+            month_from=month_from or None,
+            month_to=month_to or None,
+            metric=metric,
+            fy=fy or None,
+        )
+    except Exception as e:
+        logger.error(f"Dashboard analytics failed: {e}")
+        db.rollback()
+        return {
+            "summary": {
+                "valid_enquiries": 0,
+                "total_cost_inr": 0,
+                "total_revenue_inr": 0,
+                "capture_inr": 0,
+                "gross_margin_inr": 0,
+                "gross_margin_pct": None,
+                "gross_cost_inr": 0,
+                "gross_revenue_inr": 0,
+                "margin_pct": None,
+            },
+            "monthly_series": [],
+            "available_months": [],
+            "available_financial_years": [],
+            "enquiries": [],
+            "ongoing_enquiries": [],
+        }
+
+
+@router.get("/shipment-globe")
+def get_shipment_globe_endpoint(db: Session = Depends(get_db)):
+    """
+    Origin/destination ports and routes with lat/lng for the dashboard globe.
+    Coordinates resolved from port_code master (UN/LOCODE DMS).
+    """
+    try:
+        return get_shipment_globe_data(db)
+    except Exception as e:
+        logger.error(f"Shipment globe failed: {e}")
+        db.rollback()
+        return {
+            "summary": {
+                "trips": 0,
+                "resolved_trips": 0,
+                "unresolved_trips": 0,
+                "origin_ports": 0,
+                "destination_ports": 0,
+                "routes": 0,
+            },
+            "origins": [],
+            "destinations": [],
+            "routes": [],
+        }

@@ -1,50 +1,1848 @@
-﻿// Main Dashboard Logic
+// Main Dashboard Logic
 let enquiries = [];
 let PAGE_SIZE = 10;
 const paginationState = {
     allEnquiries: { currentPage: 1 },
     quotes: { currentPage: 1 },
     tracking: { currentPage: 1 },
-    finance: { currentPage: 1 }
+    finance: { currentPage: 1 },
+    analyticsDetails: { currentPage: 1 },
 };
 
 document.addEventListener('DOMContentLoaded', async function () {
+    // Topbar user label
+    try {
+        const user = localStorage.getItem('user') || 'User';
+        const u = document.getElementById('pageUserName');
+        if (u) u.textContent = user;
+    } catch { }
+
+    // Refresh button
+    const refreshBtn = document.getElementById('refreshDashboardBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', async () => {
+            refreshBtn.disabled = true;
+            try {
+                await Promise.all([fetchDashboardStats(), fetchDashboardAnalytics(), fetchAllEnquiries()]);
+            } finally {
+                refreshBtn.disabled = false;
+            }
+        });
+    }
+
+    const analyticsDetailsBtn = document.getElementById('analyticsViewDetailsBtn');
+    const analyticsDetailsPanel = document.getElementById('analyticsDetailsPanel');
+    if (analyticsDetailsBtn && analyticsDetailsPanel) {
+        analyticsDetailsBtn.addEventListener('click', () => {
+            const expanded = analyticsDetailsBtn.getAttribute('aria-expanded') === 'true';
+            if (expanded) {
+                analyticsDetailsBtn.setAttribute('aria-expanded', 'false');
+                analyticsDetailsPanel.hidden = true;
+                return;
+            }
+            openAnalyticsDetailsPanel({ statusFilter: 'all' });
+        });
+    }
+
     // Run stats and enquiry fetch in parallel — stats show immediately, tables fill in alongside
     await Promise.all([
         fetchDashboardStats(),
+        fetchDashboardAnalytics(),
         fetchAllEnquiries()
     ]);
 
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.rail-group')) {
+            closeOtherRailGroups(null);
+        }
+    });
+
     // Initial routing
     handleRouting();
+
+    // Enquiries list UI (search/export/columns)
+    initEnquiriesListUI();
+    initTrackingListUI();
+    initFinanceListUI();
+    initQuotesListUI();
+    initStatusSections();
+    initFinanceCompletionTabs();
 });
+
+function escapeHtml(s) {
+    if (s == null || s === '') return '';
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
+
+function escapeAttr(s) {
+    if (s == null) return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;');
+}
+
+let cachedBulkStatus = {};
+let financeReceivedCount = 0;
+let currentFinanceCompletionTab = 'pending';
+
+function isTrackingMilestoneDone(status, field) {
+    if (!status || !field) return false;
+    const val = status[field];
+    return val != null && val !== '' && val !== false;
+}
+
+function isTrackingCompleted(status) {
+    return isTrackingMilestoneDone(status, 'sob');
+}
+
+/** Map legacy milestone filters (booking/SI/BL/SOB) to pending | completed. */
+function normalizeTrackingSection(section) {
+    if (section === 'completed') return 'completed';
+    return 'pending';
+}
+
+function matchesTrackingSection(section, status) {
+    const done = isTrackingCompleted(status);
+    const key = normalizeTrackingSection(section);
+    return key === 'completed' ? done : !done;
+}
+
+const STATUS_SECTION_LABELS = {
+    sales: {
+        pending_pricing: 'Pending at Pricing',
+        pending_confirmation: 'Pending Confirmation',
+        all: 'All Enquiries'
+    },
+    tracking: {
+        pending: 'Not Completed',
+        completed: 'Completed',
+    },
+    finance: {
+        payments: 'Payment to Shipping Line',
+        invoices: 'Create Invoice',
+        received: 'Payments Received'
+    }
+};
+
+function formatEnquiryDateTime(val) {
+    if (!val) return '—';
+    const d = new Date(val);
+    if (Number.isNaN(d.getTime())) return '—';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function truncateText(text, max = 34) {
+    const s = String(text || '—');
+    return s.length > max ? `${s.slice(0, max)}…` : s;
+}
+
+function getUrgencyMeta(dateVal) {
+    if (!dateVal) return { text: '—', className: '' };
+    const target = new Date(dateVal);
+    if (Number.isNaN(target.getTime())) return { text: '—', className: '' };
+    const diffHrs = (target.getTime() - Date.now()) / (1000 * 60 * 60);
+    if (diffHrs <= 24) return { text: '<24 HRS', className: 'urgent' };
+    if (diffHrs <= 48) return { text: '<48 HRS', className: 'soon' };
+    return { text: 'SCHEDULED', className: '' };
+}
+
+function getShipmentTypeShort(e) {
+    const raw = (e.shipment_type || 'ENQUIRY').toUpperCase();
+    if (raw.includes('FCL')) return 'FCL';
+    if (raw.includes('LCL')) return 'LCL';
+    if (raw.includes('AIR')) return 'AIR';
+    return raw.split(' ')[0].slice(0, 8);
+}
+
+function renderRowActionsMenu(e, extraItemsHtml = '', quoteStatus = null) {
+    return `
+        <div class="actions-dropdown">
+            <button class="row-actions-btn actions-btn" type="button" title="Actions" aria-label="Actions">
+                <i class="fas fa-ellipsis-vertical"></i>
+            </button>
+            <div class="actions-menu">
+                ${extraItemsHtml}
+                ${renderEnquiryActions(e, quoteStatus)}
+            </div>
+        </div>`;
+}
+
+function renderListTableRow(e, status = null, options = {}) {
+    const {
+        statusHtml = statusBadge(e, status),
+        extraActionsHtml = '',
+        quoteStatus = null,
+        actionHtml = null,
+        compact = false,
+        detailsExtraHtml = ''
+    } = options;
+
+    if (compact) {
+        const opacity = e.is_void ? ' style="opacity:0.55"' : '';
+        return `
+            <tr class="list-row"${opacity}>
+                <td class="job-no-cell"><a class="cell-enquiry-id" href="#" onclick="openActionModal('view-sale', ${e.id}); return false;">${escapeHtml(e.enquiry_number)}</a></td>
+                <td>${escapeHtml(e.client_name || '—')}</td>
+                <td>${escapeHtml(e.origin)} → ${escapeHtml(e.destination)}</td>
+                <td>${statusHtml}</td>
+                <td>${actionHtml || renderRowActionsMenu(e, extraActionsHtml, quoteStatus)}</td>
+            </tr>`;
+    }
+
+    const urgency = getUrgencyMeta(e.stuffing_date || e.created_at);
+    const created = formatEnquiryDateTime(e.created_at);
+    const required = formatEnquiryDateTime(e.stuffing_date);
+    const opacity = e.is_void ? ' style="opacity:0.55"' : '';
+
+    return `
+        <tr class="list-row"${opacity}>
+            <td data-col="details">
+                <div class="cell-enquiry">
+                    <a class="cell-enquiry-id" href="#" onclick="openActionModal('view-sale', ${e.id}); return false;">${escapeHtml(e.enquiry_number)}</a>
+                    <div class="cell-enquiry-meta">${created}</div>
+                    ${detailsExtraHtml}
+                    <span class="cell-urgency ${urgency.className}">${urgency.text}</span>
+                </div>
+            </td>
+            <td data-col="client" class="cell-upper">${escapeHtml(e.client_name || '—')}</td>
+            <td data-col="location">
+                <div class="cell-location">
+                    <span class="cell-location-origin">${escapeHtml(truncateText(e.origin, 30))}</span>
+                    <span class="cell-location-arrow">→ ${escapeHtml(truncateText(e.destination, 30))}</span>
+                </div>
+            </td>
+            <td data-col="required" class="cell-muted">${required}</td>
+            <td data-col="status">${statusHtml}</td>
+            <td data-col="action">${actionHtml || renderRowActionsMenu(e, extraActionsHtml, quoteStatus)}</td>
+        </tr>`;
+}
+
+function renderFinanceActionCell(e, subView, completionTab = 'pending') {
+    const isCompleted = completionTab === 'completed';
+    if (subView === 'payments') {
+        return (e.payment_done || isCompleted)
+            ? renderFinanceDrawerActionBtn('finance-payment', e.id, { primary: false, icon: 'check-circle', label: 'View', title: 'View payment' })
+            : renderFinanceDrawerActionBtn('finance-payment', e.id, { icon: 'money-bill-wave', label: 'Pay', title: 'Make payment to shipping line' });
+    }
+    if (subView === 'invoices') {
+        const isAdditional = e && e.__finance_invoice_kind === 'additional';
+        const additionalOpts = isAdditional
+            ? { item_type: 'additional', additional_doc_id: e.__finance_additional_doc_id || null }
+            : null;
+        if (isCompleted || e.invoice_complete) {
+            return renderFinanceDrawerActionBtn('finance-invoice', e.id, { primary: false, icon: 'check-circle', label: 'View', title: 'View recorded invoice' }, additionalOpts);
+        }
+        return e.bl_received
+            ? renderFinanceDrawerActionBtn('finance-invoice', e.id, { icon: 'file-invoice', label: 'Invoice', title: 'Create client invoice' }, additionalOpts)
+            : `<button class="btn btn-secondary table-tool-btn finance-row-action-btn" type="button" disabled title="Wait for BL Received status"><i class="fas fa-clock"></i> Awaiting BL</button>`;
+    }
+    return renderFinanceDrawerActionBtn('finance-payment', e.id, { icon: 'coins', label: 'Record', title: 'Record client payment' });
+}
+
+function renderFinanceDrawerActionBtn(mode, id, { primary = true, icon, label, title } = {}, modalOptions = null) {
+    const btnClass = primary ? 'btn-primary' : 'btn-secondary';
+    const optsEncoded = modalOptions ? btoa(unescape(encodeURIComponent(JSON.stringify(modalOptions)))) : '';
+    const onclick = optsEncoded
+        ? `openActionModal('${mode}', ${id}, null, '${optsEncoded}')`
+        : `openActionModal('${mode}', ${id})`;
+    return `<button type="button" class="btn ${btnClass} table-tool-btn finance-row-action-btn" onclick="${onclick}" title="${escapeAttr(title || label)}"><i class="fas fa-${icon}"></i> ${escapeHtml(label)}</button>`;
+}
+
+function updateFinanceTableChrome(subView) {
+    const title = document.querySelector('#financeTableWrap .table-head-title');
+    const sub = document.querySelector('#financeTableWrap .table-head-sub');
+    const requiredHeader = document.querySelector('#financeDataTable th[data-col="required"]');
+    const wrap = document.getElementById('financeTableWrap');
+
+    if (subView === 'received') {
+        if (title) title.textContent = 'Payments Received';
+        if (sub) sub.textContent = 'Record client payments against raised invoices';
+        if (requiredHeader) requiredHeader.textContent = 'Due On';
+        wrap?.classList.add('has-row-action-btns');
+        return;
+    }
+
+    if (title) title.textContent = 'Finance Details';
+    if (sub) sub.textContent = 'Payments, invoices and receipts';
+    if (requiredHeader) requiredHeader.textContent = 'Required On';
+    wrap?.classList.add('has-row-action-btns');
+}
+
+function renderFinanceReceivedInvoiceRow(inv) {
+    const paid = !!inv.is_paid;
+    const statusHtml = paid
+        ? '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> PAID</span>'
+        : '<span class="badge badge-pending"><i class="fas fa-clock"></i> AWAITING PAYMENT</span>';
+    const required = inv.payment_due_date ? formatEnquiryDateTime(inv.payment_due_date) : '—';
+    const invoiceNo = escapeHtml(inv.invoice_number || '—');
+    const actionHtml = paid
+        ? renderFinanceDrawerActionBtn('finance-received', inv.id, { primary: false, icon: 'check-circle', label: 'View', title: 'View payment receipt' })
+        : renderFinanceDrawerActionBtn('finance-received', inv.id, { icon: 'money-bill-wave', label: 'Record', title: 'Record client payment' });
+
+    return `
+        <tr class="list-row">
+            <td data-col="details">
+                <div class="cell-enquiry">
+                    <a class="cell-enquiry-id" href="#" onclick="openActionModal('view-sale', ${inv.enquiry_id || 0}); return false;">${escapeHtml(inv.enquiry_number || '—')}</a>
+                    <div class="cell-enquiry-meta">Invoice ${invoiceNo}</div>
+                </div>
+            </td>
+            <td data-col="client" class="cell-upper">${escapeHtml(inv.client_name || '—')}</td>
+            <td data-col="location">
+                <div class="cell-location">
+                    <span class="cell-location-origin">${escapeHtml(truncateText(inv.origin, 30))}</span>
+                    <span class="cell-location-arrow">→ ${escapeHtml(truncateText(inv.destination, 30))}</span>
+                </div>
+            </td>
+            <td data-col="required" class="cell-muted">${required}</td>
+            <td data-col="status">${statusHtml}</td>
+            <td data-col="action">${actionHtml}</td>
+        </tr>`;
+}
+
+async function renderFinanceReceivedTable(invoices) {
+    const tbody = document.getElementById('financeTable');
+    if (!tbody) return;
+
+    updateFinanceTableChrome('received');
+    updateFinanceStats();
+    financeReceivedCount = (invoices || []).filter((inv) => !inv.is_paid).length;
+    updateFinanceCompletionCounts();
+    updateStatusSectionCounts();
+
+    const showCompleted = currentFinanceCompletionTab === 'completed';
+    const filtered = (invoices || []).filter((inv) => showCompleted ? !!inv.is_paid : !inv.is_paid);
+
+    if (!filtered.length) {
+        const emptyMsg = showCompleted
+            ? 'No completed client payments yet.'
+            : 'No pending client payments. Save an invoice from <strong>Create Invoice</strong> first.';
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">${emptyMsg}</td></tr>`;
+        renderPagination('financePagination', 0, 1, 'changeFinancePage');
+        updateTableRecordsCount('financeTable', 'financeRecordsCount');
+        return;
+    }
+
+    const page = paginationState.finance.currentPage;
+    const total = filtered.length;
+    const startIdx = (page - 1) * PAGE_SIZE;
+    const slice = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+
+    tbody.innerHTML = slice.map((inv) => renderFinanceReceivedInvoiceRow(inv)).join('');
+
+    renderPagination('financePagination', total, page, 'changeFinancePage');
+    afterListTableRender('financeTable', 'financeSearchInput', 'financeRecordsCount');
+    if (typeof initListTableColumnResize === 'function') {
+        initListTableColumnResize(document.getElementById('financeDataTable'));
+    }
+}
+
+function financeStatusBadge(e, subView, completionTab = 'pending') {
+    const isCompleted = completionTab === 'completed';
+    if (subView === 'payments') {
+        return (e.payment_done || isCompleted)
+            ? '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> Payment Done</span>'
+            : '<span class="badge badge-pending"><i class="fas fa-clock"></i> Payment Pending</span>';
+    }
+    if (subView === 'invoices') {
+        const remarkHtml = renderFinanceInvoiceRemark(e);
+        if (isCompleted || e.invoice_complete) {
+            return `<span class="badge badge-completed"><i class="fas fa-check-circle"></i> Invoice Complete</span>${remarkHtml}`;
+        }
+        return e.bl_received
+            ? `<span class="badge badge-pending"><i class="fas fa-clock"></i> IRN / Invoice Pending</span>${remarkHtml}`
+            : `<span class="badge badge-pending"><i class="fas fa-clock"></i> Awaiting BL</span>${remarkHtml}`;
+    }
+    return e.bl_received
+        ? '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> BL Received</span>'
+        : '<span class="badge badge-pending"><i class="fas fa-clock"></i> Awaiting BL</span>';
+}
+
+function setActiveStatusSection(view, section) {
+    const map = {
+        sales: 'salesStatusSections',
+        tracking: 'trackingStatusSections',
+        finance: 'financeStatusSections'
+    };
+    const el = document.getElementById(map[view]);
+    if (!el) return;
+
+    const key = view === 'sales' && (!section || section === 'all') ? 'all' : section;
+    el.querySelectorAll('.status-section-card').forEach((btn) => {
+        const active = btn.dataset.section === key;
+        btn.classList.toggle('active', active);
+        btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+    updateViewStatusPill(view, key);
+}
+
+function updateViewStatusPill(view, section) {
+    const pillMap = {
+        sales: 'enquiriesStatusPill',
+        tracking: 'trackingStatusPill',
+        finance: 'financeStatusPill'
+    };
+    const pill = document.getElementById(pillMap[view]);
+    if (!pill) return;
+    const labelEl = pill.querySelector('.status-text');
+    if (!labelEl) return;
+    const labels = STATUS_SECTION_LABELS[view] || {};
+    if (view === 'tracking' && shouldBypassTrackingSectionFilter()) {
+        labelEl.textContent = 'All sections (search)';
+        return;
+    }
+    if (view === 'sales' && shouldBypassSalesSectionFilter()) {
+        labelEl.textContent = 'All enquiries (search)';
+        return;
+    }
+    labelEl.textContent = labels[section] || section || 'All';
+}
+
+function shouldBypassTrackingSectionFilter() {
+    const table = document.getElementById('trackingDataTable');
+    return typeof window.isListTableSearchBypassActive === 'function'
+        && window.isListTableSearchBypassActive(table);
+}
+
+function shouldBypassSalesSectionFilter() {
+    const table = document.getElementById('enquiriesDataTable');
+    return typeof window.isListTableSearchBypassActive === 'function'
+        && window.isListTableSearchBypassActive(table);
+}
+
+function countSalesSection(section) {
+    const active = enquiries.filter((e) => !e.is_void);
+    if (section === 'pending_pricing') return active.filter((e) => (e.stage || 1) <= 1).length;
+    if (section === 'pending_confirmation') return active.filter((e) => e.stage === 2).length;
+    return active.length;
+}
+
+function countTrackingSection(section) {
+    const ops = enquiries.filter((e) => isTrackingListEnquiry(e));
+    return ops.filter((e) => {
+        const s = cachedBulkStatus[e.id] || null;
+        // Stage-2 rows only count once they have a shipment status record.
+        if ((e.stage || 1) < 3 && !s) return false;
+        return matchesTrackingSection(section, s);
+    }).length;
+}
+
+function isTrackingListEnquiry(e) {
+    return !!(e && !e.is_void && (e.stage || 1) >= 2);
+}
+
+function isShippingLinePaymentDone(status) {
+    if (!status) return false;
+    return !!(status.pay_line || status.shipping_payment_done);
+}
+
+function isInvoiceCreateCompleted(invoice) {
+    if (!invoice) return false;
+    const invoiceNumber = (invoice.invoice_number || '').trim();
+    const irn = (invoice.irn || '').trim();
+    return !!(invoiceNumber && irn);
+}
+
+async function fetchFinanceInvoicesCache() {
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/invoice/list`);
+        if (!res.ok) return window._financeInvoiceByEnquiry || {};
+        const payload = await res.json();
+        if (!Array.isArray(payload)) return window._financeInvoiceByEnquiry || {};
+        window._financeInvoicesList = payload;
+        const byEnquiry = {};
+        const additionalByEnquiryDoc = {};
+        for (const inv of payload) {
+            if (inv.enquiry_id == null) continue;
+            const it = String(inv.item_type || 'all').toLowerCase();
+            if (it === 'additional') {
+                const docId = inv.additional_doc_id != null ? String(inv.additional_doc_id) : '';
+                if (!additionalByEnquiryDoc[inv.enquiry_id]) additionalByEnquiryDoc[inv.enquiry_id] = {};
+                if (docId) additionalByEnquiryDoc[inv.enquiry_id][docId] = inv;
+                continue;
+            }
+            // main invoice (all/main)
+            byEnquiry[inv.enquiry_id] = inv;
+        }
+        window._financeInvoiceByEnquiry = byEnquiry;
+        window._financeAdditionalInvoiceByEnquiryDoc = additionalByEnquiryDoc;
+        return byEnquiry;
+    } catch (e) {
+        console.error('fetchFinanceInvoicesCache:', e);
+        return window._financeInvoiceByEnquiry || {};
+    }
+}
+
+function getInvoiceForEnquiry(enquiryId) {
+    return (window._financeInvoiceByEnquiry || {})[enquiryId] || null;
+}
+
+function getAdditionalInvoiceForEnquiryDoc(enquiryId, docId) {
+    const map = window._financeAdditionalInvoiceByEnquiryDoc || {};
+    const byDoc = map[enquiryId] || {};
+    return byDoc[String(docId)] || null;
+}
+
+function getFinanceInvoiceKindLabel(kind) {
+    if (kind === 'additional') return 'Additional invoice';
+    if (kind === 'main') return 'Main invoice';
+    return '';
+}
+
+function renderFinanceInvoiceTypeBadge(e) {
+    const label = getFinanceInvoiceKindLabel(e && e.__finance_invoice_kind);
+    if (!label) return '';
+    const isAdditional = e.__finance_invoice_kind === 'additional';
+    const bg = isAdditional ? '#ede9fe' : '#e0f2fe';
+    const color = isAdditional ? '#6d28d9' : '#0369a1';
+    return `<span class="finance-invoice-type-badge" style="display:inline-block;margin-top:6px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${bg};color:${color};">${escapeHtml(label)}</span>`;
+}
+
+function renderFinanceInvoiceRemark(e) {
+    const label = (e && e.__finance_remark) || getFinanceInvoiceKindLabel(e && e.__finance_invoice_kind);
+    if (!label) return '';
+    return `<div class="cell-muted" style="margin-top:4px;font-size:12px;">Remark: ${escapeHtml(label)}</div>`;
+}
+
+function buildFinanceInvoiceTaskRows(operationalEnquiries, bulkStatus, additionalInvBulk, completionTab) {
+    const showCompleted = completionTab === 'completed';
+    const rows = [];
+
+    for (const e of operationalEnquiries) {
+        const s = bulkStatus[e.id] || null;
+        if (!s || !s.shipping_invoice || !s.bl_received) continue;
+
+        const base = {
+            ...e,
+            bl_received: !!s.bl_received,
+            payment_done: isShippingLinePaymentDone(s),
+        };
+
+        const mainInv = getInvoiceForEnquiry(e.id);
+        const mainComplete = isInvoiceCreateCompleted(mainInv);
+        if (showCompleted ? mainComplete : !mainComplete) {
+            rows.push({
+                ...base,
+                __finance_invoice_kind: 'main',
+                __finance_remark: 'Main invoice',
+                invoice_complete: mainComplete,
+            });
+        }
+
+        if (showCompleted) {
+            const allInvoices = window._financeInvoicesList || [];
+            for (const inv of allInvoices) {
+                if (inv.enquiry_id !== e.id) continue;
+                if (String(inv.item_type || '').toLowerCase() !== 'additional') continue;
+                if (!isInvoiceCreateCompleted(inv)) continue;
+                rows.push({
+                    ...base,
+                    __finance_invoice_kind: 'additional',
+                    __finance_additional_doc_id: inv.additional_doc_id || null,
+                    __finance_remark: inv.remark || 'Additional invoice',
+                    invoice_complete: true,
+                });
+            }
+        } else {
+            const docs = (additionalInvBulk && (additionalInvBulk[String(e.id)] || additionalInvBulk[e.id])) || [];
+            for (const doc of docs) {
+                if (!doc || !doc.id) continue;
+                const addInv = getAdditionalInvoiceForEnquiryDoc(e.id, doc.id);
+                const addComplete = isInvoiceCreateCompleted(addInv);
+                if (addComplete) continue;
+                rows.push({
+                    ...base,
+                    __finance_invoice_kind: 'additional',
+                    __finance_additional_doc_id: doc.id,
+                    __finance_remark: 'Additional invoice',
+                    invoice_complete: false,
+                });
+            }
+        }
+    }
+
+    return rows;
+}
+
+function countFinanceInvoiceTasks(completionTab) {
+    const ops = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
+    const showCompleted = completionTab === 'completed';
+    const docsByEnquiry = window._additionalInvoiceDocsByEnquiry || {};
+    let count = 0;
+
+    for (const e of ops) {
+        const s = cachedBulkStatus[e.id];
+        if (!s || !s.shipping_invoice || !s.bl_received) continue;
+
+        const mainComplete = isInvoiceCreateCompleted(getInvoiceForEnquiry(e.id));
+        if (showCompleted ? mainComplete : !mainComplete) count += 1;
+
+        if (showCompleted) {
+            const allInvoices = window._financeInvoicesList || [];
+            for (const inv of allInvoices) {
+                if (inv.enquiry_id !== e.id) continue;
+                if (String(inv.item_type || '').toLowerCase() !== 'additional') continue;
+                if (!isInvoiceCreateCompleted(inv)) continue;
+                count += 1;
+            }
+        } else {
+            const docs = docsByEnquiry[String(e.id)] || docsByEnquiry[e.id] || [];
+            for (const doc of docs) {
+                if (!doc || !doc.id) continue;
+                const addInv = getAdditionalInvoiceForEnquiryDoc(e.id, doc.id);
+                if (!isInvoiceCreateCompleted(addInv)) count += 1;
+            }
+        }
+    }
+
+    return count;
+}
+
+function countFinanceSection(section) {
+    return countFinanceCompletion(section, 'pending');
+}
+
+function countFinanceCompletion(section, completionTab) {
+    const ops = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
+    const showCompleted = completionTab === 'completed';
+
+    if (section === 'payments') {
+        return ops.filter((e) => {
+            const s = cachedBulkStatus[e.id];
+            if (!s || !s.shipping_invoice) return false;
+            const done = isShippingLinePaymentDone(s);
+            return showCompleted ? done : !done;
+        }).length;
+    }
+    if (section === 'invoices') {
+        return countFinanceInvoiceTasks(completionTab);
+    }
+    if (section === 'received') {
+        // Pending count for main card comes from financeReceivedCount (invoice list).
+        if (!window._financeReceivedInvoices) return showCompleted ? 0 : financeReceivedCount;
+        return window._financeReceivedInvoices.filter((inv) => showCompleted ? !!inv.is_paid : !inv.is_paid).length;
+    }
+    return 0;
+}
+
+function updateFinanceCompletionCounts() {
+    const tabs = document.getElementById('financeCompletionTabs');
+    if (!tabs || !currentFinanceSubView) return;
+    const pendingEl = tabs.querySelector('[data-completion-count="pending"]');
+    const completedEl = tabs.querySelector('[data-completion-count="completed"]');
+    if (pendingEl) pendingEl.textContent = countFinanceCompletion(currentFinanceSubView, 'pending');
+    if (completedEl) completedEl.textContent = countFinanceCompletion(currentFinanceSubView, 'completed');
+}
+
+function setFinanceCompletionTab(tab) {
+    currentFinanceCompletionTab = tab === 'completed' ? 'completed' : 'pending';
+    const tabs = document.getElementById('financeCompletionTabs');
+    if (tabs) {
+        tabs.querySelectorAll('.finance-completion-tab').forEach((btn) => {
+            const active = btn.dataset.completion === currentFinanceCompletionTab;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+    }
+    updateFinanceCompletionCounts();
+}
+
+function initFinanceCompletionTabs() {
+    const tabs = document.getElementById('financeCompletionTabs');
+    if (!tabs || tabs.dataset.bound) return;
+    tabs.dataset.bound = '1';
+    tabs.querySelectorAll('.finance-completion-tab').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            setFinanceCompletionTab(btn.dataset.completion);
+            paginationState.finance.currentPage = 1;
+            updateFinanceTable(currentFinanceSubView);
+        });
+    });
+}
+
+function updateStatusSectionCounts() {
+    const salesEl = document.getElementById('salesStatusSections');
+    if (salesEl) {
+        ['pending_pricing', 'pending_confirmation', 'all'].forEach((section) => {
+            const span = salesEl.querySelector(`[data-count="${section}"]`);
+            if (span) span.textContent = countSalesSection(section);
+        });
+    }
+
+    const trackingEl = document.getElementById('trackingStatusSections');
+    if (trackingEl) {
+        ['pending', 'completed'].forEach((section) => {
+            const span = trackingEl.querySelector(`[data-count="${section}"]`);
+            if (span) span.textContent = countTrackingSection(section);
+        });
+    }
+
+    const financeEl = document.getElementById('financeStatusSections');
+    if (financeEl) {
+        ['payments', 'invoices', 'received'].forEach((section) => {
+            const span = financeEl.querySelector(`[data-count="${section}"]`);
+            if (span) span.textContent = countFinanceSection(section);
+        });
+    }
+}
+
+async function refreshBulkStatusCache() {
+    const ids = enquiries.filter((e) => isTrackingListEnquiry(e)).map((e) => e.id);
+    cachedBulkStatus = ids.length ? await fetchBulkStatus(ids) : {};
+    updateStatusSectionCounts();
+    updateFinanceCompletionCounts();
+}
+
+function initStatusSections() {
+    document.querySelectorAll('.status-section-card').forEach((btn) => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+            const view = btn.dataset.view;
+            const section = btn.dataset.section;
+            setActiveStatusSection(view, section);
+
+            if (view === 'sales') {
+                paginationState.allEnquiries.currentPage = 1;
+                const filter = section === 'all' ? null : section;
+                updateAllEnquiriesTable(filter);
+            } else if (view === 'tracking') {
+                paginationState.tracking.currentPage = 1;
+                currentTrackingFilter = normalizeTrackingSection(section);
+                updateTrackingTable(currentTrackingFilter);
+            } else if (view === 'finance') {
+                paginationState.finance.currentPage = 1;
+                currentFinanceCompletionTab = 'pending';
+                setFinanceCompletionTab('pending');
+                const hash = section === 'payments' ? '#finance-payments'
+                    : section === 'invoices' ? '#finance-invoices'
+                        : '#finance-received';
+                if (window.location.hash !== hash) window.location.hash = hash;
+                updateFinanceTable(section);
+            }
+        });
+    });
+}
+
+function initListTableUI(config) {
+    const {
+        searchId,
+        exportId,
+        toggleBtnId,
+        menuId,
+        dropdownId,
+        cardId,
+        tableId,
+        tbodyId,
+        exportName
+    } = config;
+
+    const input = document.getElementById(searchId);
+    if (input && !input.dataset.bound) {
+        input.dataset.bound = '1';
+        input.addEventListener('input', () => {
+            const table = tableId ? document.getElementById(tableId) : null;
+            const bypassTables = new Set(['trackingDataTable', 'enquiriesDataTable', 'analyticsDetailsDataTable']);
+            if (table && bypassTables.has(table.id)) {
+                clearTimeout(listTableSearchTimers[tbodyId]);
+                listTableSearchTimers[tbodyId] = setTimeout(() => {
+                    if (tbodyId === 'trackingTable') {
+                        paginationState.tracking.currentPage = 1;
+                        updateTrackingTable(currentTrackingFilter);
+                    } else if (tbodyId === 'allEnquiriesTable') {
+                        paginationState.allEnquiries.currentPage = 1;
+                        updateAllEnquiriesTable(currentAllEnquiriesFilter);
+                    } else if (tbodyId === 'analyticsEnquiryTable') {
+                        analyticsDetailsState.search = (input.value || '').trim().toLowerCase();
+                        paginationState.analyticsDetails.currentPage = 1;
+                        renderAnalyticsDetailsTable();
+                    }
+                }, LIST_TABLE_SEARCH_DEBOUNCE_MS);
+                return;
+            }
+            applyTableSearchFilter(tbodyId, input);
+            updateTableRecordsCount(tbodyId, config.recordsCountId);
+        });
+    }
+
+    const exportBtn = document.getElementById(exportId);
+    if (exportBtn && !exportBtn.dataset.bound) {
+        exportBtn.dataset.bound = '1';
+        exportBtn.addEventListener('click', () => exportVisibleTableToCsv(tableId, tbodyId, exportName));
+    }
+
+    const menu = document.getElementById(menuId);
+    const toggleBtn = document.getElementById(toggleBtnId);
+    const card = document.getElementById(cardId);
+
+    if (toggleBtn && menu && !toggleBtn.dataset.bound) {
+        toggleBtn.dataset.bound = '1';
+        toggleBtn.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            menu.classList.toggle('open');
+        });
+    }
+
+    if (menu && card && !menu.dataset.bound) {
+        menu.dataset.bound = '1';
+        menu.addEventListener('change', (e) => {
+            const cb = e.target.closest('input[type="checkbox"][data-col]');
+            if (!cb) return;
+            const cls = `cols-hide-${cb.dataset.col}`;
+            if (cb.checked) card.classList.remove(cls);
+            else card.classList.add(cls);
+        });
+    }
+
+    if (dropdownId && !document.body.dataset[`dropdownBound_${dropdownId}`]) {
+        document.body.dataset[`dropdownBound_${dropdownId}`] = '1';
+        document.addEventListener('click', (e) => {
+            const wrap = document.getElementById(dropdownId);
+            const menuEl = document.getElementById(menuId);
+            if (!wrap || !menuEl) return;
+            if (wrap.contains(e.target)) return;
+            menuEl.classList.remove('open');
+        });
+    }
+}
+
+function applyTableSearchFilter(tbodyId, input) {
+    if (typeof window.applyListTableFilters === 'function') {
+        window.applyListTableFilters(tbodyId, input);
+        return;
+    }
+    const tbody = document.getElementById(tbodyId);
+    if (!tbody || !input) return;
+    const q = (input.value || '').trim().toLowerCase();
+    Array.from(tbody.querySelectorAll('tr')).forEach((tr) => {
+        const text = (tr.textContent || '').toLowerCase();
+        tr.style.display = !q || text.includes(q) ? '' : 'none';
+    });
+}
+
+function afterListTableRender(tbodyId, searchInputId, recordsCountId) {
+    const input = searchInputId ? document.getElementById(searchInputId) : null;
+    applyTableSearchFilter(tbodyId, input);
+    if (recordsCountId) updateTableRecordsCount(tbodyId, recordsCountId);
+    if (typeof window.refreshListTableFilters === 'function') {
+        window.refreshListTableFilters(tbodyId);
+    }
+}
+
+function updateTableRecordsCount(tbodyId, countId) {
+    const tbody = document.getElementById(tbodyId);
+    const out = countId ? document.getElementById(countId) : null;
+    if (!tbody || !out) return;
+    const visible = Array.from(tbody.querySelectorAll('tr')).filter((tr) => tr.style.display !== 'none');
+    out.textContent = String(visible.length);
+}
+
+function exportVisibleTableToCsv(tableId, tbodyId, filenamePrefix) {
+    const table = document.getElementById(tableId);
+    const tbody = document.getElementById(tbodyId);
+    if (!table || !tbody) return;
+
+    const headers = Array.from(table.querySelectorAll('thead th'))
+        .filter((th) => th.offsetParent !== null)
+        .map((th) => (th.textContent || '').trim());
+
+    const rows = Array.from(tbody.querySelectorAll('tr'))
+        .filter((tr) => tr.style.display !== 'none')
+        .map((tr) => Array.from(tr.querySelectorAll('td'))
+            .filter((td) => td.offsetParent !== null)
+            .map((td) => {
+                const t = (td.textContent || '').trim().replace(/\s+/g, ' ');
+                return `"${t.replace(/"/g, '""')}"`;
+            }).join(','));
+
+    const csv = [headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
 
 async function fetchDashboardStats() {
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/dashboard/stats`);
-        if (response.ok) {
-            const data = await response.json();
-            document.getElementById('totalEnquiry').textContent = data.total_enquiries;
-            document.getElementById('pendingPricing').textContent = data.pending_at_pricing;
-            document.getElementById('pendingConfirmation').textContent = data.pending_client_confirmation;
-            // Updated Booking Pending
-            if (document.getElementById('bookingPendingCount'))
-                document.getElementById('bookingPendingCount').textContent = data.booking_pending;
-
-            // Updated milestone counts (Pending)
-            if (document.getElementById('siPendingCount'))
-                document.getElementById('siPendingCount').textContent = data.si_pending;
-            if (document.getElementById('blPendingCount'))
-                document.getElementById('blPendingCount').textContent = data.bl_pending;
-            if (document.getElementById('sobPendingCount'))
-                document.getElementById('sobPendingCount').textContent = data.sob_pending;
-            if (document.getElementById('financeInvoicesRaised'))
-                document.getElementById('financeInvoicesRaised').textContent = data.invoices_raised || 0;
-            if (document.getElementById('paymentPendingCount'))
-                document.getElementById('paymentPendingCount').textContent = data.payment_pending || 0;
+        if (!response.ok) {
+            console.error('Dashboard stats HTTP error:', response.status, await response.text());
+            return;
         }
+        const data = await response.json();
+        const setStat = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val ?? 0;
+        };
+        setStat('totalEnquiry', data.total_enquiries);
+        setStat('pendingPricing', data.pending_at_pricing);
+        setStat('pendingConfirmation', data.pending_client_confirmation);
+        setStat('bookingPendingCount', data.booking_pending);
+        setStat('siPendingCount', data.si_pending);
+        setStat('blPendingCount', data.bl_pending);
+        setStat('sobPendingCount', data.sob_pending);
+        setStat('financeInvoicesRaised', data.invoices_raised);
+        setStat('paymentPendingCount', data.payment_pending);
+
+        // Section header totals (derived)
+        setStat('salesTotalInline', (data.pending_at_pricing ?? 0) + (data.pending_client_confirmation ?? 0));
+        setStat('trafficTotalInline', (data.booking_pending ?? 0) + (data.si_pending ?? 0) + (data.bl_pending ?? 0));
+        setStat('opsTotalInline', (data.sob_pending ?? 0) + (data.invoices_raised ?? 0) + (data.payment_pending ?? 0));
+        updateStatusSectionCounts();
     } catch (error) {
         console.error('Error fetching dashboard stats:', error);
+    }
+}
+
+function formatInrAmount(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '—';
+    return `₹${Math.round(n).toLocaleString('en-IN')}`;
+}
+
+function formatInrLakhs(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '—';
+    const abs = Math.abs(n);
+    // 100 lac = 1 crore
+    if (abs > 10000000) {
+        return `₹${(n / 10000000).toFixed(2)} Cr`;
+    }
+    if (abs >= 100000) {
+        return `₹${(n / 100000).toFixed(2)} L`;
+    }
+    if (abs >= 1000) {
+        return `₹${(n / 1000).toFixed(2)} K`;
+    }
+    return formatInrAmount(n);
+}
+
+function formatMarginPct(value, digits = 1) {
+    if (value == null || !Number.isFinite(Number(value))) return '—';
+    return `${Number(value).toFixed(digits)}%`;
+}
+
+function formatSobDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(`${iso}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return escapeHtml(iso);
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+function analyticsValueClass(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n) || n === 0) return '';
+    return n > 0 ? 'positive' : 'negative';
+}
+
+function setText(id, text) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = text;
+}
+
+const analyticsFilterState = {
+    fy: '',
+    monthFrom: '',
+    monthTo: '',
+    metric: 'gross_margin',
+};
+
+let analyticsAvailableMonths = [];
+let analyticsAvailableYears = [];
+const analyticsDetailsState = {
+    rows: [],
+    search: '',
+    statusFilter: 'all',
+    pageSize: 20,
+};
+
+function currentAnalyticsFyValue() {
+    const now = new Date();
+    const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
+    return `${y}-${String(y + 1).slice(-2)}`;
+}
+
+function openAnalyticsDetailsPanel({ statusFilter = null } = {}) {
+    const btn = document.getElementById('analyticsViewDetailsBtn');
+    const panel = document.getElementById('analyticsDetailsPanel');
+    if (!btn || !panel) return;
+    btn.setAttribute('aria-expanded', 'true');
+    panel.hidden = false;
+    if (statusFilter) {
+        setAnalyticsDetailsStatusFilter(statusFilter, { render: false });
+    }
+    paginationState.analyticsDetails.currentPage = 1;
+    renderAnalyticsDetailsTable();
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function buildMarginGaugeSvg(pct) {
+    const p = Math.min(100, Math.max(0, Number(pct) || 0));
+    const r = 34;
+    const c = 2 * Math.PI * r;
+    const offset = c - (p / 100) * c;
+    return `<svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${r}" fill="none" stroke="#e2e8f0" stroke-width="8" /><circle cx="40" cy="40" r="${r}" fill="none" stroke="#f97316" stroke-width="8" stroke-dasharray="${c.toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}" stroke-linecap="round" transform="rotate(-90 40 40)" /></svg>`;
+}
+
+function renderAnalyticsSummary(summary) {
+    const completed = summary.total_enquiries ?? 0;
+    const active = (summary.ongoing && summary.ongoing.trips) ? summary.ongoing.trips : 0;
+    const total = completed + active;
+    const marginPct = summary.margin_pct;
+    const marginClass = analyticsValueClass(marginPct);
+
+    setText('analyticsTripsBadge', `${total} Total`);
+    setText('analyticsTripsValue', String(total));
+    setText('analyticsTripsActive', String(active));
+    setText('analyticsTripsCompleted', String(completed));
+    setText('analyticsRecordsBadge', `${total} Records`);
+
+    setText('analyticsRevenue', formatInrLakhs(summary.total_revenue_inr));
+    setText('analyticsGrossRevenue', formatInrLakhs(summary.gross_revenue_inr));
+    setText('analyticsCost', formatInrLakhs(summary.total_cost_inr));
+    setText('analyticsCostMarginPill', `Net Margin: ${formatMarginPct(marginPct, 1)}`);
+    setText('analyticsCapture', formatInrLakhs(summary.capture_inr));
+
+    const captureEl = document.getElementById('analyticsCapture');
+    if (captureEl) {
+        captureEl.classList.remove('positive', 'negative');
+        if (marginClass) captureEl.classList.add(marginClass);
+    }
+
+    setText('analyticsGrossCost', formatInrLakhs(summary.gross_cost_inr));
+
+    const grossMarginPct = summary.gross_margin_pct;
+    const grossMarginClass = analyticsValueClass(grossMarginPct);
+    setText('analyticsGrossMargin', formatInrLakhs(summary.gross_margin_inr));
+    setText('analyticsGrossMarginPct', formatMarginPct(grossMarginPct, 2));
+
+    const grossMarginEl = document.getElementById('analyticsGrossMargin');
+    if (grossMarginEl) {
+        grossMarginEl.classList.remove('positive', 'negative');
+        if (grossMarginClass) grossMarginEl.classList.add(grossMarginClass);
+    }
+    const grossMarginPctEl = document.getElementById('analyticsGrossMarginPct');
+    if (grossMarginPctEl) {
+        grossMarginPctEl.classList.remove('positive', 'negative');
+        if (grossMarginClass) grossMarginPctEl.classList.add(grossMarginClass);
+    }
+
+    const marginPctText = formatMarginPct(marginPct, 2);
+    setText('analyticsMarginPct', marginPctText);
+
+    const trendBadge = document.getElementById('analyticsMarginTrendBadge');
+    if (trendBadge) {
+        const positive = Number(marginPct) >= 0;
+        trendBadge.textContent = `${positive ? '↗' : '↘'} ${marginPctText}`;
+        trendBadge.classList.toggle('positive', positive);
+        trendBadge.classList.toggle('negative', !positive && marginPct != null);
+    }
+
+    const gaugeWrap = document.getElementById('analyticsMarginGauge');
+    if (gaugeWrap) {
+        const iconHtml = '<div class="biz-kpi-gauge-icon"><i class="fas fa-bullseye"></i></div>';
+        gaugeWrap.innerHTML = buildMarginGaugeSvg(marginPct) + iconHtml;
+    }
+
+    const fySub = document.getElementById('analyticsFySubtitle');
+    if (fySub) {
+        const label = summary.fy_label || summary.filter_fy || 'Financial year';
+        const range = summary.fy_range || 'Apr – Mar';
+        const from = summary.filter_month_from;
+        const to = summary.filter_month_to;
+        let monthNote = 'all months';
+        if (from || to) {
+            monthNote = from && to && from !== to ? `${from} – ${to}` : (from || to);
+        }
+        fySub.textContent = `${label} · ${range} · ${monthNote} · by SI date (from Jul)`;
+    }
+
+    const pendingNote = document.getElementById('analyticsPendingSobNote');
+    const ongoing = summary.ongoing;
+    if (pendingNote) {
+        const showOngoing = ongoing && ongoing.trips > 0 && ongoing.included_in_gross;
+        if (showOngoing) {
+            pendingNote.hidden = false;
+            pendingNote.innerHTML =
+                `${ongoing.trips} ongoing enquir${ongoing.trips === 1 ? 'y' : 'ies'} ` +
+                `(SI submitted, no final quote) · ` +
+                `Capture ${formatInrLakhs(ongoing.capture_inr)}` +
+                `<button type="button" class="analytics-pending-note__action" id="analyticsViewOngoingBtn">View list</button>`;
+            const viewBtn = document.getElementById('analyticsViewOngoingBtn');
+            if (viewBtn) {
+                viewBtn.addEventListener('click', () => openAnalyticsDetailsPanel({ statusFilter: 'ongoing' }));
+            }
+        } else {
+            pendingNote.hidden = true;
+            pendingNote.textContent = '';
+        }
+    }
+}
+
+function populateAnalyticsFyFilter(years) {
+    const select = document.getElementById('analyticsFyFilter');
+    if (!select) return;
+
+    const list = Array.isArray(years) && years.length
+        ? years
+        : [{ value: currentAnalyticsFyValue(), label: `FY ${currentAnalyticsFyValue()}` }];
+
+    if (!analyticsFilterState.fy) {
+        analyticsFilterState.fy = currentAnalyticsFyValue();
+    }
+
+    const options = list.map((y) => {
+        const value = y.value || '';
+        const label = y.label || `FY ${value}`;
+        return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+    });
+    select.innerHTML = options.join('');
+
+    const hasCurrent = list.some((y) => y.value === analyticsFilterState.fy);
+    select.value = hasCurrent ? analyticsFilterState.fy : (list[0]?.value || '');
+    analyticsFilterState.fy = select.value;
+}
+
+function populateAnalyticsMonthRangeFilters(months) {
+    const fromSelect = document.getElementById('analyticsMonthFromFilter');
+    const toSelect = document.getElementById('analyticsMonthToFilter');
+    if (!fromSelect || !toSelect) return;
+
+    const list = Array.isArray(months) ? months : [];
+    const fromOptions = ['<option value="">All</option>']
+        .concat(list.map((m) => {
+            const value = m.value || m.month || '';
+            const label = m.label || m.short_label || value;
+            return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+        }));
+    const toOptions = ['<option value="">All</option>']
+        .concat(list.map((m) => {
+            const value = m.value || m.month || '';
+            const label = m.label || m.short_label || value;
+            return `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`;
+        }));
+
+    fromSelect.innerHTML = fromOptions.join('');
+    toSelect.innerHTML = toOptions.join('');
+
+    const validValues = new Set(list.map((m) => m.value || m.month));
+    let monthFrom = analyticsFilterState.monthFrom && validValues.has(analyticsFilterState.monthFrom)
+        ? analyticsFilterState.monthFrom
+        : '';
+    let monthTo = analyticsFilterState.monthTo && validValues.has(analyticsFilterState.monthTo)
+        ? analyticsFilterState.monthTo
+        : '';
+    ({ monthFrom, monthTo } = clampAnalyticsMonthRange(monthFrom, monthTo, list));
+    fromSelect.value = monthFrom;
+    toSelect.value = monthTo;
+    analyticsFilterState.monthFrom = fromSelect.value;
+    analyticsFilterState.monthTo = toSelect.value;
+}
+
+function monthIndexInFy(monthKey, months) {
+    if (!monthKey) return -1;
+    return months.findIndex((m) => (m.value || m.month) === monthKey);
+}
+
+/** Clamp To so it cannot be before From in FY order (Apr→Mar). */
+function clampAnalyticsMonthRange(monthFrom, monthTo, availableMonths) {
+    if (!monthFrom || !monthTo) {
+        return { monthFrom: monthFrom || '', monthTo: monthTo || '' };
+    }
+    const startIdx = monthIndexInFy(monthFrom, availableMonths);
+    const endIdx = monthIndexInFy(monthTo, availableMonths);
+    if (startIdx >= 0 && endIdx >= 0 && endIdx < startIdx) {
+        return { monthFrom, monthTo: monthFrom };
+    }
+    return { monthFrom, monthTo };
+}
+
+function filterSeriesByMonthRange(series, monthFrom, monthTo, availableMonths) {
+    const rows = Array.isArray(series) ? series : [];
+    if (!monthFrom && !monthTo) return rows;
+
+    // One bound only → that single month
+    if (monthFrom && !monthTo) {
+        return rows.filter((r) => r.month === monthFrom);
+    }
+    if (monthTo && !monthFrom) {
+        return rows.filter((r) => r.month === monthTo);
+    }
+
+    const monthKeys = (availableMonths || []).map((m) => m.value || m.month);
+    const startIdx = monthIndexInFy(monthFrom, availableMonths);
+    const endIdx = monthIndexInFy(monthTo, availableMonths);
+    // Unknown keys or backward range → match nothing (do not expand to full FY)
+    if (startIdx < 0 || endIdx < 0 || startIdx > endIdx) {
+        return [];
+    }
+    const allowed = new Set(monthKeys.slice(startIdx, endIdx + 1));
+    return rows.filter((r) => allowed.has(r.month));
+}
+
+function getAnalyticsSliceValue(row, metric) {
+    if (metric === 'cost') return Math.max(0, Number(row.cost_inr) || 0);
+    if (metric === 'revenue') return Math.max(0, Number(row.revenue_inr) || 0);
+    if (metric === 'net_margin' || metric === 'both') {
+        return Math.max(0, Number(row.capture_inr) || 0);
+    }
+    return Math.max(0, Number(row.capture_inr) || 0);
+}
+
+function getAnalyticsMetricLabel(metric) {
+    if (metric === 'cost') return 'Cost';
+    if (metric === 'revenue') return 'Revenue';
+    if (metric === 'net_margin' || metric === 'both') return 'Net Margin';
+    return 'Gross Margin';
+}
+
+const ANALYTICS_PIE_COLORS = [
+    '#0284c7', '#059669', '#f59e0b', '#7c3aed', '#dc2626',
+    '#0d9488', '#db2777', '#2563eb', '#ca8a04', '#475569',
+    '#0891b2', '#4f46e5',
+];
+
+function buildAnalyticsPiePath(cx, cy, radius, startAngle, endAngle) {
+    const toXY = (angle) => {
+        const rad = ((angle - 90) * Math.PI) / 180;
+        return [cx + radius * Math.cos(rad), cy + radius * Math.sin(rad)];
+    };
+    const [x1, y1] = toXY(startAngle);
+    const [x2, y2] = toXY(endAngle);
+    const large = endAngle - startAngle > 180 ? 1 : 0;
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${radius} ${radius} 0 ${large} 1 ${x2} ${y2} Z`;
+}
+
+function renderMonthlyAnalyticsChart(series, metric, options = {}) {
+    const wrap = document.getElementById('analyticsMonthlyChart');
+    if (!wrap) return;
+
+    const rows = Array.isArray(series) ? series : [];
+    const metricKey = metric || 'gross_margin';
+    const metricLabel = getAnalyticsMetricLabel(metricKey);
+    const pipelineMargin = Number(options.pipelineMargin) || 0;
+    const showPipeline = metricKey === 'gross_margin' && pipelineMargin > 0;
+
+    // Keep FY month order; only draw pie slices with positive value
+    const ordered = rows.map((r, idx) => ({
+        label: r.short_label || r.label,
+        fullLabel: r.label,
+        month: r.month,
+        trips: r.trips || 0,
+        margin_pct: r.margin_pct,
+        value: getAnalyticsSliceValue(r, metricKey),
+        color: ANALYTICS_PIE_COLORS[idx % ANALYTICS_PIE_COLORS.length],
+        cost_inr: r.cost_inr,
+        revenue_inr: r.revenue_inr,
+        capture_inr: r.capture_inr,
+    }));
+
+    if (showPipeline) {
+        ordered.push({
+            label: 'Ongoing',
+            fullLabel: 'Ongoing (SI submitted, no final quote)',
+            month: '__ongoing__',
+            trips: options.pipelineTrips || 0,
+            value: pipelineMargin,
+            color: '#94a3b8',
+        });
+    }
+
+    const slices = ordered.filter((s) => s.value > 0);
+    if (!slices.length) {
+        wrap.innerHTML = `<div class="analytics-chart-empty">No ${escapeHtml(metricLabel.toLowerCase())} for this filter yet. Final quotes with SI from Jul onward will appear here.</div>`;
+        return;
+    }
+
+    const total = slices.reduce((sum, s) => sum + s.value, 0);
+    const size = 260;
+    const cx = size / 2;
+    const cy = size / 2;
+    const radius = 108;
+    let angle = 0;
+
+    const paths = slices.map((s) => {
+        const portion = (s.value / total) * 360;
+        const start = angle;
+        const end = angle + portion;
+        angle = end;
+        const d = portion >= 359.999
+            ? `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.01} ${cy - radius} Z`
+            : buildAnalyticsPiePath(cx, cy, radius, start, end);
+        const pct = ((s.value / total) * 100).toFixed(1);
+        return `<path d="${d}" fill="${s.color}" stroke="#fff" stroke-width="2.5">
+            <title>${escapeHtml(s.fullLabel)}: ${formatInrAmount(s.value)} (${pct}%)</title>
+        </path>`;
+    }).join('');
+
+    // Legend: months with trips, plus ongoing pipeline slice when shown
+    const legendMonths = ordered.filter((s) => (s.trips || 0) > 0 || s.month === '__ongoing__');
+    const legend = legendMonths.map((s) => {
+        const hasValue = s.value > 0;
+        const pct = hasValue && total > 0 ? ((s.value / total) * 100).toFixed(1) : '0.0';
+        const clickable = s.month === '__ongoing__';
+        return `
+            <li class="analytics-pie-card${clickable ? ' is-clickable' : ''}"${clickable ? ' data-ongoing-slice="1" tabindex="0" role="button" aria-label="View ongoing enquiries"' : ''}>
+                <span class="analytics-pie-swatch" style="background:${s.color}"></span>
+                <div class="analytics-pie-card-body">
+                    <div class="analytics-pie-card-top">
+                        <strong>${escapeHtml(s.label)}</strong>
+                        <em>${hasValue ? `${pct}%` : '—'}</em>
+                    </div>
+                    <div class="analytics-pie-card-meta">
+                        ${hasValue ? formatInrLakhs(s.value) : '₹0'} · ${s.trips} trip${s.trips === 1 ? '' : 's'}
+                    </div>
+                </div>
+            </li>`;
+    }).join('');
+
+    if (!legendMonths.length) {
+        wrap.innerHTML = `<div class="analytics-chart-empty">No trips in this financial year yet.</div>`;
+        return;
+    }
+
+    wrap.innerHTML = `
+        <div class="analytics-pie-layout">
+            <div class="analytics-pie-visual">
+                <svg viewBox="0 0 ${size} ${size}" class="analytics-pie-svg" role="img" aria-label="${escapeHtml(metricLabel)} by financial year month">
+                    ${paths}
+                    <circle cx="${cx}" cy="${cy}" r="58" fill="#fff"></circle>
+                    <text x="${cx}" y="${cy - 8}" text-anchor="middle" class="analytics-pie-center-label">${escapeHtml(metricLabel)}</text>
+                    <text x="${cx}" y="${cy + 14}" text-anchor="middle" class="analytics-pie-center-value">${formatInrLakhs(total)}</text>
+                </svg>
+            </div>
+            <ul class="analytics-pie-legend">${legend}</ul>
+        </div>`;
+
+    wrap.querySelectorAll('[data-ongoing-slice]').forEach((el) => {
+        const open = () => openAnalyticsDetailsPanel({ statusFilter: 'ongoing' });
+        el.addEventListener('click', open);
+        el.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                open();
+            }
+        });
+    });
+}
+
+function analyticsRowSearchText(row) {
+    return [
+        row.enquiry_number,
+        row.client_name,
+        row.origin,
+        row.destination,
+        row.container_type,
+        row.master_number,
+        row.route,
+        row.economics_status,
+        row.revenue_inr,
+        row.cost_inr,
+        row.capture_inr,
+    ].map((v) => String(v ?? '').toLowerCase()).join(' ');
+}
+
+function getAnalyticsDetailsFilteredRows() {
+    const q = (analyticsDetailsState.search || '').trim().toLowerCase();
+    const status = analyticsDetailsState.statusFilter || 'all';
+    return (analyticsDetailsState.rows || []).filter((row) => {
+        if (status === 'final' && row.economics_status !== 'final') return false;
+        if (status === 'ongoing' && row.economics_status !== 'ongoing') return false;
+        if (!q) return true;
+        return analyticsRowSearchText(row).includes(q);
+    });
+}
+
+function setAnalyticsDetailsStatusFilter(status, { render = true } = {}) {
+    analyticsDetailsState.statusFilter = status || 'all';
+    document.querySelectorAll('.analytics-status-chip').forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.status === analyticsDetailsState.statusFilter);
+    });
+    const label =
+        analyticsDetailsState.statusFilter === 'ongoing' ? 'Ongoing'
+            : analyticsDetailsState.statusFilter === 'final' ? 'Settled'
+                : 'All';
+    setText('analyticsDetailsStatusText', label);
+    if (render) {
+        paginationState.analyticsDetails.currentPage = 1;
+        renderAnalyticsDetailsTable();
+    }
+}
+
+function renderAnalyticsDetailsSummary(rows) {
+    const trips = rows.length;
+    const revenue = rows.reduce((sum, r) => sum + (Number(r.revenue_inr) || 0), 0);
+    const cost = rows.reduce((sum, r) => sum + (Number(r.cost_inr) || 0), 0);
+    const margin = revenue - cost;
+    const marginClass = analyticsValueClass(margin);
+
+    setText('analyticsDetailsTrips', String(trips));
+    setText('analyticsDetailsRevenue', formatInrAmount(revenue));
+    setText('analyticsDetailsCost', formatInrAmount(cost));
+    setText('analyticsDetailsMargin', formatInrAmount(margin));
+    setText('analyticsDetailsRecordsCount', String(trips));
+
+    const marginEl = document.getElementById('analyticsDetailsMargin');
+    if (marginEl) {
+        marginEl.classList.remove('positive', 'negative');
+        if (marginClass) marginEl.classList.add(marginClass);
+    }
+}
+
+function renderAnalyticsDetailsPagination(totalItems, currentPage, pageSize) {
+    const container = document.getElementById('analyticsDetailsPagination');
+    if (!container) return;
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize) || 1);
+    const page = Math.min(Math.max(1, currentPage), totalPages);
+
+    if (totalItems === 0) {
+        container.style.display = 'none';
+        container.innerHTML = '';
+        return;
+    }
+
+    container.style.display = 'flex';
+    container.innerHTML = `
+        <div class="pagination-info" style="display: flex; align-items: center; gap: 16px;">
+            <div class="page-size-selector" style="display: flex; align-items: center; gap: 8px;">
+                <label style="margin: 0; font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Rows per page</label>
+                <select data-analytics-page-size style="padding: 2px 8px; font-size: 12px; height: 28px; min-height: 28px;">
+                    <option value="10" ${pageSize === 10 ? 'selected' : ''}>10</option>
+                    <option value="20" ${pageSize === 20 ? 'selected' : ''}>20</option>
+                    <option value="25" ${pageSize === 25 ? 'selected' : ''}>25</option>
+                    <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
+                    <option value="100" ${pageSize === 100 ? 'selected' : ''}>100</option>
+                </select>
+            </div>
+        </div>
+        <div class="pagination-controls">
+            <button class="page-btn" type="button" ${page <= 1 ? 'disabled' : ''} data-analytics-page="first" title="First page">&laquo;</button>
+            <button class="page-btn" type="button" ${page <= 1 ? 'disabled' : ''} data-analytics-page="prev" title="Previous">Previous</button>
+            <span style="padding: 0 8px; font-size: 13px; color: var(--text-secondary);">Page ${page} of ${totalPages}</span>
+            <button class="page-btn" type="button" ${page >= totalPages ? 'disabled' : ''} data-analytics-page="next" title="Next">Next</button>
+            <button class="page-btn" type="button" ${page >= totalPages ? 'disabled' : ''} data-analytics-page="last" title="Last page">&raquo;</button>
+        </div>
+    `;
+
+    if (!container.dataset.bound) {
+        container.dataset.bound = '1';
+        container.addEventListener('change', (e) => {
+            const select = e.target.closest('[data-analytics-page-size]');
+            if (!select) return;
+            analyticsDetailsState.pageSize = parseInt(select.value, 10) || 20;
+            paginationState.analyticsDetails.currentPage = 1;
+            renderAnalyticsDetailsTable();
+        });
+        container.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-analytics-page]');
+            if (!btn || btn.disabled) return;
+            const action = btn.getAttribute('data-analytics-page');
+            const current = paginationState.analyticsDetails.currentPage || 1;
+            const size = analyticsDetailsState.pageSize || 20;
+            const total = getAnalyticsDetailsFilteredRows().length;
+            const pages = Math.max(1, Math.ceil(total / size) || 1);
+            let next = current;
+            if (action === 'first') next = 1;
+            else if (action === 'prev') next = current - 1;
+            else if (action === 'next') next = current + 1;
+            else if (action === 'last') next = pages;
+            window.changeAnalyticsDetailsPage(next);
+        });
+    }
+}
+
+function renderAnalyticsEnquiryRowHtml(row) {
+    const isOngoing = row.economics_status === 'ongoing';
+    const statusLabel = isOngoing ? 'Ongoing' : 'Settled';
+    const statusClass = isOngoing ? 'analytics-status-pill' : 'analytics-status-pill is-settled';
+    return `
+            <tr class="list-row">
+                <td data-col="enquiry"><a href="#shipment/${row.enquiry_id}" class="table-link">${escapeHtml(row.enquiry_number || '—')}</a></td>
+                <td data-col="client">${escapeHtml(row.client_name || '—')}</td>
+                <td data-col="origin">${escapeHtml(row.origin || '—')}</td>
+                <td data-col="destination">${escapeHtml(row.destination || '—')}</td>
+                <td data-col="container">${escapeHtml(row.container_type || '—')}</td>
+                <td class="num" data-col="revenue">${formatInrAmount(row.revenue_inr)}</td>
+                <td class="num" data-col="cost">${formatInrAmount(row.cost_inr)}</td>
+                <td class="num ${analyticsValueClass(row.capture_inr)}" data-col="margin">${formatInrAmount(row.capture_inr)}</td>
+                <td data-col="status"><span class="${statusClass}">${statusLabel}</span></td>
+            </tr>`;
+}
+
+function renderAnalyticsDetailsTable() {
+    const tbody = document.getElementById('analyticsEnquiryTable');
+    if (!tbody) return;
+
+    const filtered = getAnalyticsDetailsFilteredRows();
+    renderAnalyticsDetailsSummary(filtered);
+
+    const pageSize = analyticsDetailsState.pageSize || 20;
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize) || 1);
+    let page = paginationState.analyticsDetails.currentPage || 1;
+    if (page > totalPages) page = totalPages;
+    if (page < 1) page = 1;
+    paginationState.analyticsDetails.currentPage = page;
+
+    const start = (page - 1) * pageSize;
+    const pageRows = filtered.slice(start, start + pageSize);
+
+    if (!total) {
+        tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">No economics data for this filter.</td></tr>';
+    } else {
+        tbody.innerHTML = pageRows.map((row) => renderAnalyticsEnquiryRowHtml(row)).join('');
+    }
+
+    renderAnalyticsDetailsPagination(total, page, pageSize);
+
+    const subtitle = document.getElementById('analyticsDetailsSubtitle');
+    if (subtitle) {
+        const ongoingCount = (analyticsDetailsState.rows || []).filter((r) => r.economics_status === 'ongoing').length;
+        subtitle.textContent = ongoingCount
+            ? `Settled + ongoing · ${ongoingCount} ongoing in pipeline`
+            : 'SOB-settled trips for the selected period';
+    }
+}
+
+function setAnalyticsDetailsRows(settledRows, ongoingRows) {
+    const settled = (Array.isArray(settledRows) ? settledRows : []).map((r) => ({
+        ...r,
+        economics_status: 'final',
+    }));
+    const ongoing = (Array.isArray(ongoingRows) ? ongoingRows : []).map((r) => ({
+        ...r,
+        economics_status: 'ongoing',
+    }));
+    analyticsDetailsState.rows = settled.concat(ongoing);
+    paginationState.analyticsDetails.currentPage = 1;
+    renderAnalyticsDetailsTable();
+}
+
+function bindAnalyticsDetailsUI() {
+    initListTableUI({
+        searchId: 'analyticsDetailsSearchInput',
+        exportId: 'analyticsDetailsExportBtn',
+        toggleBtnId: 'analyticsDetailsToggleColumnsBtn',
+        menuId: 'analyticsDetailsColumnsMenu',
+        dropdownId: 'analyticsDetailsColumnsDropdown',
+        cardId: 'analyticsDetailsTableCard',
+        tableId: 'analyticsDetailsDataTable',
+        tbodyId: 'analyticsEnquiryTable',
+        recordsCountId: 'analyticsDetailsRecordsCount',
+        exportName: 'enquiry-economics',
+    });
+
+    document.querySelectorAll('.analytics-status-chip').forEach((btn) => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+            setAnalyticsDetailsStatusFilter(btn.dataset.status || 'all');
+        });
+    });
+}
+
+window.changeAnalyticsDetailsPage = (page) => {
+    paginationState.analyticsDetails.currentPage = page;
+    renderAnalyticsDetailsTable();
+};
+
+function formatTeu(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '0';
+    return Number.isInteger(n) ? String(n) : n.toFixed(1);
+}
+
+function renderTeuBarChart(series) {
+    const wrap = document.getElementById('analyticsTeuBarChart');
+    if (!wrap) return;
+
+    const rows = Array.isArray(series) ? series : [];
+    if (!rows.length) {
+        wrap.innerHTML = '<div class="analytics-chart-empty">No TEU data for this period.</div>';
+        return;
+    }
+
+    const maxTeu = Math.max(0, ...rows.map((r) => Number(r.teu) || 0));
+    const bars = rows.map((r) => {
+        const teu = Number(r.teu) || 0;
+        const pct = maxTeu > 0 ? Math.max(2, (teu / maxTeu) * 100) : 2;
+        const height = teu > 0 ? pct : 2;
+        const empty = teu <= 0;
+        return `
+            <div class="analytics-teu-bar${empty ? ' is-empty' : ''}" title="${escapeHtml(r.label || r.month)}: ${formatTeu(teu)} TEU">
+                <span class="analytics-teu-bar__value">${empty ? '' : formatTeu(teu)}</span>
+                <div class="analytics-teu-bar__track">
+                    <div class="analytics-teu-bar__fill" style="height:${height}%"></div>
+                </div>
+                <span class="analytics-teu-bar__label">${escapeHtml(r.short_label || r.label || '')}</span>
+            </div>`;
+    }).join('');
+
+    wrap.innerHTML = `<div class="analytics-teu-bars" style="grid-template-columns: repeat(${rows.length}, minmax(0, 1fr));">${bars}</div>`;
+}
+
+function renderContainerTeuMatrix(matrix, months) {
+    const head = document.getElementById('analyticsTeuMatrixHead');
+    const body = document.getElementById('analyticsTeuMatrixBody');
+    if (!head || !body) return;
+
+    const monthList = Array.isArray(months) ? months : [];
+    const rows = Array.isArray(matrix) ? matrix : [];
+
+    if (!monthList.length) {
+        head.innerHTML = '';
+        body.innerHTML = '<tr class="analytics-empty-row"><td>No container data yet.</td></tr>';
+        return;
+    }
+
+    head.innerHTML = `
+        <tr>
+            <th>Container Type</th>
+            ${monthList.map((m) => `<th class="num">${escapeHtml(m.short_label || m.label || m.value || '')}</th>`).join('')}
+            <th class="num is-total">Total TEU</th>
+        </tr>`;
+
+    if (!rows.length) {
+        body.innerHTML = `<tr class="analytics-empty-row"><td colspan="${monthList.length + 2}">No container TEUs for this period.</td></tr>`;
+        return;
+    }
+
+    const monthKeys = monthList.map((m) => m.value || m.month);
+    const colTotals = monthKeys.map(() => 0);
+    let grandTotal = 0;
+
+    const dataRows = rows.map((row) => {
+        const cells = monthKeys.map((key, idx) => {
+            const teu = Number((row.months || {})[key]) || 0;
+            colTotals[idx] += teu;
+            return `<td class="num">${teu > 0 ? formatTeu(teu) : '—'}</td>`;
+        }).join('');
+        const total = Number(row.total_teu) || 0;
+        grandTotal += total;
+        const factor = Number(row.teu_factor) || 1;
+        return `
+            <tr>
+                <td class="type-cell">
+                    ${escapeHtml(row.container_type || 'Unknown')}
+                    <span class="factor-pill">${factor}× TEU</span>
+                </td>
+                ${cells}
+                <td class="num is-total">${formatTeu(total)}</td>
+            </tr>`;
+    }).join('');
+
+    const footer = `
+        <tr class="is-total">
+            <td class="type-cell">Total</td>
+            ${colTotals.map((t) => `<td class="num">${t > 0 ? formatTeu(t) : '—'}</td>`).join('')}
+            <td class="num">${formatTeu(grandTotal)}</td>
+        </tr>`;
+
+    body.innerHTML = dataRows + footer;
+}
+
+function filterContainerMatrixByMonths(matrix, monthKeys) {
+    const keys = Array.isArray(monthKeys) ? monthKeys : [];
+    const keySet = new Set(keys);
+    return (Array.isArray(matrix) ? matrix : []).map((row) => {
+        const months = {};
+        const containers = {};
+        let totalTeu = 0;
+        let totalContainers = 0;
+        keys.forEach((key) => {
+            const teu = Number((row.months || {})[key]) || 0;
+            const count = Number((row.containers || {})[key]) || 0;
+            months[key] = teu;
+            containers[key] = count;
+            totalTeu += teu;
+            totalContainers += count;
+        });
+        return {
+            ...row,
+            months,
+            containers,
+            total_teu: Math.round(totalTeu * 100) / 100,
+            total_containers: totalContainers,
+        };
+    }).filter((row) => {
+        if (!keySet.size) return true;
+        return row.total_teu > 0 || row.total_containers > 0;
+    });
+}
+
+function renderAnalyticsTeuSection(data) {
+    const teuSeries = filterSeriesByMonthRange(
+        Array.isArray(data.monthly_teu_series) ? data.monthly_teu_series : (data.monthly_series || []),
+        analyticsFilterState.monthFrom,
+        analyticsFilterState.monthTo,
+        analyticsAvailableMonths,
+    );
+    // Prefer explicit teu series; fall back to monthly_series.teu
+    const barRows = teuSeries.map((r) => ({
+        month: r.month,
+        label: r.label,
+        short_label: r.short_label,
+        teu: r.teu != null ? r.teu : 0,
+        containers: r.containers || 0,
+        trips: r.trips || 0,
+    }));
+
+    renderTeuBarChart(barRows);
+
+    const monthKeys = barRows.map((r) => r.month);
+    const monthMeta = barRows.map((r) => ({
+        value: r.month,
+        label: r.label,
+        short_label: r.short_label,
+    }));
+    const matrix = filterContainerMatrixByMonths(
+        Array.isArray(data.container_matrix) ? data.container_matrix : [],
+        monthKeys,
+    );
+    renderContainerTeuMatrix(matrix, monthMeta);
+
+    const totalTeu = barRows.reduce((sum, r) => sum + (Number(r.teu) || 0), 0);
+    const totalContainers = barRows.reduce((sum, r) => sum + (Number(r.containers) || 0), 0);
+    setText('analyticsTotalTeu', formatTeu(totalTeu));
+    setText('analyticsTotalContainers', String(totalContainers));
+}
+
+function bindAnalyticsFilters() {
+    const fySelect = document.getElementById('analyticsFyFilter');
+    const monthFromSelect = document.getElementById('analyticsMonthFromFilter');
+    const monthToSelect = document.getElementById('analyticsMonthToFilter');
+    const metricSelect = document.getElementById('analyticsMetricFilter');
+
+    if (fySelect && !fySelect.dataset.bound) {
+        fySelect.dataset.bound = '1';
+        fySelect.addEventListener('change', () => {
+            analyticsFilterState.fy = fySelect.value || currentAnalyticsFyValue();
+            analyticsFilterState.monthFrom = '';
+            analyticsFilterState.monthTo = '';
+            fetchDashboardAnalytics();
+        });
+    }
+    if (monthFromSelect && !monthFromSelect.dataset.bound) {
+        monthFromSelect.dataset.bound = '1';
+        monthFromSelect.addEventListener('change', () => {
+            let monthFrom = monthFromSelect.value || '';
+            let monthTo = analyticsFilterState.monthTo || '';
+            ({ monthFrom, monthTo } = clampAnalyticsMonthRange(
+                monthFrom,
+                monthTo,
+                analyticsAvailableMonths,
+            ));
+            analyticsFilterState.monthFrom = monthFrom;
+            analyticsFilterState.monthTo = monthTo;
+            if (monthToSelect) monthToSelect.value = monthTo;
+            fetchDashboardAnalytics();
+        });
+    }
+    if (monthToSelect && !monthToSelect.dataset.bound) {
+        monthToSelect.dataset.bound = '1';
+        monthToSelect.addEventListener('change', () => {
+            let monthFrom = analyticsFilterState.monthFrom || '';
+            let monthTo = monthToSelect.value || '';
+            ({ monthFrom, monthTo } = clampAnalyticsMonthRange(
+                monthFrom,
+                monthTo,
+                analyticsAvailableMonths,
+            ));
+            analyticsFilterState.monthFrom = monthFrom;
+            analyticsFilterState.monthTo = monthTo;
+            monthToSelect.value = monthTo;
+            fetchDashboardAnalytics();
+        });
+    }
+    if (metricSelect && !metricSelect.dataset.bound) {
+        metricSelect.dataset.bound = '1';
+        metricSelect.value = analyticsFilterState.metric;
+        metricSelect.addEventListener('change', () => {
+            analyticsFilterState.metric = metricSelect.value || 'gross_margin';
+            fetchDashboardAnalytics();
+        });
+    }
+}
+
+async function fetchDashboardAnalytics() {
+    bindAnalyticsFilters();
+    bindAnalyticsDetailsUI();
+    if (!analyticsFilterState.fy) {
+        analyticsFilterState.fy = currentAnalyticsFyValue();
+    }
+
+    const tbody = document.getElementById('analyticsEnquiryTable');
+    if (tbody) {
+        tbody.innerHTML = '<tr class="analytics-loading-row"><td colspan="9">Loading analytics…</td></tr>';
+    }
+
+    try {
+        const params = new URLSearchParams();
+        params.set('fy', analyticsFilterState.fy);
+        if (analyticsFilterState.monthFrom) params.set('month_from', analyticsFilterState.monthFrom);
+        if (analyticsFilterState.monthTo) params.set('month_to', analyticsFilterState.monthTo);
+        if (analyticsFilterState.metric) {
+            params.set('metric', analyticsFilterState.metric);
+        }
+        const url = `${CONFIG.API_URL}/api/dashboard/analytics?${params.toString()}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+            console.error('Dashboard analytics HTTP error:', response.status, await response.text());
+            if (tbody) {
+                tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">Could not load analytics.</td></tr>';
+            }
+            return;
+        }
+
+        const data = await response.json();
+        const summary = data.summary || {};
+        analyticsFilterState.monthFrom = summary.filter_month_from || '';
+        analyticsFilterState.monthTo = summary.filter_month_to || '';
+        renderAnalyticsSummary(summary);
+
+        analyticsAvailableYears = Array.isArray(data.available_financial_years)
+            ? data.available_financial_years
+            : [];
+        const series = Array.isArray(data.monthly_series) ? data.monthly_series : [];
+        analyticsAvailableMonths = Array.isArray(data.available_months) ? data.available_months : [];
+        populateAnalyticsFyFilter(analyticsAvailableYears);
+        populateAnalyticsMonthRangeFilters(analyticsAvailableMonths);
+
+        // Series is already month-filtered by the API; keep a client pass as safety
+        const chartSeries = filterSeriesByMonthRange(
+            series,
+            analyticsFilterState.monthFrom,
+            analyticsFilterState.monthTo,
+            analyticsAvailableMonths,
+        );
+        const ongoing = summary.ongoing || {};
+        const includeOngoing = !!ongoing.included_in_gross;
+        renderMonthlyAnalyticsChart(chartSeries, analyticsFilterState.metric, {
+            pipelineMargin: includeOngoing ? (ongoing.capture_inr || 0) : 0,
+            pipelineTrips: includeOngoing ? (ongoing.trips || 0) : 0,
+        });
+
+        renderAnalyticsTeuSection(data);
+
+        setAnalyticsDetailsRows(
+            Array.isArray(data.enquiries) ? data.enquiries : [],
+            Array.isArray(data.ongoing_enquiries) ? data.ongoing_enquiries : [],
+        );
+    } catch (error) {
+        console.error('Error fetching dashboard analytics:', error);
+        if (tbody) {
+            tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">Could not load analytics.</td></tr>';
+        }
     }
 }
 
@@ -52,7 +1850,15 @@ window.addEventListener('hashchange', handleRouting);
 
 function handleRouting() {
     const hash = window.location.hash;
-    if (hash === '#enquiries') {
+    const shipmentMatch = hash.match(/^#shipment\/(\d+)$/);
+    if (shipmentMatch) {
+        showShipmentDetailView(parseInt(shipmentMatch[1], 10));
+        return;
+    }
+
+    if (hash === '#globe') {
+        showGlobeView();
+    } else if (hash === '#enquiries') {
         showEnquiriesView();
     } else if (hash === '#quotes') {
         showQuotesView();
@@ -61,9 +1867,22 @@ function handleRouting() {
     } else if (hash === '#finance' || hash === '#finance-payments' || hash === '#finance-invoices' || hash === '#finance-received') {
         const subView = hash.replace('#finance-', '');
         showFinanceView(subView === '#finance' ? null : subView);
+    } else if (hash === '#masters') {
+        showMastersDashboard();
+    } else if (hash === '#masters-clients') {
+        showMastersClientList();
+    } else if (hash === '#masters-shipping-lines') {
+        showMastersShippingList();
+    } else if (hash === '#masters-overheads') {
+        showMastersOverheadList();
+    } else if (hash === '#masters-payees') {
+        showMastersPayeeList();
     } else {
         showDashboardView();
         updateNavPricingLink();
+    }
+    if (typeof window.updateGlobalSearchVisibility === 'function') {
+        window.updateGlobalSearchVisibility();
     }
 }
 
@@ -92,6 +1911,7 @@ async function fetchAllEnquiries() {
             updateQuotesTable();
             updateTrackingTable();
             updateFinanceTable();
+            await refreshBulkStatusCache();
         }
     } catch (error) {
         console.error('Error fetching enquiries:', error);
@@ -124,20 +1944,35 @@ function showDashboardView() {
     document.getElementById('dashboardView').style.display = 'block';
 }
 
+function showGlobeView() {
+    hideAllViews();
+    setActiveLink('navGlobe');
+    const view = document.getElementById('globeView');
+    if (view) view.style.display = 'flex';
+    const content = document.getElementById('mainContent');
+    if (content) content.classList.add('content--globe');
+    if (typeof window.mountTradeGlobeView === 'function') {
+        window.mountTradeGlobeView();
+    }
+}
+
 function showEnquiriesView(filterType = null) {
     hideAllViews();
     setActiveLink('navEnquiries');
     document.getElementById('enquiriesView').style.display = 'block';
 
-    const title = document.querySelector('#enquiriesView h1'); // Changed from h2 to h1 to match index.html
+    const section = filterType || currentAllEnquiriesFilter || 'all';
+    setActiveStatusSection('sales', section);
+
+    const title = document.querySelector('#enquiriesView .view-h1');
     if (title) {
-        if (filterType === 'pending_pricing') title.textContent = 'Sales - Pending at Pricing';
-        else if (filterType === 'pending_confirmation') title.textContent = 'Sales - Pending Confirmation';
+        if (section === 'pending_pricing') title.textContent = 'Sales - Pending at Pricing';
+        else if (section === 'pending_confirmation') title.textContent = 'Sales - Pending Confirmation';
         else title.textContent = 'Sales';
     }
 
     paginationState.allEnquiries.currentPage = 1;
-    updateAllEnquiriesTable(filterType);
+    updateAllEnquiriesTable(section === 'all' ? null : section);
 }
 
 function showQuotesView() {
@@ -153,48 +1988,70 @@ function showTrackingView(filterType = null) {
     setActiveLink('navTracking');
     document.getElementById('trackingView').style.display = 'block';
 
-    // Update header to reflect filter?
-    const title = document.querySelector('#trackingView h1');
-    if (filterType === 'pending_si') title.textContent = 'Tracking - Pending SI';
-    else if (filterType === 'pending_bl') title.textContent = 'Tracking - Pending BL';
-    else if (filterType === 'pending_sob') title.textContent = 'Tracking - Sob Remaining';
-    else if (filterType === 'pending_booking') title.textContent = 'Tracking - Booking To Be Secured';
-    else title.textContent = 'Tracking & Documents';
+    const section = normalizeTrackingSection(filterType || currentTrackingFilter || 'pending');
+    setActiveStatusSection('tracking', section);
+
+    const title = document.querySelector('#trackingView .view-h1');
+    if (title) {
+        title.textContent = section === 'completed'
+            ? 'Tracking - Completed'
+            : 'Tracking - Not Completed';
+    }
 
     paginationState.tracking.currentPage = 1;
-    updateTrackingTable(filterType);
+    updateTrackingTable(section);
 }
+
+window.applyTrackingSavedRefresh = async function applyTrackingSavedRefresh(options = {}) {
+    if (options.moveToCompleted) {
+        currentTrackingFilter = 'completed';
+        setActiveStatusSection('tracking', 'completed');
+        const title = document.querySelector('#trackingView .view-h1');
+        if (title) title.textContent = 'Tracking - Completed';
+    }
+    if (typeof refreshBulkStatusCache === 'function') await refreshBulkStatusCache();
+    await updateTrackingTable(currentTrackingFilter || 'completed');
+    if (typeof updateStatusSectionCounts === 'function') updateStatusSectionCounts();
+    if (typeof fetchDashboardStats === 'function') fetchDashboardStats();
+};
 
 async function showFinanceView(subView = null) {
     hideAllViews();
     setActiveLink('navFinance');
     document.getElementById('financeView').style.display = 'block';
 
-    const subnav = document.getElementById('financeSubnav');
-    if (subnav) subnav.style.display = 'block';
+    const financeGroup = document.getElementById('financeRailGroup');
+    closeOtherRailGroups(financeGroup);
 
-    const title = document.querySelector('#financeView h1');
-    const desc = document.querySelector('#financeView div[style*="text-tertiary"]');
+    const section = subView || currentFinanceSubView || 'payments';
+    setActiveStatusSection('finance', section);
 
-    if (subView === 'payments') {
+    const title = document.querySelector('#financeView .view-h1');
+    const desc = document.querySelector('#financeView .view-subtitle');
+
+    if (section === 'payments') {
         if (title) title.textContent = 'Payment to Shipping Line';
         if (desc) desc.textContent = 'Manage and record payments made to shipping lines';
         setActiveLink('navFinancePayments');
-    } else if (subView === 'invoices') {
+    } else if (section === 'invoices') {
         if (title) title.textContent = 'Create Client Invoice';
         if (desc) desc.textContent = 'Review BL status and generate invoices for clients';
         setActiveLink('navFinanceInvoices');
-    } else if (subView === 'received') {
+    } else if (section === 'received') {
         if (title) title.textContent = 'Payments Received from Client';
         if (desc) desc.textContent = 'Record and track payments received from clients for invoices';
         setActiveLink('navFinanceReceived');
     } else {
-        if (title) title.textContent = 'Finance Management';
+        if (title) title.textContent = 'Finance';
         if (desc) desc.textContent = 'Manage payments and client invoices';
     }
 
     paginationState.finance.currentPage = 1;
-    await updateFinanceTable(subView);
+    setFinanceCompletionTab(currentFinanceCompletionTab);
+    if (section === 'invoices') {
+        await fetchFinanceInvoicesCache();
+    }
+    await updateFinanceTable(section);
 }
 
 function setActiveLink(id) {
@@ -203,25 +2060,55 @@ function setActiveLink(id) {
     if (active) active.classList.add('active');
 }
 
+function closeOtherRailGroups(exceptGroup) {
+    document.querySelectorAll('.rail-group.is-open').forEach((group) => {
+        if (group !== exceptGroup) group.classList.remove('is-open');
+    });
+}
+
+window.toggleFinanceNav = function toggleFinanceNav(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const group = document.getElementById('financeRailGroup');
+    if (!group) return;
+    const willOpen = !group.classList.contains('is-open');
+    closeOtherRailGroups(group);
+    group.classList.toggle('is-open', willOpen);
+    setActiveLink('navFinance');
+};
+
 function toggleSettingsNav(e) {
     e.preventDefault();
-    const subnav = document.getElementById('settingsSubnav');
-    if (subnav) {
-        subnav.style.display = subnav.style.display === 'none' ? 'block' : 'none';
-    }
+    e.stopPropagation();
+    const group = document.getElementById('settingsRailGroup');
+    if (!group) return;
+    const willOpen = !group.classList.contains('is-open');
+    closeOtherRailGroups(group);
+    group.classList.toggle('is-open', willOpen);
     setActiveLink('navSettings');
 }
 
 function hideAllViews() {
+    if (typeof window.unmountTradeGlobeView === 'function') {
+        window.unmountTradeGlobeView();
+    }
+    const content = document.getElementById('mainContent');
+    if (content) content.classList.remove('content--globe');
     document.getElementById('dashboardView').style.display = 'none';
+    const globeView = document.getElementById('globeView');
+    if (globeView) globeView.style.display = 'none';
     document.getElementById('enquiriesView').style.display = 'none';
     document.getElementById('quotesView').style.display = 'none';
     document.getElementById('trackingView').style.display = 'none';
     const financeView = document.getElementById('financeView');
     if (financeView) financeView.style.display = 'none';
+    const shipmentView = document.getElementById('shipmentDetailView');
+    if (shipmentView) shipmentView.style.display = 'none';
 
-    const financeSubnav = document.getElementById('financeSubnav');
-    if (financeSubnav) financeSubnav.style.display = 'none';
+    ['mastersDashboardView', 'mastersClientListView', 'mastersShippingListView'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
 }
 
 async function updateDashboardTable() {
@@ -237,7 +2124,7 @@ async function updateDashboardTable() {
 
     recent.forEach(e => {
         const s = e.stage >= 3 ? (bulkStatus[e.id] || null) : null;
-        tbody.appendChild(createEnquiryRowWithStatus(e, s, false));
+        tbody.appendChild(createEnquiryRowWithStatus(e, s, true));
     });
 }
 
@@ -357,22 +2244,44 @@ let currentAllEnquiriesFilter = null;
 let currentTrackingFilter = null;
 let currentFinanceSubView = null;
 
+window.refreshTrackingTableDataScope = function refreshTrackingTableDataScope() {
+    paginationState.tracking.currentPage = 1;
+    updateTrackingTable(currentTrackingFilter);
+};
+
+window.refreshSalesTableDataScope = function refreshSalesTableDataScope() {
+    paginationState.allEnquiries.currentPage = 1;
+    updateAllEnquiriesTable(currentAllEnquiriesFilter);
+};
+
+const LIST_TABLE_SEARCH_DEBOUNCE_MS = 250;
+const listTableSearchTimers = {};
+
 async function updateAllEnquiriesTable(filterType = null) {
     currentAllEnquiriesFilter = filterType;
     const tbody = document.getElementById('allEnquiriesTable');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading...</td></tr>';
 
     let filteredEnquiries = enquiries;
-    if (filterType === 'pending_pricing') {
-        filteredEnquiries = enquiries.filter(e => e.stage <= 2);
-    } else if (filterType === 'pending_confirmation') {
-        filteredEnquiries = enquiries.filter(e => e.stage === 2);
+    if (!shouldBypassSalesSectionFilter()) {
+        if (filterType === 'pending_pricing') {
+            filteredEnquiries = enquiries.filter((e) => !e.is_void && (e.stage || 1) <= 1);
+        } else if (filterType === 'pending_confirmation') {
+            filteredEnquiries = enquiries.filter((e) => !e.is_void && e.stage === 2);
+        }
+    } else if (filterType && filterType !== 'all') {
+        // Keep void rows out when searching across sections.
+        filteredEnquiries = enquiries.filter((e) => !e.is_void);
     }
 
+    updateStatusSectionCounts();
+
     if (filteredEnquiries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No records found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
         renderPagination('allEnquiriesPagination', 0, 1, 'changeAllEnquiriesPage');
+        updateTableRecordsCount('allEnquiriesTable', 'enquiriesRecordsCount');
+        updateViewStatusPill('sales', filterType || 'all');
         return;
     }
 
@@ -381,48 +2290,160 @@ async function updateAllEnquiriesTable(filterType = null) {
     const start = (page - 1) * PAGE_SIZE;
     const paginated = filteredEnquiries.slice(start, start + PAGE_SIZE);
 
-    // One bulk call for all stage>=3 IDs on this page
-    const opsIds = paginated.filter(e => e.stage >= 3).map(e => e.id);
+    const opsIds = paginated.filter((e) => e.stage >= 3 && !e.is_void).map((e) => e.id);
     const bulkStatus = opsIds.length > 0 ? await fetchBulkStatus(opsIds) : {};
 
-    tbody.innerHTML = '';
-    paginated.forEach(e => {
-        const s = e.stage >= 3 ? (bulkStatus[e.id] || null) : null;
-        tbody.appendChild(createEnquiryRowWithStatus(e, s, true));
-    });
+    tbody.innerHTML = paginated.map((e) => {
+        const s = (e.stage >= 3 && !e.is_void) ? (bulkStatus[e.id] || null) : null;
+        return renderListTableRow(e, s);
+    }).join('');
 
     renderPagination('allEnquiriesPagination', total, page, 'changeAllEnquiriesPage');
+    afterListTableRender('allEnquiriesTable', 'enquiriesSearchInput', 'enquiriesRecordsCount');
+    updateViewStatusPill('sales', filterType || 'all');
 }
 
-function createEnquiryRowWithStatus(e, status = null, showDate = false) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-        <td><strong>${e.enquiry_number}</strong></td>
-        <td>${e.client_name}</td>
-        <td>${e.origin} → ${e.destination}</td>
-        <td>${statusBadge(e, status)}</td>
-        ${showDate ? `<td>${e.stuffing_date ? new Date(e.stuffing_date).toLocaleDateString() : '---'}</td>` : ''}
-        <td>
-            <div class="actions-dropdown">
-                <button class="actions-btn">Actions <i class="fas fa-chevron-down"></i></button>
-                <div class="actions-menu">
-                    <button class="actions-item" onclick="viewEnquiry(${e.id})">
-                        <i class="fas fa-file-invoice"></i> View Sale
-                    </button>
-                    ${e.stage === 2 ? `
-                        <button class="actions-item confirm-item confirm-action" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=confirm'">
-                            <i class="fas fa-eye"></i> View Quote
-                        </button>
-                    ` : e.stage >= 3 ? `
-                        <button class="actions-item" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=view'">
-                            <i class="fas fa-file-invoice-dollar"></i> View Quotes
-                        </button>
-                    ` : ''}
+function createEnquiryRowWithStatus(e, status = null, compact = false) {
+    const wrapper = document.createElement('tbody');
+    wrapper.innerHTML = renderListTableRow(e, status, { compact });
+    return wrapper.firstElementChild;
+}
+
+function renderQuotesListRow(e, quoteInfo = {}) {
+    const line = quoteInfo.line || '—';
+    const total = quoteInfo.total || '—';
+    const quoteStatus = quoteInfo.status || 'Draft';
+    const statusKey = quoteStatus.toLowerCase();
+    const statusHtml = e.is_void
+        ? `<span style="display:inline-block; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 800; background:#1f2937; color:#f9fafb; letter-spacing:0.06em; white-space: nowrap; text-transform:uppercase;">⊘ VOID</span>`
+        : `<span class="badge badge-${statusKey}">${escapeHtml(quoteStatus)}</span>`;
+
+    const urgency = getUrgencyMeta(e.stuffing_date || e.created_at);
+    const created = formatEnquiryDateTime(e.created_at);
+    const required = formatEnquiryDateTime(e.stuffing_date);
+    const opacity = e.is_void ? ' style="opacity:0.55"' : '';
+
+    return `
+        <tr class="list-row"${opacity}>
+            <td data-col="details">
+                <div class="cell-enquiry">
+                    <a class="cell-enquiry-id" href="#" onclick="openActionModal('view-sale', ${e.id}); return false;">${escapeHtml(e.enquiry_number)}</a>
+                    <div class="cell-enquiry-meta">${created}</div>
+                    <span class="cell-urgency ${urgency.className}">${urgency.text}</span>
                 </div>
-            </div>
-        </td>
-    `;
-    return tr;
+            </td>
+            <td data-col="client" class="cell-upper">${escapeHtml(e.client_name || '—')}</td>
+            <td data-col="location">
+                <div class="cell-location">
+                    <span class="cell-location-origin">${escapeHtml(truncateText(e.origin, 30))}</span>
+                    <span class="cell-location-arrow">→ ${escapeHtml(truncateText(e.destination, 30))}</span>
+                </div>
+            </td>
+            <td data-col="required" class="cell-muted">${required}</td>
+            <td data-col="line" class="cell-muted">${escapeHtml(line)}</td>
+            <td data-col="total" class="cell-muted cell-amount">${escapeHtml(total)}</td>
+            <td data-col="status">${statusHtml}</td>
+            <td data-col="action">${renderRowActionsMenu(e, '', quoteStatus)}</td>
+        </tr>`;
+}
+
+function renderTrackingListRow(e, status = null, extraActionsHtml = '') {
+    const statusHtml = trackingStatusBadge(e, status);
+    const urgency = getUrgencyMeta(e.stuffing_date || e.created_at);
+    const created = formatEnquiryDateTime(e.created_at);
+    const required = formatEnquiryDateTime(e.stuffing_date);
+    const opacity = e.is_void ? ' style="opacity:0.55"' : '';
+
+    return `
+        <tr class="list-row"${opacity}>
+            <td data-col="details">
+                <div class="cell-enquiry">
+                    <a class="cell-enquiry-id" href="#" onclick="openActionModal('view-sale', ${e.id}); return false;">${escapeHtml(e.enquiry_number)}</a>
+                    <div class="cell-enquiry-meta">${created}</div>
+                    <span class="cell-urgency ${urgency.className}">${urgency.text}</span>
+                </div>
+            </td>
+            <td data-col="client" class="cell-upper">${escapeHtml(e.client_name || '—')}</td>
+            <td data-col="location">
+                <div class="cell-location">
+                    <span class="cell-location-origin">${escapeHtml(truncateText(e.origin, 30))}</span>
+                    <span class="cell-location-arrow">→ ${escapeHtml(truncateText(e.destination, 30))}</span>
+                </div>
+            </td>
+            <td data-col="required" class="cell-muted">${required}</td>
+            <td data-col="status">${statusHtml}</td>
+            <td data-col="action">${renderRowActionsMenu(e, extraActionsHtml)}</td>
+        </tr>`;
+}
+
+function trackingStatusBadge(e, status = null) {
+    if (e.is_void) {
+        return `<span style="display:inline-block; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 800; background:#1f2937; color:#f9fafb; letter-spacing:0.06em; white-space: nowrap; text-transform:uppercase;">⊘ VOID</span>`;
+    }
+    if (isTrackingCompleted(status)) {
+        return '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> Completed</span>';
+    }
+    return '<span class="badge badge-pending"><i class="fas fa-clock"></i> Not Completed</span>';
+}
+
+function initEnquiriesListUI() {
+    initListTableUI({
+        searchId: 'enquiriesSearchInput',
+        exportId: 'enquiriesExportBtn',
+        toggleBtnId: 'enquiriesToggleColumnsBtn',
+        menuId: 'enquiriesColumnsMenu',
+        dropdownId: 'enquiriesColumnsDropdown',
+        cardId: 'enquiriesTableCard',
+        tableId: 'enquiriesDataTable',
+        tbodyId: 'allEnquiriesTable',
+        recordsCountId: 'enquiriesRecordsCount',
+        exportName: 'enquiries'
+    });
+}
+
+function initTrackingListUI() {
+    initListTableUI({
+        searchId: 'trackingSearchInput',
+        exportId: 'trackingExportBtn',
+        toggleBtnId: 'trackingToggleColumnsBtn',
+        menuId: 'trackingColumnsMenu',
+        dropdownId: 'trackingColumnsDropdown',
+        cardId: 'trackingTableCard',
+        tableId: 'trackingDataTable',
+        tbodyId: 'trackingTable',
+        recordsCountId: 'trackingRecordsCount',
+        exportName: 'tracking'
+    });
+}
+
+function initFinanceListUI() {
+    initListTableUI({
+        searchId: 'financeSearchInput',
+        exportId: 'financeExportBtn',
+        toggleBtnId: 'financeToggleColumnsBtn',
+        menuId: 'financeColumnsMenu',
+        dropdownId: 'financeColumnsDropdown',
+        cardId: 'financeTableWrap',
+        tableId: 'financeDataTable',
+        tbodyId: 'financeTable',
+        recordsCountId: 'financeRecordsCount',
+        exportName: 'finance'
+    });
+}
+
+function initQuotesListUI() {
+    initListTableUI({
+        searchId: 'quotesSearchInput',
+        exportId: 'quotesExportBtn',
+        toggleBtnId: 'quotesToggleColumnsBtn',
+        menuId: 'quotesColumnsMenu',
+        dropdownId: 'quotesColumnsDropdown',
+        cardId: 'quotesTableCard',
+        tableId: 'quotesDataTable',
+        tbodyId: 'quotesTable',
+        recordsCountId: 'quotesRecordsCount',
+        exportName: 'quotes'
+    });
 }
 
 async function updateQuotesTable() {
@@ -437,24 +2458,24 @@ async function updateQuotesTable() {
     const paginatedEnquiries = pricingEnquiries.slice(startIdx, startIdx + PAGE_SIZE);
 
     if (total === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No records found.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No records found.</td></tr>';
         renderPagination('quotesPagination', 0, 1, 'changeQuotesPage');
+        updateTableRecordsCount('quotesTable', 'quotesRecordsCount');
         return;
     }
 
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading...</td></tr>';
 
-    const rowsHtml = await Promise.all(paginatedEnquiries.map(async e => {
-        // Fetch quote status for this enquiry
-        let quoteInfo = { line: '---', total: '---', status: 'Draft' };
+    const rowsHtml = await Promise.all(paginatedEnquiries.map(async (e) => {
+        let quoteInfo = { line: '—', total: '—', status: 'Draft' };
         try {
             const res = await fetch(`${CONFIG.API_URL}/api/quotes/enquiry/${e.id}`);
             if (res.ok) {
                 const quotes = await res.json();
-                const accepted = quotes.find(q => q.status === 'accepted') || quotes[0];
+                const accepted = quotes.find((q) => q.status === 'accepted') || quotes[0];
                 if (accepted) {
                     quoteInfo.line = accepted.shipping_line || 'Multiple';
-                    quoteInfo.total = accepted.final_quote_inr ? `₹${accepted.final_quote_inr.toLocaleString()}` : '---';
+                    quoteInfo.total = accepted.final_quote_inr ? `₹${accepted.final_quote_inr.toLocaleString()}` : '—';
                     quoteInfo.status = accepted.status.charAt(0).toUpperCase() + accepted.status.slice(1);
                 }
             }
@@ -462,72 +2483,63 @@ async function updateQuotesTable() {
             console.error('Error fetching quote info:', err);
         }
 
-        return `
-            <tr>
-                <td><strong>${e.enquiry_number}</strong></td>
-                <td>${e.client_name}</td>
-                <td>${e.origin} → ${e.destination}</td>
-                <td>${quoteInfo.line}</td>
-                <td><span class="badge badge-${quoteInfo.status.toLowerCase()}">${quoteInfo.status}</span></td>
-                <td style="font-weight: 700;">${quoteInfo.total}</td>
-                <td>
-                    <div class="actions-dropdown">
-                        <button class="actions-btn">Actions <i class="fas fa-chevron-down"></i></button>
-                        <div class="actions-menu">
-                            ${quoteInfo.status === 'Draft' ? `
-                                <button class="actions-item" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=edit'">
-                                    <i class="fas fa-edit"></i> Edit Quotes
-                                </button>
-                            ` : `
-                                <button class="actions-item" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=view'">
-                                    <i class="fas fa-eye"></i> View Quotes
-                                </button>
-                            `}
-                        </div>
-                    </div>
-                </td>
-            </tr>
-        `;
+        return renderQuotesListRow(e, quoteInfo);
     }));
 
     tbody.innerHTML = rowsHtml.join('');
     renderPagination('quotesPagination', total, page, 'changeQuotesPage');
+    afterListTableRender('quotesTable', 'quotesSearchInput', 'quotesRecordsCount');
 }
 
 
 
 
 async function updateTrackingTable(filterType = null) {
-    currentTrackingFilter = filterType;
+    currentTrackingFilter = normalizeTrackingSection(filterType || 'pending');
     const tbody = document.getElementById('trackingTable');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading...</td></tr>';
 
-    const trackingEnquiries = enquiries.filter(e => e.stage >= 3);
-    if (trackingEnquiries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No records found.</td></tr>';
+    const candidates = enquiries.filter((e) => isTrackingListEnquiry(e));
+    if (candidates.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
         renderPagination('trackingPagination', 0, 1, 'changeTrackingPage');
+        updateTableRecordsCount('trackingTable', 'trackingRecordsCount');
+        updateViewStatusPill('tracking', currentTrackingFilter);
         return;
     }
 
-    // One bulk call for all IDs
-    const ids = trackingEnquiries.map(e => e.id);
-    const bulkStatus = await fetchBulkStatus(ids);
+    const ids = candidates.map((e) => e.id);
+    const bulkStatus = Object.keys(cachedBulkStatus).length
+        ? cachedBulkStatus
+        : await fetchBulkStatus(ids);
+    if (!Object.keys(cachedBulkStatus).length) cachedBulkStatus = bulkStatus;
 
-    // Apply milestone filter
-    const filteredResults = trackingEnquiries.filter(e => {
-        const s = bulkStatus[e.id] || null;
-        if (filterType === 'pending_si') return !(s && s.si_submitted);
-        if (filterType === 'pending_bl') return !(s && s.bl_received);
-        if (filterType === 'pending_sob') return !(s && s.sob);
-        if (filterType === 'pending_booking') return !(s && s.booking_confirmed);
-        return true;
+    // Stage 3+ always eligible; stage 2 only if tracking has already started.
+    const trackingEnquiries = candidates.filter((e) => {
+        if ((e.stage || 1) >= 3) return true;
+        return !!bulkStatus[e.id];
     });
+
+    const sectionKey = shouldBypassTrackingSectionFilter() ? null : currentTrackingFilter;
+
+    const filteredResults = trackingEnquiries.filter((e) => {
+        const s = bulkStatus[e.id] || null;
+        if (!sectionKey) return true;
+        return matchesTrackingSection(sectionKey, s);
+    });
+
+    updateStatusSectionCounts();
 
     const total = filteredResults.length;
     if (total === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No records found.</td></tr>';
+        const emptyMsg = currentTrackingFilter === 'completed'
+            ? 'No completed shipments yet.'
+            : 'No incomplete shipments found.';
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">${emptyMsg}</td></tr>`;
         renderPagination('trackingPagination', 0, 1, 'changeTrackingPage');
+        updateTableRecordsCount('trackingTable', 'trackingRecordsCount');
+        updateViewStatusPill('tracking', currentTrackingFilter);
         return;
     }
 
@@ -535,95 +2547,152 @@ async function updateTrackingTable(filterType = null) {
     const startIdx = (page - 1) * PAGE_SIZE;
     const paginatedResults = filteredResults.slice(startIdx, startIdx + PAGE_SIZE);
 
-    const rowsHtml = paginatedResults.map(e => {
+    tbody.innerHTML = paginatedResults.map((e) => {
         const s = bulkStatus[e.id] || null;
-        return `
-            <tr>
-                <td><strong>${e.enquiry_number}</strong></td>
-                <td>${e.client_name}</td>
-                <td>${e.origin} → ${e.destination}</td>
-                <td>${statusBadge(e, s)}</td>
-                <td>
-                    <div class="actions-dropdown">
-                        <button class="actions-btn">Actions <i class="fas fa-chevron-down"></i></button>
-                        <div class="actions-menu">
-                            <button class="actions-item" onclick="window.location.href='/upload-track?enquiry_id=${e.id}'">
-                                <i class="fas fa-shipping-fast"></i> View Tracking
-                            </button>
-                        </div>
-                    </div>
-                </td>
-            </tr>
-        `;
-    });
+        const extra = `
+            <button class="actions-item" onclick="openActionModal('view-tracking', ${e.id})">
+                <i class="fas fa-shipping-fast"></i> View Tracking
+            </button>`;
+        return renderTrackingListRow(e, s, extra);
+    }).join('');
 
-    tbody.innerHTML = rowsHtml.join('');
     renderPagination('trackingPagination', total, page, 'changeTrackingPage');
+    afterListTableRender('trackingTable', 'trackingSearchInput', 'trackingRecordsCount');
+    updateViewStatusPill('tracking', currentTrackingFilter);
 }
 
 async function updateFinanceTable(subView = null) {
-    currentFinanceSubView = subView;
+    currentFinanceSubView = subView || 'payments';
     const tbody = document.getElementById('financeTable');
-    if (!tbody) return;
+    const tableWrap = document.getElementById('financeTableWrap');
+    const receivedEl = document.getElementById('financeReceivedSections');
 
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Loading...</td></tr>';
+    setActiveStatusSection('finance', currentFinanceSubView);
+    updateViewStatusPill('finance', currentFinanceSubView);
 
-    const operationalEnquiries = enquiries.filter(e => e.stage >= 3);
-    if (operationalEnquiries.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No records found.</td></tr>';
-        renderPagination('financePagination', 0, 1, 'changeFinancePage');
-        updateFinanceStats();
-        return;
-    }
-
-    // One bulk call for all IDs
-    const ids = operationalEnquiries.map(e => e.id);
-    const bulkStatus = await fetchBulkStatus(ids);
-
-    // Update table headers for enquiries (default)
-    const thead = document.querySelector('#financeView .data-table thead tr');
-    if (thead && subView !== 'received') {
-        thead.innerHTML = `
-            <th>Sale #</th>
-            <th>Client</th>
-            <th>Route</th>
-            <th>Finance Status</th>
-            <th>Action</th>
-        `;
-    }
-
-    // For Payments Received, we use a different data source (Invoices)
-    if (subView === 'received') {
+    if (currentFinanceSubView === 'received') {
+        if (!tbody) return;
+        if (tableWrap) tableWrap.style.display = 'block';
+        if (receivedEl) {
+            receivedEl.style.display = 'none';
+            receivedEl.innerHTML = '';
+        }
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading invoices…</td></tr>';
         try {
             const res = await fetch(`${CONFIG.API_URL}/api/invoice/list`);
-            if (res.ok) {
-                const invoices = await res.json();
-                renderInvoicesTable(invoices);
-                return;
+            let payload;
+            try {
+                payload = await res.json();
+            } catch (je) {
+                throw new Error('Server did not return JSON (check API URL / login).');
+            }
+            if (res.ok && Array.isArray(payload)) {
+                window._financeReceivedInvoices = payload;
+                financeReceivedCount = payload.filter((inv) => !inv.is_paid).length;
+                updateStatusSectionCounts();
+                updateFinanceCompletionCounts();
+                try {
+                    await renderFinanceReceivedTable(payload);
+                } catch (re) {
+                    console.error('renderFinanceReceivedTable:', re);
+                    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">Could not render invoice list. ${escapeHtml(re.message || String(re))}</td></tr>`;
+                    renderPagination('financePagination', 0, 1, 'changeFinancePage');
+                    updateFinanceStats();
+                }
+            } else {
+                const detail = payload && payload.detail != null ? String(payload.detail) : `HTTP ${res.status}`;
+                tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">Could not load invoices. ${escapeHtml(detail)}</td></tr>`;
+                renderPagination('financePagination', 0, 1, 'changeFinancePage');
+                updateFinanceStats();
             }
         } catch (err) {
             console.error('Error fetching invoices:', err);
+            const hint = err && err.message ? err.message : String(err);
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--text-secondary);">Error loading invoices. ${escapeHtml(hint)}</td></tr>`;
+            renderPagination('financePagination', 0, 1, 'changeFinancePage');
+            updateFinanceStats();
         }
+        return;
     }
 
-    // Filter to those that have a shipping invoice
-    const financeEnquiries = operationalEnquiries
-        .map(e => {
-            const s = bulkStatus[e.id] || null;
-            if (!s || !s.shipping_invoice) return null;
-            return {
-                ...e,
-                bl_received: !!s.bl_received,
-                payment_done: !!s.pay_line
-            };
-        })
-        .filter(Boolean);
+    if (!tbody) return;
+
+    if (tableWrap) tableWrap.style.display = 'block';
+    if (receivedEl) {
+        receivedEl.style.display = 'none';
+        receivedEl.innerHTML = '';
+    }
+
+    updateFinanceTableChrome(currentFinanceSubView);
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Loading...</td></tr>';
+
+    const operationalEnquiries = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
+    if (operationalEnquiries.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>';
+        renderPagination('financePagination', 0, 1, 'changeFinancePage');
+        updateFinanceStats();
+        updateStatusSectionCounts();
+        return;
+    }
+
+    const ids = operationalEnquiries.map((e) => e.id);
+    const [bulkStatus, additionalInvBulk] = await Promise.all([
+        fetchBulkStatus(ids),
+        currentFinanceSubView === 'invoices'
+            ? fetch(`${CONFIG.API_URL}/api/tracking/additional-invoices/bulk?ids=${encodeURIComponent(ids.join(','))}`)
+                .then((r) => r.ok ? r.json() : ({}))
+                .catch(() => ({}))
+            : Promise.resolve({}),
+        currentFinanceSubView === 'invoices' ? fetchFinanceInvoicesCache() : Promise.resolve(null),
+    ]).then((arr) => [arr[0], arr[1]]);
+    cachedBulkStatus = { ...cachedBulkStatus, ...bulkStatus };
+    if (currentFinanceSubView === 'invoices') {
+        window._additionalInvoiceDocsByEnquiry = additionalInvBulk || {};
+    }
+
+    let financeEnquiries;
+    if (currentFinanceSubView === 'invoices') {
+        financeEnquiries = buildFinanceInvoiceTaskRows(
+            operationalEnquiries,
+            bulkStatus,
+            additionalInvBulk,
+            currentFinanceCompletionTab
+        );
+    } else {
+        financeEnquiries = operationalEnquiries
+            .map((e) => {
+                const s = bulkStatus[e.id] || null;
+                if (!s || !s.shipping_invoice) return null;
+                const savedInvoice = getInvoiceForEnquiry(e.id);
+                return {
+                    ...e,
+                    bl_received: !!s.bl_received,
+                    payment_done: isShippingLinePaymentDone(s),
+                    invoice_complete: isInvoiceCreateCompleted(savedInvoice),
+                };
+            })
+            .filter(Boolean)
+            .filter((e) => {
+                const s = bulkStatus[e.id] || null;
+                const showCompleted = currentFinanceCompletionTab === 'completed';
+                if (!s) return false;
+                const done = isShippingLinePaymentDone(s);
+                return showCompleted ? done : !done;
+            });
+    }
+
+    updateStatusSectionCounts();
+    updateFinanceCompletionCounts();
 
     const total = financeEnquiries.length;
     if (total === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No records found.</td></tr>';
+        const emptyMsg = currentFinanceCompletionTab === 'completed'
+            ? 'No completed records in this section yet.'
+            : 'No pending records found.';
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">${emptyMsg}</td></tr>`;
         renderPagination('financePagination', 0, 1, 'changeFinancePage');
         updateFinanceStats();
+        updateTableRecordsCount('financeTable', 'financeRecordsCount');
         return;
     }
 
@@ -631,68 +2700,47 @@ async function updateFinanceTable(subView = null) {
     const startIdx = (page - 1) * PAGE_SIZE;
     const paginatedFinance = financeEnquiries.slice(startIdx, startIdx + PAGE_SIZE);
 
-    const rowsHtml = paginatedFinance.map(e => {
-        return `
-            <tr>
-                <td><strong>${e.enquiry_number}</strong></td>
-                <td>${e.client_name}</td>
-                <td>${e.origin} → ${e.destination}</td>
-                <td>
-                    ${e.bl_received
-                ? '<span class="badge badge-success"><i class="fas fa-check-circle"></i> BL Received</span>'
-                : '<span class="badge badge-warning"><i class="fas fa-clock"></i> Awaiting BL</span>'}
-                </td>
-                <td>
-                    ${subView === 'payments' ? `
-                        ${e.payment_done ? `
-                            <button class="btn btn-success btn-outline" style="padding: 6px 12px; font-size: 12px; display: flex; align-items: center; gap: 6px;" onclick="window.location.href='/finance-details?enquiry_id=${e.id}'">
-                                <i class="fas fa-check-circle"></i> View/Edit Payment
-                            </button>
-                        ` : `
-                            <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="window.location.href='/finance-details?enquiry_id=${e.id}'">
-                                <i class="fas fa-money-bill-wave"></i> Make Payment
-                            </button>
-                        `}
-                    ` : subView === 'invoices' ? `
-                        <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" 
-                                ${e.bl_received ? `onclick="window.location.href='/create-invoice?enquiry_id=${e.id}'"` : 'disabled style="opacity: 0.5; cursor: not-allowed; background: var(--gray-400); border-color: var(--gray-400); color: white;" title="Wait for BL Received status"'}
-                        >
-                            <i class="fas fa-file-invoice"></i> Create Invoice
-                        </button>
-                    ` : `
-                        <div class="actions-dropdown">
-                            <button class="actions-btn">Actions <i class="fas fa-chevron-down"></i></button>
-                            <div class="actions-menu">
-                                <button class="actions-item" onclick="window.location.href='/finance-details?enquiry_id=${e.id}'">
-                                    <i class="fas fa-${e.payment_done ? 'check-circle' : 'money-bill-wave'}"></i> 
-                                    ${e.payment_done ? 'View/Edit Payment' : 'Payment to Shipping Line'}
-                                </button>
-                                <button class="actions-item" 
-                                        ${e.bl_received ? `onclick="window.location.href='/create-invoice?enquiry_id=${e.id}'"` : 'disabled style="opacity: 0.5; cursor: not-allowed;" title="Wait for BL Received status"'}
-                                >
-                                    <i class="fas fa-file-invoice"></i> Create Invoice 
-                                </button>
-                            </div>
-                        </div>
-                    `}
-                </td>
-            </tr>
-        `;
-    });
+    tbody.innerHTML = paginatedFinance.map((e) => renderListTableRow(e, bulkStatus[e.id] || null, {
+        statusHtml: financeStatusBadge(e, currentFinanceSubView, currentFinanceCompletionTab),
+        actionHtml: renderFinanceActionCell(e, currentFinanceSubView, currentFinanceCompletionTab),
+        detailsExtraHtml: currentFinanceSubView === 'invoices' ? renderFinanceInvoiceTypeBadge(e) : ''
+    })).join('');
 
-    tbody.innerHTML = rowsHtml.join('');
     renderPagination('financePagination', total, page, 'changeFinancePage');
+    afterListTableRender('financeTable', 'financeSearchInput', 'financeRecordsCount');
     updateFinanceStats();
 }
 
+window.refreshFinanceView = function refreshFinanceView() {
+    return updateFinanceTable(currentFinanceSubView);
+};
+
+window.applyFinanceSavedRefresh = async function applyFinanceSavedRefresh(options = {}) {
+    if (options.section) {
+        currentFinanceSubView = options.section;
+        setActiveStatusSection('finance', options.section);
+    }
+    if (options.moveToCompleted) {
+        currentFinanceCompletionTab = 'completed';
+        setFinanceCompletionTab('completed');
+    }
+    if (typeof refreshBulkStatusCache === 'function') await refreshBulkStatusCache();
+    if (options.section === 'invoices' || currentFinanceSubView === 'invoices') {
+        await fetchFinanceInvoicesCache();
+    }
+    await updateFinanceTable(currentFinanceSubView || 'payments');
+    if (typeof updateFinanceStats === 'function') updateFinanceStats();
+    if (typeof updateStatusSectionCounts === 'function') updateStatusSectionCounts();
+    if (typeof updateFinanceCompletionCounts === 'function') updateFinanceCompletionCounts();
+    if (typeof fetchDashboardStats === 'function') fetchDashboardStats();
+};
+
+window.setFinanceCompletionTab = setFinanceCompletionTab;
+
 async function updateFinanceStats() {
-    const paymentsMade = document.getElementById('financePaymentsMade');
     const invoicesRaised = document.getElementById('financeInvoicesRaised');
     const paymentPending = document.getElementById('paymentPendingCount');
-    const paymentsReceived = document.getElementById('financePaymentsReceived');
-
-    if (paymentsMade) paymentsMade.textContent = '0';
-    if (paymentsReceived) paymentsReceived.textContent = '0';
+    if (!invoicesRaised && !paymentPending) return;
 
     try {
         const statsRes = await fetch(`${CONFIG.API_URL}/api/dashboard/stats`);
@@ -700,60 +2748,31 @@ async function updateFinanceStats() {
             const sData = await statsRes.json();
             if (invoicesRaised) invoicesRaised.textContent = sData.invoices_raised || '0';
             if (paymentPending) paymentPending.textContent = sData.payment_pending || '0';
-            if (paymentsMade) paymentsMade.textContent = sData.payments_made || '0';
-            if (paymentsReceived) paymentsReceived.textContent = sData.received_payments || '0';
         }
     } catch (e) {
         console.error(e);
     }
 }
 
-function renderInvoicesTable(invoices) {
-    const tbody = document.getElementById('financeTable');
-    if (!tbody) return;
+window.openPaymentModal = function (invoiceId) {
+    openActionModal('finance-received', invoiceId);
+};
 
-    // Update table headers for invoices
-    const thead = document.querySelector('#financeView .data-table thead tr');
-    if (thead) {
-        thead.innerHTML = `
-            <th>Invoice #</th>
-            <th>Client</th>
-            <th>Sale #</th>
-            <th>Status</th>
-            <th>Action</th>
-        `;
+/** Client receipt: open record-payment drawer if this sale has a saved invoice, else Finance Received list */
+window.recordAmountForEnquiry = async function (enquiryId) {
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/invoice/details/${enquiryId}`);
+        if (res.ok) {
+            const inv = await res.json();
+            if (inv && inv.id) {
+                openActionModal('finance-received', inv.id);
+                return;
+            }
+        }
+    } catch (err) {
+        console.error('recordAmountForEnquiry:', err);
     }
-
-    if (invoices.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No records found.</td></tr>';
-        return;
-    }
-
-    tbody.innerHTML = invoices.map(inv => `
-        <tr>
-            <td><strong>${inv.invoice_number}</strong></td>
-            <td>${inv.client_name}</td>
-            <td>${inv.enquiry_number}</td>
-            <td>
-                ${inv.is_paid
-            ? `<span class="badge badge-success"><i class="fas fa-check-circle"></i> Paid</span>`
-            : `<span class="badge badge-warning"><i class="fas fa-clock"></i> Pending</span>`}
-            </td>
-            <td>
-                <button class="btn btn-primary" style="padding: 6px 12px; font-size: 12px;" onclick="openPaymentModal(${inv.id}, '${inv.invoice_number}')">
-                    <i class="fas fa-money-check-alt"></i> ${inv.is_paid ? 'View/Edit Receipt' : 'Record Receipt'}
-                </button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-// Global function for modal (will be implemented in separate JS or here)
-window.openPaymentModal = async function (invoiceId, invNum) {
-    // We'll use a modal to record payment
-    // For now, let's redirect to a details page or implement a modal here
-    // Redirecting is easier for complex forms
-    window.location.href = `/record-payment?invoice_id=${invoiceId}`;
+    showFinanceView('received');
 };
 
 /**
@@ -773,7 +2792,7 @@ function getEnquiryStatusLabel(e, status = null) {
             if (!status.si_submitted) return { label: 'SI to be submitted', color: '#0891b2', bg: '#cffafe' };
             if (!status.bl_received) return { label: 'BL to be received', color: '#b45309', bg: '#fef9c3' };
             if (!status.sob) return { label: 'SOB Remaining', color: '#6d28d9', bg: '#ede9fe' };
-            if (!status.pay_line) return { label: 'Payment Pending at Shipping Line', color: '#dc2626', bg: '#fee2e2' };
+            if (!isShippingLinePaymentDone(status)) return { label: 'Payment Pending at Shipping Line', color: '#dc2626', bg: '#fee2e2' };
             if (!status.inv_raised) return { label: 'Pending Invoices', color: '#b45309', bg: '#fef3c7' };
             if (!status.pay_client) return { label: 'Payment Pending for Client', color: '#0f766e', bg: '#ccfbf1' };
             return { label: 'Completed', color: '#059669', bg: '#d1fae5' };
@@ -785,15 +2804,80 @@ function getEnquiryStatusLabel(e, status = null) {
     return { label: e.status || 'Unknown', color: '#6b7280', bg: '#f3f4f6' };
 }
 
+/**
+ * Common helper to render enquiry action items for the dropdown menu.
+ * @param {object} e - Enquiry object
+ * @param {string} quoteStatus - Optional status for quote-specific actions
+ */
+function renderEnquiryActions(e, quoteStatus = null) {
+    let isAdmin = false;
+    try {
+        const currentUser = (localStorage.getItem('user') || '').toLowerCase();
+        if (window.CONFIG && CONFIG.adminUsers) {
+            let admins = CONFIG.adminUsers;
+            if (typeof admins === 'string') admins = JSON.parse(admins);
+            isAdmin = admins.map(u => u.toLowerCase()).includes(currentUser);
+        } else if (currentUser === 'admin') {
+            isAdmin = true; // Hard-coded fallback for the 'admin' user
+        }
+    } catch (err) {
+        console.error('isAdmin check failed:', err);
+    }
+
+    const voidLabel = e.is_void ? 'Un-void Enquiry' : 'Mark as Void';
+    const voidIcon = e.is_void ? 'fa-undo' : 'fa-ban';
+    const voidStyle = e.is_void ? 'color:#10b981;' : 'color:#ef4444;'; // emerald-500 and red-500
+    
+    const voidBtn = isAdmin ? `
+        <button class="actions-item" style="${voidStyle} font-weight:600;" onclick="voidEnquiry(${e.id}, event)">
+            <i class="fas ${voidIcon}"></i> ${voidLabel}
+        </button>` : '';
+
+    // Standard buttons
+    let html = `
+        <button class="actions-item" onclick="openActionModal('view-sale', ${e.id})">
+            <i class="fas fa-file-invoice"></i> View Sale
+        </button>
+    `;
+
+    // Quotes stay editable until accepted (stage 3+ / status Accepted)
+    if (!e.is_void) {
+        const statusKey = String(quoteStatus || '').toLowerCase();
+        const isAccepted = e.stage >= 3 || statusKey === 'accepted';
+        if (isAccepted) {
+            html += `
+                <button class="actions-item" onclick="openActionModal('view-quotes', ${e.id})">
+                    <i class="fas fa-file-invoice-dollar"></i> View Quotes
+                </button>
+            `;
+        } else {
+            html += `
+                <button class="actions-item" onclick="openActionModal('edit-quotes', ${e.id})">
+                    <i class="fas fa-edit"></i> Edit Quotes
+                </button>
+            `;
+        }
+    }
+
+    // Add Admin Void/Restore at the end
+    html += voidBtn;
+
+    return html;
+}
+
 function statusBadge(e, status = null) {
+    if (e.is_void) {
+        return `<span style="display:inline-block; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 800; background:#1f2937; color:#f9fafb; letter-spacing:0.06em; white-space: nowrap; text-transform:uppercase;">⊘ VOID</span>`;
+    }
     const s = getEnquiryStatusLabel(e, status);
     return `<span style="display:inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background:${s.bg}; color:${s.color}; white-space: nowrap;">${s.label}</span>`;
 }
 
 function createEnquiryRow(e, showDate = false) {
     const tr = document.createElement('tr');
+    if (e.is_void) tr.style.opacity = '0.55';
     tr.innerHTML = `
-        <td><strong>${e.enquiry_number}</strong></td>
+        <td class="job-no-cell">${escapeHtml(e.enquiry_number)}</td>
         <td>${e.client_name}</td>
         <td>${e.origin} → ${e.destination}</td>
         <td>${statusBadge(e)}</td>
@@ -802,19 +2886,7 @@ function createEnquiryRow(e, showDate = false) {
             <div class="actions-dropdown">
                 <button class="actions-btn">Actions <i class="fas fa-chevron-down"></i></button>
                 <div class="actions-menu">
-                    <button class="actions-item" onclick="viewEnquiry(${e.id})">
-                        <i class="fas fa-file-invoice"></i> View Sale
-                    </button>
-
-                    ${e.stage === 2 ? `
-                        <button class="actions-item confirm-item confirm-action" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=confirm'">
-                            <i class="fas fa-eye"></i> View Quote
-                        </button>
-                    ` : e.stage >= 3 ? `
-                        <button class="actions-item" onclick="window.location.href='/pricing?enquiry_id=${e.id}&mode=view'">
-                            <i class="fas fa-file-invoice-dollar"></i> View Quotes
-                        </button>
-                    ` : ''}
+                    ${renderEnquiryActions(e)}
                 </div>
             </div>
         </td>
@@ -823,9 +2895,62 @@ function createEnquiryRow(e, showDate = false) {
 }
 
 function viewEnquiry(id) {
-    window.location.href = `/enquiry?enquiry_id=${id}`;
+    openActionModal('view-sale', id);
 }
 
 function startNewEnquiry() {
-    window.location.href = '/enquiry';
+    openActionModal('new-sale');
 }
+
+window.voidEnquiry = async function (enquiryId, event) {
+    if (event) event.stopPropagation();
+    const enq = enquiries.find(e => e.id === enquiryId);
+    if (!enq) return;
+
+    const actionLabel = enq.is_void ? 'un-void' : 'void';
+    const confirmed = await new Promise(resolve => {
+        showModal(
+            enq.is_void ? 'Restore Enquiry' : 'Mark Enquiry as Void',
+            enq.is_void
+                ? `Are you sure you want to <strong>restore</strong> enquiry <strong>${enq.enquiry_number}</strong>? It will become active again.`
+                : `Are you sure you want to mark enquiry <strong>${enq.enquiry_number}</strong> as <strong>VOID</strong>? It will be deemed cancelled / null.`,
+            enq.is_void ? 'info' : 'warning',
+            () => resolve(true)
+        );
+        // If user closes without confirming
+        setTimeout(() => resolve(false), 30000);
+    });
+
+    if (!confirmed) return;
+
+    const token = localStorage.getItem('token') || '';
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/${enquiryId}/void`, {
+            method: 'PATCH',
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showModal('Error', err.detail || 'Could not update enquiry.', 'error');
+            return;
+        }
+        const updated = await res.json();
+        // Update local cache
+        const idx = enquiries.findIndex(e => e.id === enquiryId);
+        if (idx !== -1) enquiries[idx] = updated;
+
+        // Refresh the current view
+        updateAllEnquiriesTable(currentAllEnquiriesFilter);
+        updateDashboardTable();
+
+        showModal(
+            updated.is_void ? 'Enquiry Voided' : 'Enquiry Restored',
+            updated.is_void
+                ? `Enquiry <strong>${updated.enquiry_number}</strong> has been marked as <strong>VOID</strong> and deemed cancelled.`
+                : `Enquiry <strong>${updated.enquiry_number}</strong> has been <strong>restored</strong> and is now active again.`,
+            updated.is_void ? 'warning' : 'success'
+        );
+    } catch (err) {
+        showModal('Network Error', err.message, 'error');
+    }
+};

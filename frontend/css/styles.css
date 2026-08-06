@@ -195,6 +195,9 @@ header {
     background: rgba(255, 255, 255, 0.95);
 }
 
+/* Dashboard now uses an app-shell with nav rail (see `dashboard.css`).
+   Keep legacy header styles for other pages, but don't add extra top padding here. */
+
 .header-content {
     display: flex;
     justify-content: space-between;
@@ -207,30 +210,11 @@ header {
     gap: var(--space-3);
 }
 
-.logo-icon {
-    width: 44px;
-    height: 44px;
-    background: linear-gradient(135deg, var(--navy-700), var(--navy-600));
-    border-radius: var(--radius-lg);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Outfit', monospace;
-    font-weight: 800;
-    font-size: 18px;
-    color: white;
-    box-shadow: var(--shadow-md);
-}
-
-.logo-text {
-    font-family: 'Outfit', sans-serif;
-    font-size: 1.5rem;
-    font-weight: 800;
-    background: linear-gradient(135deg, var(--navy-800), var(--navy-600));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    letter-spacing: -0.03em;
+.logo-img {
+    height: 48px;
+    width: auto;
+    object-fit: contain;
+    display: block;
 }
 
 .header-actions {
@@ -689,6 +673,40 @@ textarea {
     background: var(--gray-50);
 }
 
+/* Job / Sale number — long values e.g. LLP/OFE/YY/MM/NNNNN */
+.job-no,
+.job-no-cell,
+#display_enquiry_number,
+#job_no_val,
+#enquiryNumber,
+a.job-link {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--navy-800);
+    word-break: break-all;
+    line-height: 1.35;
+    letter-spacing: 0.01em;
+}
+
+a.job-link {
+    color: var(--primary);
+    font-weight: 700;
+    text-decoration: none;
+}
+
+a.job-link:hover {
+    text-decoration: underline;
+}
+
+#enquiryNumber {
+    font-size: 0.75rem;
+}
+
+.data-table td.job-no-cell {
+    max-width: 11rem;
+    vertical-align: top;
+}
+
 /* ==========================================
    BADGES
    ========================================== */
@@ -1066,6 +1084,18 @@ textarea {
     background: var(--gray-100);
     padding: 2px 6px;
     border-radius: 4px;
+}
+
+.autocomplete-item.autocomplete-loading,
+.autocomplete-item.autocomplete-empty,
+.autocomplete-item.autocomplete-error {
+    cursor: default;
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.autocomplete-item.autocomplete-error {
+    color: var(--danger, #dc2626);
 }
 
 /* ==========================================
@@ -1515,6 +1545,16 @@ textarea {
     animation: fadeInScale 0.2s ease-out;
 }
 
+.actions-menu.actions-menu-floating {
+    position: fixed !important;
+    padding-top: 0;
+    margin: 0;
+    max-height: min(360px, calc(100vh - 16px));
+    overflow-y: auto;
+    z-index: 1200;
+    /* top/left are set inline by positionActionsMenu() — do not use top/right:auto !important */
+}
+
 @keyframes fadeInScale {
     from {
         opacity: 0;
@@ -1527,8 +1567,18 @@ textarea {
     }
 }
 
-.actions-dropdown:hover .actions-menu {
+.actions-dropdown:hover .actions-menu,
+.actions-dropdown .actions-menu.open,
+.actions-dropdown.actions-menu-open .actions-menu {
     display: block;
+}
+
+.actions-dropdown.actions-menu-dismissed:not(.actions-menu-open) .actions-menu {
+    display: none !important;
+}
+
+.actions-menu:not(.open) {
+    display: none !important;
 }
 
 /* Invisible bridge to prevent closing when moving to menu */

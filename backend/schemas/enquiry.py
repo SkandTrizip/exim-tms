@@ -34,9 +34,16 @@ class EnquiryBase(BaseModel):
     customer_clearance_required: Optional[str] = None
     client_target_rate: Optional[float] = 0.0
     remarks: Optional[str] = None
+    hbl_required: Optional[bool] = False
+    delivery_agent: Optional[str] = None
+    vessel: Optional[str] = None
+    voyage_no: Optional[str] = None
+    notify_party_address: Optional[str] = None
+    notify_party_2_address: Optional[str] = None
 
     status: Optional[str] = "pending"
     stage: Optional[int] = 1
+    is_void: Optional[bool] = False
 
 class EnquiryCreate(EnquiryBase):
     pass

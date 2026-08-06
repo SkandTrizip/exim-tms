@@ -4,10 +4,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Add Shipping Line – ShipFlow TMS</title>
+    <title>Add Shipping Line – ATLAS EXIM</title>
     <link href="css/styles.css" rel="stylesheet">
     <link href="css/modal.css" rel="stylesheet">
+    <link href="css/action-modal.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        (function () {
+            if (new URLSearchParams(location.search).get('embedded') === '1') {
+                document.documentElement.classList.add('embedded-mode');
+            }
+        })();
+    </script>
     <style>
         .sl-page {
             padding: 36px 0 60px;
@@ -223,9 +231,8 @@
         <div class="container">
             <div class="header-content">
                 <div class="logo">
-                    <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none;">
-                        <div class="logo-icon">SF</div>
-                        <div class="logo-text">ShipFlow</div>
+                    <a href="/" style="display:flex;align-items:center;text-decoration:none;">
+                        <img src="Logipod_Logo.png" alt="Logipod" class="logo-img">
                     </a>
                 </div>
             </div>
@@ -254,6 +261,7 @@
 
             <!-- ── TAB 1 : FORM ─────────────────────────────────────────── -->
             <div class="wizard-panel active" id="panel1">
+                <h2 class="embedded-drawer-title">Shipping Line Details</h2>
 
                 <!-- Status banner (shown when viewing existing record) -->
                 <div id="statusBanner" style="

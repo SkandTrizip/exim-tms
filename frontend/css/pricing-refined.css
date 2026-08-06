@@ -78,12 +78,17 @@
 /* Updated Summary Horizontal */
 .shipment-summary-horizontal {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: var(--space-4);
     background: var(--gray-50);
     padding: var(--space-6);
     border-radius: var(--radius-lg);
     border: 1px solid var(--border-light);
+    align-items: start;
+}
+
+.summary-box {
+    min-width: 0;
 }
 
 .summary-box label {
@@ -91,16 +96,31 @@
     color: var(--text-tertiary);
     text-transform: uppercase;
     font-weight: 800;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
     letter-spacing: 0.05em;
     display: block;
+    white-space: nowrap;
 }
 
 .summary-box .value {
-    font-size: 0.9rem;
-    font-weight: 700;
+    font-size: 0.8125rem;
+    font-weight: 600;
     color: var(--navy-800);
-    word-break: break-all;
+    line-height: 1.35;
+    min-height: calc(1.35em * 2);
+    overflow-wrap: break-word;
+    word-break: normal;
+    hyphens: auto;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+}
+
+.summary-box .value.job-no {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
 }
 
 /* Route Selection Grid */
@@ -434,8 +454,7 @@
     border-left: none !important;
 }
 
-/* Show vendor total summary card only in confirm mode */
-body.confirm-mode .vendor-total-card {
+.vendor-total-card {
     display: flex !important;
 }
 

@@ -37,12 +37,22 @@ class Quote(Base):
     final_quote_inr = Column(Float, default=0.0)
     
     # Status and metadata
-    status = Column(String, default="draft")  # draft, sent, accepted, rejected
+    status = Column(String, default="draft", index=True)  # draft, sent, accepted, rejected
+    # Legacy JSON snapshots (optional); initial rates live in quote_containers / quote_charges
+    initial_quote_snapshot = Column(Text, nullable=True)
+    final_quote_snapshot = Column(Text, nullable=True)
+    accepted_remarks_reason = Column(String, nullable=True)
+    accepted_remarks_other = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
     
     # Relationships
-    containers = relationship("QuoteContainer", back_populates="quote", cascade="all, delete-orphan")
+    containers = relationship(
+        "QuoteContainer",
+        back_populates="quote",
+        cascade="all, delete-orphan",
+        order_by="QuoteContainer.container_sequence, QuoteContainer.id",
+    )
 
 
 class QuoteContainer(Base):
@@ -62,7 +72,12 @@ class QuoteContainer(Base):
     
     # Relationships
     quote = relationship("Quote", back_populates="containers")
-    charges = relationship("QuoteCharge", back_populates="container", cascade="all, delete-orphan")
+    charges = relationship(
+        "QuoteCharge",
+        back_populates="container",
+        cascade="all, delete-orphan",
+        order_by="QuoteCharge.charge_sequence, QuoteCharge.id",
+    )
 
 
 class QuoteCharge(Base):
@@ -94,6 +109,8 @@ class QuoteCharge(Base):
     
     # Vendor Rate: what the company charges the client (editable, not fixed)
     vendor_rate = Column(Float, default=0.0)
+    # Exchange rate applied to vendor_rate → client INR (may differ from shipping-line ex. rate)
+    vendor_exchange_rate = Column(Float, default=1.0)
     
     # Sequence for ordering
     charge_sequence = Column(Integer, default=0)

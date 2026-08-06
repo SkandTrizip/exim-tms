@@ -35,6 +35,7 @@ async function fetchInvoiceDetails() {
 
                 if (currentInvoice.is_paid) {
                     document.getElementById('payment_date').value = currentInvoice.payment_date;
+                    document.getElementById('payment_type').value = currentInvoice.payment_type || 'NEFT';
                     document.getElementById('payment_reference').value = currentInvoice.payment_reference || '';
                     document.getElementById('received_amount').value = currentInvoice.received_amount || 0;
                 }
@@ -50,6 +51,7 @@ async function fetchInvoiceDetails() {
 
 async function savePayment() {
     const date = document.getElementById('payment_date').value;
+    const type = document.getElementById('payment_type').value;
     const ref = document.getElementById('payment_reference').value;
     const amount = parseFloat(document.getElementById('received_amount').value);
 
@@ -60,6 +62,7 @@ async function savePayment() {
 
     const payload = {
         payment_date: date,
+        payment_type: type,
         payment_reference: ref,
         received_amount: amount
     };
@@ -72,8 +75,17 @@ async function savePayment() {
         });
 
         if (response.ok) {
-            alert('Payment recorded successfully');
-            window.location.href = '/#finance-received';
+            if (typeof notifyFinanceParentRefresh === 'function') {
+                notifyFinanceParentRefresh({ close: true, section: 'received', moveToCompleted: true });
+            }
+            if (typeof showModal === 'function') {
+                showModal('Success', 'Payment recorded successfully', 'success');
+            } else {
+                alert('Payment recorded successfully');
+            }
+            if (!isEmbeddedDrawer()) {
+                window.location.href = '/#finance-received';
+            }
         } else {
             const err = await response.json();
             alert('Error: ' + (err.detail || 'Failed to save payment'));

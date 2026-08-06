@@ -4,38 +4,54 @@
 
 let currentEnquiryData = null;
 let currentPricingData = null;
+let currentFinalQuoteData = null;
 let uploadedFiles = {};
+
+function syncPricingDataToWindow(quote) {
+    currentPricingData = quote;
+    window.currentPricingData = quote;
+}
+
+window.currentPricingData = null;
 
 // ==========================================
 // Initialization
 // ==========================================
-document.addEventListener('DOMContentLoaded', function () {
+document.addEventListener('DOMContentLoaded', async function () {
+    if (new URLSearchParams(window.location.search).get('embedded') === '1') {
+        document.documentElement.classList.add('embedded-mode');
+        document.body.classList.add('embedded-mode');
+    }
     console.log('📦 Upload & Track page loaded');
-    loadEnquiryData();
-    // After everything is populated, try to load any saved checklist state
-    setTimeout(loadChecklistState, 500);
+    await loadEnquiryData();
+    // Run after enquiry + documents load so BL View link and checklist stay in sync
+    await loadChecklistState();
+    hideEmbeddedDrawerBackButtons();
 
     // Attach autosave to metadata fields
     const metadataFields = [
         'si_number', 'bl_consignee', 'bl_port_origin', 'bl_final_dest', 'bl_master_number',
-        'bl_vessel', 'bl_voyage', 'bl_etd', 'bl_eta'
+        'bl_vessel', 'bl_voyage', 'bl_etd', 'bl_eta', 'bl_container_number'
     ];
     metadataFields.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.addEventListener('change', saveChecklistState);
+        if (el) {
+            el.addEventListener('change', saveChecklistState);
+            el.addEventListener('input', saveChecklistState);
+        }
     });
 });
 
 /**
  * Load enquiry and pricing data from URL parameters or localStorage
  */
-function loadEnquiryData() {
+async function loadEnquiryData() {
     // Try to get enquiry ID from URL parameters
     const urlParams = new URLSearchParams(window.location.search);
     const enquiryId = urlParams.get('enquiry_id');
 
     if (enquiryId) {
-        fetchEnquiryById(enquiryId);
+        await fetchEnquiryById(enquiryId);
     } else {
         // Try to load from localStorage as fallback
         const storedEnquiry = localStorage.getItem('currentEnquiry');
@@ -47,7 +63,7 @@ function loadEnquiryData() {
         }
 
         if (storedPricing) {
-            currentPricingData = JSON.parse(storedPricing);
+            syncPricingDataToWindow(JSON.parse(storedPricing));
             populateInvoiceInfo();
         }
 
@@ -69,6 +85,7 @@ async function fetchEnquiryById(enquiryId) {
 
             // Fetch associated pricing data
             await fetchPricingData(enquiryId);
+            await fetchFinalQuoteData();
 
             // Fetch associated documents
             await fetchUploadedDocuments(enquiryId);
@@ -87,7 +104,7 @@ async function fetchEnquiryById(enquiryId) {
             }
 
             if (storedPricing) {
-                currentPricingData = JSON.parse(storedPricing);
+                syncPricingDataToWindow(JSON.parse(storedPricing));
                 populateInvoiceInfo();
             }
 
@@ -108,7 +125,7 @@ async function fetchEnquiryById(enquiryId) {
         }
 
         if (storedPricing) {
-            currentPricingData = JSON.parse(storedPricing);
+            syncPricingDataToWindow(JSON.parse(storedPricing));
             populateInvoiceInfo();
         }
 
@@ -129,8 +146,9 @@ async function fetchPricingData(enquiryId) {
             if (pricingList && pricingList.length > 0) {
                 // Find the quote that was actually accepted
                 const acceptedQuote = pricingList.find(q => q.status === 'accepted') || pricingList[0];
-                currentPricingData = acceptedQuote;
+                syncPricingDataToWindow(acceptedQuote);
                 populateInvoiceInfo();
+                updateUpdateQuoteRowVisibility();
             }
         } else {
             console.warn('No pricing data found for this enquiry');
@@ -138,6 +156,56 @@ async function fetchPricingData(enquiryId) {
     } catch (error) {
         console.error('Error fetching pricing data:', error);
     }
+}
+
+/**
+ * Map API document_type / aliases → DOM element id suffix (…FileName), incl. BL → blFileName.
+ */
+function getTrackingDocDisplayId(documentType) {
+    const raw = (documentType || '').toString().trim();
+    if (!raw) return 'unknownFileName';
+    const norm = raw.toLowerCase().replace(/[\s_-]/g, '');
+    const byNorm = {
+        bol: 'blFileName',
+        billoflading: 'blFileName',
+        housebilloflading: 'blFileName',
+        masterbilloflading: 'blFileName',
+        bl: 'blFileName',
+        blreceived: 'blFileName',
+        mbl: 'blFileName',
+        hbl: 'blFileName',
+        shippinginvoice: 'shippingInvoiceFileName',
+        clientconfirm: 'clientConfirmFileName',
+        booking: 'bookingFileName',
+        draftsi: 'draftSiFileName',
+        si: 'siFileName',
+        shippingbill: 'shippingBillFileName',
+        origincert: 'originCertFileName',
+        customsdeclaration: 'customsDeclarationFileName',
+        insurancecert: 'insuranceCertFileName',
+        commercialinvoice: 'commercialInvoiceFileName',
+        packinglist: 'packingListFileName'
+    };
+    if (byNorm[norm]) return byNorm[norm];
+    // e.g. bl_received, BL_copy → normalize underscores away above; catch remaining *bl* doc labels
+    if (norm.includes('billoflading') || norm === 'masterbl' || norm === 'housebl') {
+        return 'blFileName';
+    }
+    return `${raw}FileName`;
+}
+
+function setBlReceivedViewLink(fileUrl) {
+    const link = document.getElementById('link_view_bl_received');
+    if (!link || !fileUrl) return;
+    link.href = fileUrl;
+    link.style.display = 'inline-flex';
+}
+
+function hideBlReceivedViewLink() {
+    const link = document.getElementById('link_view_bl_received');
+    if (!link) return;
+    link.style.display = 'none';
+    link.removeAttribute('href');
 }
 
 /**
@@ -150,9 +218,11 @@ async function fetchUploadedDocuments(enquiryId) {
             const documents = await response.json();
             console.log('📎 Existing documents found:', documents);
 
+            hideBlReceivedViewLink();
+
             documents.forEach(doc => {
-                const filename = doc.file_path.split(/[\\\/]/).pop();
-                const fileUrl = `${CONFIG.API_URL}/uploads/${filename}`;
+                const filename = (doc.file_path || '').split(/[/\\]/).pop();
+                const fileUrl = `${CONFIG.API_URL}/uploads/${encodeURIComponent(filename)}`;
                 const metadata = doc.metadata_info || {};
 
                 // 1. Handling for Additional Invoices
@@ -161,11 +231,19 @@ async function fetchUploadedDocuments(enquiryId) {
                     if (listEl) {
                         let metaHtml = "";
                         if (metadata.amount || metadata.charge_details) {
+                            const curr = (metadata.currency || 'INR').toUpperCase();
+                            const amt = parseFloat(metadata.amount || 0);
+                            const roe = parseFloat(metadata.roe != null ? metadata.roe : (curr === 'INR' ? 1 : 0));
+                            const amtLabel = curr === 'INR'
+                                ? `₹${amt.toLocaleString()}`
+                                : `${curr} ${amt.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+                            const roeLabel = Number.isFinite(roe) && roe > 0 ? roe.toFixed(2) : '—';
                             metaHtml = `
-                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #e2e8f0; display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; font-size: 10px; color: #64748b;">
+                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #e2e8f0; display: grid; grid-template-columns: 2fr 1fr 0.8fr 1fr; gap: 8px; font-size: 10px; color: #64748b;">
                                     <span><strong>Desc:</strong> ${metadata.charge_details || '-'}</span>
                                     <span><strong>HSN:</strong> ${metadata.hsn_sac || '-'}</span>
-                                    <span style="text-align: right; font-weight: 700; color: var(--navy-800);">₹${parseFloat(metadata.amount || 0).toLocaleString()}</span>
+                                    <span><strong>ROE:</strong> ${roeLabel}</span>
+                                    <span style="text-align: right; font-weight: 700; color: var(--navy-800);">${amtLabel}</span>
                                 </div>
                             `;
                         }
@@ -187,23 +265,8 @@ async function fetchUploadedDocuments(enquiryId) {
                 }
 
                 // 2. Mapping for all other documents (including Main Shipping Invoice)
-                let displayId = `${doc.document_type}FileName`;
-                const specialMappings = {
-                    'bol': 'blFileName',
-                    'shippingInvoice': 'shippingInvoiceFileName',
-                    'clientConfirm': 'clientConfirmFileName',
-                    'booking': 'bookingFileName',
-                    'draftSi': 'draftSiFileName',
-                    'si': 'siFileName',
-                    'shippingBill': 'shippingBillFileName',
-                    'originCert': 'originCertFileName',
-                    'customsDeclaration': 'customsDeclarationFileName',
-                    'insuranceCert': 'insuranceCertFileName'
-                };
-
-                if (specialMappings[doc.document_type]) {
-                    displayId = specialMappings[doc.document_type];
-                }
+                const displayId = getTrackingDocDisplayId(doc.document_type);
+                const isBlDoc = displayId === 'blFileName';
 
                 const displayElement = document.getElementById(displayId);
                 if (displayElement) {
@@ -211,11 +274,14 @@ async function fetchUploadedDocuments(enquiryId) {
                         <div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: white; border-radius: 4px; border: 1px solid var(--border-light); margin-top: 4px;">
                             <i class="fas fa-check-circle" style="color: var(--success);"></i>
                             <span style="flex: 1; font-weight: 500; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${doc.file_name}">${doc.file_name}</span>
-                            <a href="${fileUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px; padding: 2px 4px;">
+                            <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: none; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px; padding: 2px 4px;">
                                 <i class="fas fa-eye"></i> View
                             </a>
                         </div>
                     `;
+                }
+                if (isBlDoc) {
+                    setBlReceivedViewLink(fileUrl);
                 }
             });
         }
@@ -259,7 +325,88 @@ function populateShipmentInfo() {
 
     console.log('✅ Shipment information populated');
     updateInitialStatus();
+    updateGenerateHblRowVisibility();
 }
+
+function updateGenerateHblRowVisibility() {
+    const row = document.getElementById('row_generate_hbl');
+    if (!row) return;
+    const siChecked = !!document.getElementById('status_si_submitted')?.checked;
+    const hblRequired = !!currentEnquiryData?.hbl_required;
+    row.style.display = siChecked && hblRequired ? 'table-row' : 'none';
+    if (typeof updateUpdateQuoteRowVisibility === 'function') {
+        updateUpdateQuoteRowVisibility();
+    }
+}
+
+function openGenerateHblFromTracking() {
+    if (!currentEnquiryData?.id) {
+        showModal('Error', 'Enquiry not loaded. Please refresh the page.', 'error');
+        return;
+    }
+    if (!currentEnquiryData.hbl_required) {
+        showModal('HBL Not Required', 'This sale does not have HBL required.', 'info');
+        return;
+    }
+    const siChecked = !!document.getElementById('status_si_submitted')?.checked;
+    if (!siChecked) {
+        showModal('SI Required', 'Upload SI and mark SI Submitted before generating HBL.', 'warning');
+        return;
+    }
+    const url = `/hbl-document?enquiry_id=${currentEnquiryData.id}`;
+    const target = window.parent !== window ? window.parent : window;
+    target.location.href = url;
+}
+
+/**
+ * Fetch final quote (post-SI revisions) for the accepted source quote.
+ */
+async function fetchFinalQuoteData() {
+    if (!currentPricingData?.id || currentPricingData.status !== 'accepted') {
+        currentFinalQuoteData = null;
+        return;
+    }
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/quotes/${currentPricingData.id}/final`);
+        if (response.ok) {
+            const data = await response.json();
+            currentFinalQuoteData = data || null;
+        } else {
+            currentFinalQuoteData = null;
+        }
+    } catch (error) {
+        console.error('Error fetching final quote:', error);
+        currentFinalQuoteData = null;
+    }
+    refreshQuoteSnapshotDisplays();
+}
+
+function refreshQuoteSnapshotDisplays() {
+    if (!currentPricingData) return;
+    const setInr = (id, amount) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = amount != null ? `₹${amount.toLocaleString()}` : '—';
+    };
+
+    const initialInr = currentPricingData.final_quote_inr != null
+        ? Math.round(currentPricingData.final_quote_inr)
+        : (currentPricingData.total_origin_charges_inr
+            ? Math.round(currentPricingData.total_origin_charges_inr)
+            : null);
+
+    const finalInr = currentFinalQuoteData?.final_quote_inr != null
+        ? Math.round(currentFinalQuoteData.final_quote_inr)
+        : initialInr;
+
+    setInr('display_initial_quote', initialInr);
+    setInr('display_final_quote', finalInr);
+}
+
+window.onFinalQuoteSaved = function (finalQuote) {
+    currentFinalQuoteData = finalQuote;
+    refreshQuoteSnapshotDisplays();
+};
 
 /**
  * Populate Invoice Summary section
@@ -303,9 +450,7 @@ function populateInvoiceInfo() {
         setTextContent('display_dest_charges', `$${currentPricingData.total_destination_charges_usd.toLocaleString()}`);
     }
 
-    if (currentPricingData.final_quote_inr) {
-        setTextContent('display_final_quote', `₹${currentPricingData.final_quote_inr.toLocaleString()}`);
-    }
+    refreshQuoteSnapshotDisplays();
 
     console.log('✅ Invoice information populated');
 }
@@ -477,8 +622,9 @@ function toggleDetailRow(checkbox, rowId) {
 function getChecklistState() {
     const checklistItems = [
         'booking_confirmed', 'booking_placed', 'booking_finalized',
-        'container_picked', 'stuffing_done', 'container_gated',
-        'draft_si', 'si_submitted', 'form13', 'shipping_bill', 'sob', 'shipping_invoice', 'bl_received'
+        'container_picked', 'stuffing_done',
+        'draft_si', 'si_submitted', 'shipping_bill', 'container_gated',
+        'sob', 'shipping_invoice', 'bl_received'
     ];
 
     const state = {};
@@ -512,6 +658,7 @@ function getChecklistState() {
     state.voyage = document.getElementById('bl_voyage')?.value || '';
     state.etd = document.getElementById('bl_etd')?.value || '';
     state.eta = document.getElementById('bl_eta')?.value || '';
+    state.container_number = document.getElementById('bl_container_number')?.value || '';
 
     return state;
 }
@@ -534,6 +681,9 @@ async function saveChecklistState() {
         });
         if (response.ok) {
             console.log('✅ Checklist state synced with backend');
+            if (state.sob?.checked && typeof notifyTrackingParentRefresh === 'function') {
+                notifyTrackingParentRefresh({ moveToCompleted: true });
+            }
         }
     } catch (e) {
         console.error('❌ Failed to sync checklist state with backend:', e);
@@ -585,8 +735,9 @@ function applyChecklistState(state, isBackend = false) {
 
     const checklistItems = [
         'booking_confirmed', 'booking_placed', 'booking_finalized',
-        'container_picked', 'stuffing_done', 'container_gated',
-        'draft_si', 'si_submitted', 'form13', 'shipping_bill', 'sob', 'shipping_invoice', 'bl_received'
+        'container_picked', 'stuffing_done',
+        'draft_si', 'si_submitted', 'shipping_bill', 'container_gated',
+        'sob', 'shipping_invoice', 'bl_received'
     ];
 
     // Check for payment status
@@ -667,22 +818,24 @@ function applyChecklistState(state, isBackend = false) {
         'vessel': 'bl_vessel',
         'voyage': 'bl_voyage',
         'etd': 'bl_etd',
-        'eta': 'bl_eta'
+        'eta': 'bl_eta',
+        'container_number': 'bl_container_number'
     };
 
     Object.entries(metadataMapping).forEach(([backendKey, elementId]) => {
         const el = document.getElementById(elementId);
-        if (el && state[backendKey]) {
-            let value = state[backendKey];
-            if ((backendKey === 'etd' || backendKey === 'eta') && typeof value === 'string' && value.includes('T')) {
-                value = value.split('T')[0];
-            }
-            el.value = value;
+        if (!el || !Object.prototype.hasOwnProperty.call(state, backendKey)) return;
+        let value = state[backendKey];
+        if (value == null) value = '';
+        if ((backendKey === 'etd' || backendKey === 'eta') && typeof value === 'string' && value.includes('T')) {
+            value = value.split('T')[0];
         }
+        el.value = value;
     });
 
     // Ensure dependencies are applied AFTER applying state
     checkAllDependencies();
+    updateGenerateHblRowVisibility();
 }
 
 // Update populateShipmentInfo to handle initial status date
@@ -771,6 +924,9 @@ function handleFileUpload(input, displayId) {
             }
         }
 
+        updateGenerateHblRowVisibility();
+        updateUpdateQuoteRowVisibility();
+
         // Display filename with icon and size
         const fileSize = (file.size / 1024).toFixed(2); // KB
         const tempUrl = URL.createObjectURL(file);
@@ -778,7 +934,7 @@ function handleFileUpload(input, displayId) {
             <div style="display: flex; align-items: center; gap: 8px; padding: 8px; background: white; border-radius: 4px; border: 1px solid var(--border-light); margin-top: 4px;">
                 <i class="fas fa-file-${getFileIcon(file.type)}" style="color: var(--primary);"></i>
                 <span style="flex: 1; font-weight: 500; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${file.name}">${file.name}</span>
-                <a href="${tempUrl}" target="_blank" style="color: var(--primary); text-decoration: none; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px; padding: 2px 4px;">
+                <a href="${tempUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); text-decoration: none; font-size: 11px; font-weight: 600; display: flex; align-items: center; gap: 4px; padding: 2px 4px;">
                     <i class="fas fa-eye"></i> View
                 </a>
                 <button type="button" onclick="removeFile('${input.id}', '${displayId}')" 
@@ -788,10 +944,17 @@ function handleFileUpload(input, displayId) {
             </div>
         `;
 
+        if (displayId === 'blFileName') {
+            setBlReceivedViewLink(tempUrl);
+        }
+
         console.log(`✅ File selected: ${file.name} (${fileSize} KB) for ${fileKey}`);
     } else {
         displayElement.innerHTML = '';
         delete uploadedFiles[fileKey];
+        if (displayId === 'blFileName') {
+            hideBlReceivedViewLink();
+        }
     }
 }
 
@@ -818,13 +981,17 @@ function removeFile(inputId, displayId) {
     const fileKey = inputId.replace('Upload', '');
     delete uploadedFiles[fileKey];
 
+    if (fileKey === 'bl') {
+        hideBlReceivedViewLink();
+    }
+
     // Automatically uncheck the corresponding status checkbox if it exists
     const mapping = {
         'clientConfirm': 'booking_confirmed',
         'booking': 'booking_finalized',
         'draftSi': 'draft_si',
         'si': 'si_submitted',
-        'shippingBill': 'form13',
+        'shippingBill': 'shipping_bill',
         'shippingInvoice': 'shipping_invoice',
         'bl': 'bl_received'
     };
@@ -848,6 +1015,8 @@ function removeFile(inputId, displayId) {
         }
     }
 
+    updateGenerateHblRowVisibility();
+
     console.log(`🗑️ File removed: ${fileKey}`);
 }
 
@@ -859,9 +1028,16 @@ function removeFile(inputId, displayId) {
  * Save tracking details and uploaded documents
  */
 async function saveTracking() {
-    // Prepare minimal tracking data
+    if (!currentEnquiryData?.id) {
+        showModal('Error', 'Enquiry not loaded. Please refresh the page.', 'error');
+        return;
+    }
+
+    // Persist checklist/metadata (container no., BL fields, SI number) before file upload
+    await saveChecklistState();
+
     const trackingData = {
-        enquiry_id: currentEnquiryData?.id,
+        enquiry_id: currentEnquiryData.id,
         quote_id: currentPricingData?.id,
         checklist_state: getChecklistState()
     };
@@ -875,7 +1051,9 @@ async function saveTracking() {
 
     // Append all uploaded files
     Object.entries(uploadedFiles).forEach(([key, file]) => {
-        formData.append(key, file);
+        // Backend expects `bol` for Bill of Lading; file input key from blUpload is `bl`.
+        const formKey = key === 'bl' ? 'bol' : key;
+        formData.append(formKey, file);
     });
 
     try {
@@ -889,12 +1067,14 @@ async function saveTracking() {
             const result = await response.json();
             console.log('✅ Tracking data saved:', result);
 
-            // Show Success Modal and Redirect
-            showModal('Success', 'Documents uploaded successfully!', 'success');
+            await saveChecklistState();
+            await loadChecklistState();
+
+            showModal('Success', 'Tracking saved successfully!', 'success');
         } else {
             const error = await response.json();
             console.error('❌ Error saving tracking data:', error);
-            showModal('Error', 'Error uploading documents: ' + (error.detail || 'Unknown error'), 'error');
+            showModal('Error', 'Error saving tracking: ' + (error.detail || 'Unknown error'), 'error');
         }
     } catch (error) {
         console.error('❌ Error:', error);
@@ -909,22 +1089,8 @@ async function saveTracking() {
 }
 
 // ==========================================
-// Navigation
+// Additional Charges & Payments Modal Logic
 // ==========================================
-
-/**
- * Navigate back to the previous page
- */
-function goBack() {
-    // Once in Stage 3 (Upload & Track), we don't allow going back to the pricing calculator 
-    // as the quote is already finalized and locked.
-    window.location.href = '/#dashboard';
-}
-
-
-/**
- * Additional Charges & Payments Modal Logic
- */
 function openAdditionalChargeModal() {
     document.getElementById('additionalChargeModal').style.display = 'block';
     // Set default date to today
@@ -984,6 +1150,11 @@ async function fetchAdditionalPayments(enquiryId) {
             list.innerHTML = '';
 
             payments.forEach(p => {
+                const utrDisplay = (Array.isArray(p.utr_number) ? p.utr_number : (p.utr_number ? [p.utr_number] : []))
+                    .filter(Boolean)
+                    .join(', ') || '—';
+                const dates = Array.isArray(p.payment_date) ? p.payment_date : (p.payment_date ? [p.payment_date] : []);
+                const lastDate = dates.length ? dates[dates.length - 1] : null;
                 const card = document.createElement('div');
                 card.style.cssText = 'background: white; border: 1.5px solid #e2e8f0; border-radius: 8px; padding: 12px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);';
                 card.innerHTML = `
@@ -994,10 +1165,10 @@ async function fetchAdditionalPayments(enquiryId) {
                     <div style="font-size: 13px; font-weight: 700; color: var(--navy-800); margin-bottom: 8px;">${p.description || 'Shipping Line Payment'}</div>
                     <div style="display: grid; grid-template-columns: 1fr; gap: 4px; font-size: 11px; color: var(--text-secondary);">
                         <div style="display: flex; justify-content: space-between;">
-                            <span>UTR:</span> <span style="font-weight: 600; color: var(--navy-700);">${p.utr_number}</span>
+                            <span>UTR:</span> <span style="font-weight: 600; color: var(--navy-700);">${utrDisplay}</span>
                         </div>
                         <div style="display: flex; justify-content: space-between;">
-                            <span>Date:</span> <span style="font-weight: 600;">${new Date(p.payment_date).toLocaleDateString()}</span>
+                            <span>Date:</span> <span style="font-weight: 600;">${lastDate ? new Date(lastDate).toLocaleDateString() : '—'}</span>
                         </div>
                         <div style="display: flex; justify-content: space-between; margin-top: 4px; padding-top: 4px; border-top: 1px dashed #e2e8f0;">
                             <span>Amount:</span> <span style="font-weight: 800; color: var(--primary); font-size: 12px;">₹${p.amount.toLocaleString()}</span>
@@ -1024,14 +1195,40 @@ function handleAdditionalInvoiceUpload(input) {
 }
 
 
+function onAdditionalInvoiceCurrencyChange() {
+    const curr = (document.getElementById('add_inv_currency')?.value || 'INR').toUpperCase();
+    const roeInput = document.getElementById('add_inv_roe');
+    if (!roeInput) return;
+    if (curr === 'INR') {
+        roeInput.value = '1';
+        roeInput.readOnly = true;
+        roeInput.style.background = '#f1f5f9';
+    } else {
+        roeInput.readOnly = false;
+        roeInput.style.background = 'white';
+        if (!roeInput.value || parseFloat(roeInput.value) === 1) {
+            roeInput.value = '';
+            roeInput.placeholder = 'Enter ROE';
+        }
+    }
+}
+
 async function saveAdditionalInvoiceDetails() {
     const chargeDetails = document.getElementById('add_inv_charge_details')?.value;
     const hsnSac = document.getElementById('add_inv_hsn_sac')?.value;
     const amount = document.getElementById('add_inv_amount')?.value;
+    const currency = (document.getElementById('add_inv_currency')?.value || 'INR').toUpperCase();
+    const roeRaw = document.getElementById('add_inv_roe')?.value;
     const fileInput = document.getElementById('additionalInvoiceUpload');
 
     if (!chargeDetails || !hsnSac || !amount) {
         alert("Please fill in Charge Details, HSN/SAC Code, and Amount");
+        return;
+    }
+
+    const roe = currency === 'INR' ? 1 : parseFloat(roeRaw);
+    if (!Number.isFinite(roe) || roe <= 0) {
+        alert("Please enter a valid ROE (greater than 0) for non-INR currencies");
         return;
     }
 
@@ -1050,7 +1247,9 @@ async function saveAdditionalInvoiceDetails() {
     const metadataObj = {
         charge_details: chargeDetails,
         hsn_sac: hsnSac,
-        amount: amount
+        amount: amount,
+        currency: currency,
+        roe: roe,
     };
     formData.append('metadata', JSON.stringify(metadataObj));
 
@@ -1083,6 +1282,14 @@ async function saveAdditionalInvoiceDetails() {
             document.getElementById('add_inv_charge_details').value = '';
             document.getElementById('add_inv_hsn_sac').value = '';
             document.getElementById('add_inv_amount').value = '';
+            const currSelect = document.getElementById('add_inv_currency');
+            if (currSelect) currSelect.value = 'INR';
+            const roeInput = document.getElementById('add_inv_roe');
+            if (roeInput) {
+                roeInput.value = '1';
+                roeInput.readOnly = true;
+                roeInput.style.background = '#f1f5f9';
+            }
 
             // Refresh documents list
             document.getElementById('additionalInvoicesList').innerHTML = '';
@@ -1096,3 +1303,11 @@ async function saveAdditionalInvoiceDetails() {
         showModal('Error', 'Failed to save additional invoice details', 'error');
     }
 }
+
+window.addEventListener('message', (event) => {
+    if (event.data?.type === 'final-quote-saved' && event.data.finalQuote) {
+        if (typeof window.onFinalQuoteSaved === 'function') {
+            window.onFinalQuoteSaved(event.data.finalQuote);
+        }
+    }
+});

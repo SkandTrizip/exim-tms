@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Add Payee – ATLAS EXIM</title>
+    <link href="css/styles.css" rel="stylesheet">
+    <link href="css/modal.css" rel="stylesheet">
+    <link href="css/action-modal.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        (function () {
+            if (new URLSearchParams(location.search).get('embedded') === '1') {
+                document.documentElement.classList.add('embedded-mode');
+            }
+        })();
+    </script>
+    <style>
+        .sl-page { padding: 36px 0 60px; }
+        .card {
+            background: var(--bg-secondary);
+            border-radius: var(--radius-xl);
+            padding: 36px 40px;
+            border: 1px solid var(--border-light);
+            box-shadow: var(--shadow-sm);
+        }
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 32px;
+        }
+        .page-header h1 {
+            font-size: 1.75rem;
+            color: var(--navy-800);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .page-header h1 i { color: var(--coral-500); font-size: 1.4rem; }
+        .section-label {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--text-tertiary);
+            margin: 32px 0 16px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-light);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .section-label:first-of-type { margin-top: 8px; }
+        .section-label i { color: var(--coral-500); }
+        .form-grid-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 18px 20px;
+        }
+        @media (max-width: 960px) { .form-grid-3 { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 640px) { .form-grid-3 { grid-template-columns: 1fr; } }
+        .col-span-2 { grid-column: span 2; }
+        .col-span-3 { grid-column: 1 / -1; }
+        .form-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+            margin-top: 36px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border-light);
+        }
+
+        /* Inside the drawer the global CSS zeroes container padding, which pushes
+           the "Payee Details" title flush to the edge. Restore side spacing. */
+        html.embedded-mode .container,
+        body.embedded-mode .container {
+            padding: 0 20px !important;
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <div class="logo">
+                    <a href="/" style="display:flex;align-items:center;text-decoration:none;">
+                        <img src="Logipod_Logo.png" alt="Logipod" class="logo-img">
+                    </a>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="sl-page">
+        <div class="container">
+            <div class="page-header">
+                <h1><i class="fas fa-user-tag"></i> Add Payee</h1>
+                <div style="font-size:13px;color:var(--text-tertiary);">
+                    Register a party/person and their bank details for payments
+                </div>
+            </div>
+
+            <div class="wizard-panel active" id="panel1">
+                <h2 class="embedded-drawer-title">Payee Details</h2>
+
+                <div id="statusBanner" style="display:none; align-items:center; gap:16px;
+                    border-radius:var(--radius-lg); padding:14px 20px; margin-bottom:20px; font-weight:600;"></div>
+
+                <div id="adminActionBar" style="display:none; align-items:center; gap:12px;
+                    background:var(--navy-700); border-radius:var(--radius-lg); padding:14px 20px;
+                    margin-bottom:20px; color:white;">
+                    <i class="fas fa-shield-alt" style="font-size:1.1rem;"></i>
+                    <span style="flex:1;font-weight:600;">Admin Action</span>
+                    <button id="verifyBtn" class="btn" style="background:#10B981;color:white;border:none;padding:8px 20px;border-radius:8px;font-weight:600;cursor:pointer;">
+                        <i class="fas fa-check"></i> Verify
+                    </button>
+                    <button id="rejectBtn" class="btn" style="background:#EF4444;color:white;border:none;padding:8px 20px;border-radius:8px;font-weight:600;cursor:pointer;">
+                        <i class="fas fa-times"></i> Reject
+                    </button>
+                </div>
+
+                <div class="card">
+                    <form id="payeeForm" novalidate>
+                        <!-- Identity -->
+                        <div class="section-label"><i class="fas fa-user"></i> Identity</div>
+                        <div class="form-grid-3">
+                            <div class="form-group col-span-2">
+                                <label for="py_name">Payee Name <span class="required">*</span></label>
+                                <input type="text" id="py_name" placeholder="e.g. ABC Logistics Pvt Ltd" required>
+                            </div>
+                            <div class="form-group">
+                                <label for="py_type">Type</label>
+                                <select id="py_type">
+                                    <option value="Company">Company</option>
+                                    <option value="Individual">Individual</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="py_office_location">Office Location</label>
+                                <input type="text" id="py_office_location" placeholder="e.g. Mumbai">
+                            </div>
+                            <div class="form-group col-span-2">
+                                <label for="py_address">Address</label>
+                                <input type="text" id="py_address" placeholder="Full address">
+                            </div>
+                            <div class="form-group">
+                                <label for="py_gst_number">GST Number</label>
+                                <input type="text" id="py_gst_number" placeholder="27AAACM0000A1Z1">
+                            </div>
+                            <div class="form-group">
+                                <label for="py_pan_number">PAN Number</label>
+                                <input type="text" id="py_pan_number" placeholder="AAACM0000A">
+                            </div>
+                        </div>
+
+                        <!-- Contact -->
+                        <div class="section-label"><i class="fas fa-address-book"></i> Contact</div>
+                        <div class="form-grid-3">
+                            <div class="form-group">
+                                <label for="py_contact_person">Contact Person</label>
+                                <input type="text" id="py_contact_person" placeholder="Full name">
+                            </div>
+                            <div class="form-group">
+                                <label for="py_contact_number">Contact Number</label>
+                                <input type="tel" id="py_contact_number" placeholder="+91 98XXXXXXXX">
+                            </div>
+                            <div class="form-group">
+                                <label for="py_email">Email</label>
+                                <input type="email" id="py_email" placeholder="contact@payee.com">
+                            </div>
+                        </div>
+
+                        <!-- Bank Details -->
+                        <div class="section-label"><i class="fas fa-university"></i> Bank / Beneficiary Details</div>
+                        <div class="form-grid-3">
+                            <div class="form-group col-span-2">
+                                <label for="py_beneficiary_name">Beneficiary Name</label>
+                                <input type="text" id="py_beneficiary_name" placeholder="Name as per bank records">
+                            </div>
+                            <div class="form-group">
+                                <label for="py_account_number">Account Number</label>
+                                <input type="text" id="py_account_number" placeholder="Bank account number">
+                            </div>
+                            <div class="form-group">
+                                <label for="py_ifsc_code">IFSC Code</label>
+                                <input type="text" id="py_ifsc_code" placeholder="e.g. HDFC0001234">
+                            </div>
+                            <div class="form-group">
+                                <label for="py_bank">Bank</label>
+                                <input type="text" id="py_bank" placeholder="e.g. HDFC Bank">
+                            </div>
+                            <div class="form-group">
+                                <label for="py_bank_branch">Bank Branch</label>
+                                <input type="text" id="py_bank_branch" placeholder="e.g. Nariman Point">
+                            </div>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" class="btn btn-secondary" onclick="window.location.href='/'">
+                                <i class="fas fa-arrow-left"></i> Back to Dashboard
+                            </button>
+                            <button type="submit" class="btn btn-primary" id="savePYBtn">
+                                <i class="fas fa-save"></i> Submit
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal -->
+    <div id="customModal" class="modal-overlay">
+        <div class="modal-box" style="padding:36px 32px;text-align:center;">
+            <div id="modalIcon" style="margin-bottom:8px;"></div>
+            <h3 id="modalTitle" class="modal-title" style="justify-content:center;font-size:1.25rem;"></h3>
+            <p id="modalMessage" style="color:var(--text-secondary);font-size:0.95rem;margin:8px 0 24px;"></p>
+            <button class="btn btn-primary" onclick="closeModal()" style="min-width:100px;">OK</button>
+        </div>
+    </div>
+
+    <script src="/js/config.js"></script>
+    <script src="js/payee-master.js"></script>
+</body>
+
+</html>

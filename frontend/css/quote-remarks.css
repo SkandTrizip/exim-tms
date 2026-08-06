@@ -1,0 +1,119 @@
+/* Quote remarks modal */
+.quote-remarks-overlay {
+    position: fixed;
+    inset: 0;
+    /* Must sit above the Update Quote modal (z-index 2500) since the remarks
+       popup is opened from within it while that modal stays mounted. */
+    z-index: 2700;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+.quote-remarks-dialog {
+    background: #fff;
+    border-radius: 14px;
+    width: min(480px, calc(100% - 32px));
+    max-height: min(90vh, 640px);
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    border: 1px solid var(--border-light);
+    overflow: hidden;
+}
+
+.quote-remarks-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-light);
+    background: #f8fafc;
+}
+
+.quote-remarks-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--navy-900);
+}
+
+.quote-remarks-close {
+    width: 36px;
+    height: 36px;
+    border: none;
+    background: white;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-secondary);
+}
+
+.quote-remarks-body {
+    padding: 20px;
+    overflow-y: auto;
+}
+
+.quote-remarks-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.quote-remark-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--navy-800);
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.quote-remark-option:hover {
+    border-color: var(--navy-300);
+    background: #f8fafc;
+}
+
+.quote-remark-option:has(input:checked) {
+    border-color: #059669;
+    background: #ecfdf5;
+}
+
+.quote-remark-option input {
+    margin-top: 2px;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.quote-remarks-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border-light);
+    background: #fafafa;
+}
+
+.quote-remarks-other textarea {
+    font-size: 13px;
+}
+
+html.embedded-mode .quote-remarks-overlay,
+html.embedded-mode #customModal.modal-overlay,
+body.embedded-mode .quote-remarks-overlay,
+body.embedded-mode #customModal.modal-overlay {
+    z-index: 2147483000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .quote-remark-option {
+        transition: none;
+    }
+}

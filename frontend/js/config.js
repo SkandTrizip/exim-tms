@@ -1,3 +1,9 @@
+/**
+ * Use the current page origin so API calls work whether you open the app as
+ * http://localhost:8000 or http://127.0.0.1:8000 (hardcoding localhost breaks fetch).
+ */
 const CONFIG = {
-    API_URL: 'http://localhost:8000'
+    API_URL: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000',
+    // Currencies offered on charge line items; INR is always the settlement currency (rate 1).
+    CHARGE_CURRENCIES: ['USD', 'EUR', 'GBP', 'JPY', 'INR']
 };

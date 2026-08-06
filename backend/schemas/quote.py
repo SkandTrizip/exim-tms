@@ -17,6 +17,7 @@ class QuoteChargeBase(BaseModel):
     exchange_rate: float = Field(1.0, ge=0)
     final_inr_amount: float = Field(0.0, ge=0)
     vendor_rate: float = Field(0.0, ge=0)
+    vendor_exchange_rate: float = Field(1.0, ge=0)
     charge_sequence: int = 0
 
 class QuoteChargeCreate(QuoteChargeBase):
@@ -83,6 +84,11 @@ class QuoteCreate(QuoteBase):
     enquiry_id: int
     containers: List[QuoteContainerCreate] = []
 
+class QuoteStatusUpdate(BaseModel):
+    remarks_reason: Optional[str] = None
+    remarks_other: Optional[str] = None
+
+
 class QuoteUpdate(BaseModel):
     quote_name: Optional[str] = None
     place_of_receipt: Optional[str] = None
@@ -105,6 +111,10 @@ class Quote(QuoteBase):
     id: int
     enquiry_id: int
     quote_number: str
+    initial_quote_snapshot: Optional[str] = None
+    final_quote_snapshot: Optional[str] = None
+    accepted_remarks_reason: Optional[str] = None
+    accepted_remarks_other: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     containers: List[QuoteContainer] = []

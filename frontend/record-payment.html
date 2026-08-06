@@ -4,10 +4,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Record Client Payment - Exim TMS</title>
+    <title>Record Client Payment - ATLAS EXIM</title>
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/action-modal.css">
     <link rel="stylesheet" href="css/modal.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        (function () {
+            if (new URLSearchParams(location.search).get('embedded') === '1') {
+                document.documentElement.classList.add('embedded-mode');
+                document.body.classList.add('embedded-mode');
+            }
+        })();
+    </script>
 </head>
 
 <body>
@@ -15,8 +24,7 @@
         <div class="container">
             <div class="header-content">
                 <div class="logo">
-                    <div class="logo-icon">SF</div>
-                    <div class="logo-text">ShipFlow</div>
+                    <img src="Logipod_Logo.png" alt="Logipod" class="logo-img">
                 </div>
                 <div class="header-actions">
                     <div class="user-profile"
@@ -57,7 +65,7 @@
                                 style="font-size: 16px; margin-bottom: 16px; color: var(--navy-800); border-bottom: 2px solid var(--navy-200); padding-bottom: 8px; display: inline-block;">
                                 📄 Invoice Details
                             </h3>
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                            <div class="embedded-form-grid-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
                                 <div style="display: grid; gap: 8px;">
                                     <div
                                         style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
@@ -72,8 +80,7 @@
                                         <span
                                             style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Sale
                                             Number</span>
-                                        <span id="display_enquiry_number"
-                                            style="font-size: 13px; color: var(--navy-800);">-</span>
+                                        <span id="display_enquiry_number" class="job-no">-</span>
                                     </div>
                                     <div
                                         style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
@@ -113,30 +120,37 @@
                                 Receipt Information
                             </h3>
 
-                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                            <div class="embedded-form-grid-2" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
                                 <div class="form-group">
-                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Payment
-                                        Received Date</label>
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Payment Type</label>
+                                    <select id="payment_type" class="form-control" style="width: 100%;">
+                                        <option value="NEFT">NEFT</option>
+                                        <option value="RTGS">RTGS</option>
+                                        <option value="IMPS">IMPS</option>
+                                        <option value="Cheque">Cheque</option>
+                                        <option value="Cash">Cash</option>
+                                        <option value="UPI">UPI</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Payment Received Date</label>
                                     <input type="date" id="payment_date" class="form-control" style="width: 100%;">
                                 </div>
                                 <div class="form-group">
-                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Amount Received
-                                        (INR)</label>
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">UTR / Reference Number</label>
+                                    <input type="text" id="payment_reference" class="form-control"
+                                        placeholder="Enter UTR or reference number" style="width: 100%;">
+                                </div>
+                                <div class="form-group">
+                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Amount Received (INR)</label>
                                     <input type="number" id="received_amount" class="form-control" placeholder="0.00"
                                         style="width: 100%;">
-                                </div>
-                                <div class="form-group" style="grid-column: span 2;">
-                                    <label style="font-weight: 600; margin-bottom: 8px; display: block;">Reference
-                                        Number (UTR / Check No. / Transaction ID)</label>
-                                    <input type="text" id="payment_reference" class="form-control"
-                                        placeholder="Enter reference number" style="width: 100%;">
                                 </div>
                             </div>
                         </div>
 
                         <div class="form-actions" style="display: flex; gap: 16px; margin-top: 32px;">
-                            <button type="button" class="btn btn-secondary"
-                                onclick="window.location.href='/#finance-received'">
+                            <button type="button" class="btn btn-secondary" onclick="goBack()">
                                 <i class="fas fa-arrow-left"></i> Back to Payments
                             </button>
                             <button type="button" class="btn btn-primary" onclick="savePayment()">

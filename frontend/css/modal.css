@@ -14,22 +14,26 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    /* Above floating actions menus (1200) and action drawer (1100) */
+    z-index: 2600;
     opacity: 0;
     visibility: hidden;
+    pointer-events: none;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .modal-overlay.active {
     opacity: 1;
     visibility: visible;
+    pointer-events: auto;
 }
 
 /* Modal Box */
 .modal-box {
     background: white;
-    width: 90%;
-    max-width: 440px;
+    width: min(440px, calc(100% - 32px));
+    max-width: calc(100vw - 32px);
+    max-height: min(90vh, 720px);
     border-radius: var(--radius-xl);
     padding: 0;
     box-shadow: var(--shadow-xl);
@@ -88,6 +92,7 @@
     font-size: 1rem;
     font-weight: 600;
     line-height: 1.5;
+    overflow-y: auto;
 }
 
 /* Modal Footer */

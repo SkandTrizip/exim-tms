@@ -4,11 +4,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rate & Pricing - Exim TMS</title>
+    <title>Rate & Pricing - ATLAS EXIM</title>
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/action-modal.css">
     <link rel="stylesheet" href="css/modal.css">
+    <link rel="stylesheet" href="css/quote-remarks.css">
     <link rel="stylesheet" href="css/pricing-refined.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        (function () {
+            if (new URLSearchParams(location.search).get('embedded') === '1') {
+                document.documentElement.classList.add('embedded-mode');
+            }
+        })();
+    </script>
 </head>
 
 <body>
@@ -16,8 +25,7 @@
         <div class="container">
             <div class="header-content">
                 <div class="logo">
-                    <div class="logo-icon">SF</div>
-                    <div class="logo-text">ShipFlow</div>
+                    <img src="Logipod_Logo.png" alt="Logipod" class="logo-img">
                 </div>
                 <div class="header-actions">
                     <div class="user-profile"
@@ -66,7 +74,7 @@
                             <div class="shipment-summary-horizontal">
                                 <div class="summary-box">
                                     <label>Sale #</label>
-                                    <div id="display_enquiry_number" class="value">-</div>
+                                    <div id="display_enquiry_number" class="value job-no">-</div>
                                 </div>
                                 <div class="summary-box">
                                     <label>Sale Received Date</label>
@@ -231,7 +239,7 @@
                                             <label>Shipping Line Total (INR)</label>
                                             <div id="totalOriginINR" class="amount" style="color:#1e3a8a;">₹0</div>
                                         </div>
-                                        <div class="summary-item vendor-total-card" style="display:none;">
+                                        <div class="summary-item vendor-total-card">
                                             <label>Client Rate Total (INR)</label>
                                             <div id="totalDestINR" class="amount">₹0</div>
                                         </div>
@@ -249,9 +257,11 @@
                     <div id="quoteConfirmationPage" style="display: none;">
                         <div class="pricing-card">
                             <div class="pricing-card-header"
-                                style="background: #ecfdf5; border-bottom: 2px solid #10b981;">
-                                <i class="fas fa-check-circle" style="color: #059669;"></i>
-                                <h3 style="color: #064e3b;">Quote Confirmed & Locked</h3>
+                                style="background: #ecfdf5; border-bottom: 2px solid #10b981; justify-content: space-between;">
+                                <div style="display:flex; align-items:center; gap: 12px;">
+                                    <i class="fas fa-check-circle" style="color: #059669;"></i>
+                                    <h3 style="color: #064e3b; margin: 0;">Quote Confirmed & Locked</h3>
+                                </div>
                             </div>
                             <div class="pricing-card-body">
                                 <div style="text-align: center; margin-bottom: 40px;">
@@ -269,12 +279,21 @@
                                     <!-- Dynamic content will be injected here -->
                                 </div>
 
-                                <div
+                                <div id="confirmPricingHint"
                                     style="margin-top: 32px; padding: 20px; background: #f9fafb; border-radius: 12px; border: 1px solid var(--border-light); font-size: 14px; color: var(--text-secondary);">
                                     <i class="fas fa-info-circle"
                                         style="margin-right: 8px; color: var(--navy-400);"></i>
-                                    This quote is now confirmed and cannot be edited. You can download the PDF version
-                                    or proceed to track your shipment.
+                                    This quote is confirmed and locked. Rate changes after SI submission are done from
+                                    <strong>Tracking → Update Quote</strong>. Review the breakdown below or proceed to tracking.
+                                </div>
+
+                                <div style="margin-top: 16px; display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-end;">
+                                    <button type="button" id="postConfirmViewBreakdownBtn" class="btn btn-primary" style="background:#2563eb; border:none;">
+                                        <i class="fas fa-list"></i> Final rate breakdown
+                                    </button>
+                                    <button type="button" id="postConfirmGoTrackingBtn" class="btn btn-primary" style="background:#059669; border:none;">
+                                        <i class="fas fa-route"></i> Proceed to tracking
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -325,6 +344,7 @@
 
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
+    <script src="js/quote-remarks.js"></script>
     <script src="js/pricing.js"></script>
 </body>
 

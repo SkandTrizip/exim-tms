@@ -45,12 +45,16 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
                 # Convert date string to datetime if possible, otherwise use current time
                 date_str = item_data.get('date')
                 try:
-                    # Expected format: "18 Feb 2026, 17:46"
                     if date_str and date_str != '-':
-                        setattr(status, field, datetime.strptime(date_str, "%d %b %y, %H:%M"))
+                        if key == 'sob':
+                            # SOB uses HTML date input (YYYY-MM-DD)
+                            setattr(status, field, datetime.strptime(date_str, "%Y-%m-%d"))
+                        else:
+                            # Expected format: "18 Feb 2026, 17:46"
+                            setattr(status, field, datetime.strptime(date_str, "%d %b %y, %H:%M"))
                     elif item_data.get('checked'):
                         setattr(status, field, datetime.now())
-                except:
+                except (ValueError, TypeError):
                     # Fallback to current time if parsing fails
                     setattr(status, field, datetime.now())
             else:
@@ -59,22 +63,27 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
     # Map extra metadata fields if provided
     metadata_fields = [
         'si_number', 'consignee', 'port_of_origin', 
-        'final_destination', 'vessel', 'voyage','master_number', 
+        'final_destination', 'vessel', 'voyage', 'master_number', 'container_number',
         'pay_line', 'inv_raised', 'pay_client',
         'utr_number', 'payment_date', 'payment_amount'
     ]
     
+    datetime_meta = {'pay_line', 'inv_raised', 'pay_client'}
     for field in metadata_fields:
-        if field in status_data:
-            val = status_data[field]
-            if val and field in ['pay_line', 'inv_raised', 'pay_client']:
+        if field not in status_data:
+            continue
+        val = status_data[field]
+        if field in datetime_meta:
+            if val:
                 try:
-                    # Parse ISO format from JS Date.toISOString()
                     setattr(status, field, datetime.fromisoformat(val.replace('Z', '+00:00')))
-                except:
+                except Exception:
                     setattr(status, field, datetime.now())
             else:
-                setattr(status, field, val)
+                setattr(status, field, None)
+        else:
+            # Always persist text metadata (including empty strings to allow clearing)
+            setattr(status, field, val if val is not None else None)
 
     # Handle Date fields in metadata (etd, eta, payment_date)
     for field in ['etd', 'eta', 'payment_date']:
@@ -82,9 +91,37 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
             try:
                 # Expecting YYYY-MM-DD from HTML date input
                 setattr(status, field, datetime.strptime(status_data[field], "%Y-%m-%d"))
-            except:
+            except (ValueError, TypeError):
                 pass
-    
+
+    # Tracking activity implies the sale is in operations.
+    from backend.models.enquiry import Enquiry
+    enquiry = db.query(Enquiry).filter(Enquiry.id == enquiry_id).first()
+    if enquiry and (enquiry.stage or 1) < 3:
+        enquiry.stage = 3
+        logger.info(f"Enquiry {enquiry_id} stage set to 3 after tracking status update")
+
+    # Keep enquiry_economics in sync for analytics.
+    # Full sync on SI (creates row from accepted quote if missing); SOB only needs dates.
+    if 'si_submitted' in status_data:
+        try:
+            from backend.services.enquiry_economics_service import sync_enquiry_economics
+            sync_enquiry_economics(db, enquiry_id, commit=False)
+        except Exception as e:
+            logger.warning(
+                f"Could not sync enquiry economics after SI for enquiry {enquiry_id}: {e}"
+            )
+    elif 'sob' in status_data:
+        try:
+            from backend.services.enquiry_economics_service import (
+                sync_enquiry_economics_milestone_dates,
+            )
+            sync_enquiry_economics_milestone_dates(db, enquiry_id, commit=False)
+        except Exception as e:
+            logger.warning(
+                f"Could not sync economics milestone dates for enquiry {enquiry_id}: {e}"
+            )
+
     db.commit()
     db.refresh(status)
     logger.info(f"Successfully processed shipment status for enquiry ID {enquiry_id}")

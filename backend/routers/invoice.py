@@ -2,10 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Response, Query
 from sqlalchemy.orm import Session
 from backend.database import get_db
 from backend.models.enquiry import Enquiry
-from backend.models.quote import Quote
 from backend.models.shipment_status import ShipmentStatus
 from backend.models.client_master import ClientMaster
 from backend.models.invoice import Invoice
+from backend.services.invoice_service import allocate_invoice_number, get_next_invoice_number
+from backend.services import invoice_quote_service
 from pydantic import BaseModel
 
 from reportlab.pdfgen import canvas
@@ -23,66 +24,231 @@ router = APIRouter(prefix="/invoice", tags=["Invoice"])
 
 from typing import Optional
 
+
+def _client_rate_for_invoice(charge) -> Optional[float]:
+    return invoice_quote_service.client_rate_for_invoice(charge)
+
 class InvoiceCreate(BaseModel):
     enquiry_id: int
-    invoice_number: str
+    invoice_number: Optional[str] = None
     invoice_date: datetime.date
     payment_due_date: datetime.date
     place_of_supply: str
+    customer_invoice_no: Optional[str] = None
     irn: Optional[str] = None
     item_type: str = "all"
+    additional_doc_id: Optional[int] = None
+    remark: Optional[str] = None
 
 class InvoicePayment(BaseModel):
     payment_date: datetime.date
+    payment_type: str = "NEFT"
     payment_reference: str
     received_amount: float
 
+@router.get("/next-number")
+def next_invoice_number_endpoint(
+    invoice_date: Optional[datetime.date] = None,
+    db: Session = Depends(get_db),
+):
+    """Next invoice number: LPE/YY-YY/NNNNNN (per financial year)."""
+    ref = invoice_date or datetime.date.today()
+    number = get_next_invoice_number(db, ref)
+    logger.info(f"Next invoice number for {ref}: {number}")
+    return {"invoice_number": number}
+
+
 @router.post("/record")
 def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
-    logger.info(f"Recording invoice {invoice.invoice_number} for enquiry ID {invoice.enquiry_id}")
-    # Check if invoice number already exists
-    existing_inv = db.query(Invoice).filter(Invoice.invoice_number == invoice.invoice_number).first()
-    if existing_inv:
-         logger.warning(f"Failed to record invoice: Number {invoice.invoice_number} already exists")
-         raise HTTPException(status_code=400, detail="Invoice number already exists")
-    
-    new_invoice = Invoice(**invoice.dict())
-    db.add(new_invoice)
-    db.commit()
-    db.refresh(new_invoice)
-    logger.info(f"Successfully recorded invoice {invoice.invoice_number} with ID {new_invoice.id}")
-    return {"message": "Invoice recorded successfully", "id": new_invoice.id}
+    logger.info(f"Recording invoice for enquiry ID {invoice.enquiry_id}")
+    try:
+        item_type = (invoice.item_type or "all").strip().lower()
+        is_additional = item_type == "additional"
+        if is_additional and not invoice.additional_doc_id:
+            raise HTTPException(status_code=400, detail="additional_doc_id is required for additional invoices")
+
+        # Prevent duplicates:
+        # - main invoice: only one per enquiry (item_type in {'all','main'})
+        # - additional invoice: only one per enquiry per additional_doc_id
+        if is_additional:
+            existing = (
+                db.query(Invoice.id, Invoice.invoice_number)
+                .filter(
+                    Invoice.enquiry_id == invoice.enquiry_id,
+                    Invoice.item_type == "additional",
+                    Invoice.additional_doc_id == invoice.additional_doc_id,
+                )
+                .first()
+            )
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Additional invoice already recorded for this job ({existing[1]})",
+                )
+        else:
+            existing = (
+                db.query(Invoice.id, Invoice.invoice_number)
+                .filter(
+                    Invoice.enquiry_id == invoice.enquiry_id,
+                    Invoice.item_type.in_(["all", "main"]),
+                )
+                .first()
+            )
+            if existing:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Main invoice already recorded for this job ({existing[1]})",
+                )
+
+        allocated_number = allocate_invoice_number(db, invoice.invoice_date)
+
+        # Only pass fields that exist on the SQLAlchemy model.
+        # This avoids 500s if the Pydantic schema has extra keys (e.g. `item_type`)
+        # while the DB/model doesn't.
+        allowed_fields = set(Invoice.__table__.columns.keys())
+        payload = {k: v for k, v in invoice.dict().items() if k in allowed_fields}
+        payload["invoice_number"] = allocated_number
+        payload["item_type"] = item_type
+        if not payload.get("remark"):
+            payload["remark"] = "Additional invoice" if is_additional else "Main invoice"
+
+        new_invoice = Invoice(**payload)
+        db.add(new_invoice)
+
+        status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == invoice.enquiry_id).first()
+        if not status:
+            status = ShipmentStatus(enquiry_id=invoice.enquiry_id)
+            db.add(status)
+        status.inv_raised = datetime.datetime.now()
+
+        db.commit()
+        db.refresh(new_invoice)
+        logger.info(f"Successfully recorded invoice {allocated_number} with ID {new_invoice.id}")
+        return {
+            "message": "Invoice recorded successfully",
+            "id": new_invoice.id,
+            "invoice_number": allocated_number,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.exception(
+            "Error recording invoice",
+            extra={"enquiry_id": invoice.enquiry_id, "invoice_number": invoice.invoice_number},
+        )
+        # Return JSON error (so the frontend doesn't fail JSON.parse on plain-text 500 responses)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/details/{enquiry_id}")
-def get_invoice_details(enquiry_id: int, db: Session = Depends(get_db)):
-    invoice = db.query(Invoice).filter(Invoice.enquiry_id == enquiry_id).first()
+def get_invoice_details(
+    enquiry_id: int,
+    item_type: str = Query("all"),
+    additional_doc_id: Optional[int] = Query(None),
+    db: Session = Depends(get_db),
+):
+    it = (item_type or "all").strip().lower()
+    if it == "additional":
+        # Require a specific additional doc — otherwise callers can accidentally
+        # prefill from another additional invoice (or worse, main invoice UI state).
+        if additional_doc_id is None:
+            return None
+        invoice = (
+            db.query(Invoice)
+            .filter(
+                Invoice.enquiry_id == enquiry_id,
+                Invoice.item_type == "additional",
+                Invoice.additional_doc_id == additional_doc_id,
+            )
+            .order_by(Invoice.id.desc())
+            .first()
+        )
+    else:
+        invoice = (
+            db.query(Invoice)
+            .filter(Invoice.enquiry_id == enquiry_id, Invoice.item_type.in_(["all", "main"]))
+            .order_by(Invoice.id.desc())
+            .first()
+        )
     if not invoice:
         # Return empty or 404? 
         # Better to return null so frontend knows to show empty form
         return None
     return invoice
 
+
+@router.get("/rates-preview/{enquiry_id}")
+def get_invoice_rates_preview(enquiry_id: int, db: Session = Depends(get_db)):
+    """Charge lines for create-invoice (final quote preferred)."""
+    containers, source = invoice_quote_service.get_invoice_charge_containers(db, enquiry_id)
+    if not source:
+        raise HTTPException(status_code=404, detail="No quote found for this enquiry")
+
+    lines = []
+    for container in sorted(containers, key=lambda c: c.container_sequence or 0):
+        for charge in sorted(
+            container.charges or [],
+            key=lambda ch: (ch.charge_sequence or 0, ch.id or 0),
+        ):
+            if charge.account_type != "On Your Account":
+                continue
+            vendor_rate = invoice_quote_service.client_rate_for_invoice(charge)
+            if vendor_rate is None:
+                continue
+            curr = (charge.currency or "INR").upper()
+            vendor_ex = invoice_quote_service.client_exchange_rate_for_invoice(charge)
+            lines.append(
+                {
+                    "charge_description": charge.charge_description,
+                    "currency": curr,
+                    "quantity": charge.quantity,
+                    "vendor_rate": vendor_rate,
+                    "vendor_exchange_rate": vendor_ex,
+                }
+            )
+
+    return {
+        "source": source,
+        "lines": lines,
+    }
+
 @router.get("/list")
 def list_all_invoices(db: Session = Depends(get_db)):
     """List all recorded invoices for payment tracking"""
-    invoices = db.query(Invoice, Enquiry.enquiry_number, Enquiry.client_name)\
+    invoices = db.query(
+            Invoice,
+            Enquiry.enquiry_number,
+            Enquiry.client_name,
+            Enquiry.origin,
+            Enquiry.destination,
+        )\
         .join(Enquiry, Invoice.enquiry_id == Enquiry.id)\
         .order_by(Invoice.created_at.desc()).all()
     
     result = []
-    for inv, enq_num, client in invoices:
+    for inv, enq_num, client, origin, destination in invoices:
         inv_dict = {
             "id": inv.id,
+            "enquiry_id": inv.enquiry_id,
             "invoice_number": inv.invoice_number,
             "invoice_date": inv.invoice_date,
+            "payment_due_date": inv.payment_due_date,
+            "place_of_supply": inv.place_of_supply,
             "enquiry_number": enq_num,
             "client_name": client,
+            "origin": origin or "",
+            "destination": destination or "",
             "is_paid": inv.is_paid,
             "payment_date": inv.payment_date,
+            "payment_type": inv.payment_type,
             "payment_reference": inv.payment_reference,
             "received_amount": inv.received_amount,
             "status": inv.status,
-            "item_type": inv.item_type
+            "irn": inv.irn,
+            "customer_invoice_no": inv.customer_invoice_no,
+            "item_type": getattr(inv, "item_type", "all"),
+            "remark": getattr(inv, "remark", None),
+            "additional_doc_id": getattr(inv, "additional_doc_id", None),
         }
         result.append(inv_dict)
     return result
@@ -96,6 +262,7 @@ def record_invoice_payment(invoice_id: int, payment: InvoicePayment, db: Session
     
     db_invoice.is_paid = True
     db_invoice.payment_date = payment.payment_date
+    db_invoice.payment_type = payment.payment_type
     db_invoice.payment_reference = payment.payment_reference
     db_invoice.received_amount = payment.received_amount
     
@@ -112,39 +279,36 @@ def record_invoice_payment(invoice_id: int, payment: InvoicePayment, db: Session
 
 
 @router.get("/generate/{enquiry_id}")
-async def generate_invoice_pdf(
+def generate_invoice_pdf(
     enquiry_id: int, 
     invoice_number: str,
     invoice_date: str,
     invoice_type: str = "draft",  # 'draft' or 'tax'
     place_of_supply: str = "06AAFCL3674H1ZE/Gurugram",
-    roe: float = Query(...),
     irn: str = None,
+    customer_invoice_no: Optional[str] = None,
     item_type: str = "all",      # 'all', 'main', or 'additional'
+    additional_doc_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
-    # 1. Validate mandatory fields
-    if roe is None or roe <= 0:
-        logger.warning(f"Invoice generation blocked: Exchange Rate (ROE) is mandatory but was not provided or is invalid (enquiry_id={enquiry_id})")
-        raise HTTPException(
-            status_code=422,
-            detail="Exchange Rate (ROE) is mandatory and must be a positive number. Please enter the Exchange Rate before generating the invoice."
-        )
-
-    # 2. Fetch Data
+    # 1. Fetch Data
     logger.info(f"Generating invoice PDF for enquiry ID {enquiry_id}")
     enquiry = db.query(Enquiry).filter(Enquiry.id == enquiry_id).first()
     if not enquiry:
         logger.warning(f"Failed to generate invoice PDF: Enquiry {enquiry_id} not found")
         raise HTTPException(status_code=404, detail="Enquiry not found")
 
-    # Fetch accepted quote or latest quote
-    quote = db.query(Quote).filter(Quote.enquiry_id == enquiry_id, Quote.status == 'accepted').first()
-    if not quote:
-         quote = db.query(Quote).filter(Quote.enquiry_id == enquiry_id).order_by(Quote.created_at.desc()).first()
-    
-    if not quote:
+    # Fetch charge containers — post-SI final quote when present, else accepted quote
+    containers, charge_source = invoice_quote_service.get_invoice_charge_containers(db, enquiry_id)
+    if not charge_source:
         raise HTTPException(status_code=404, detail="No accepted quote found for this enquiry")
+
+    logger.info(
+        "Invoice PDF enquiry_id=%s using charge_source=%s line_containers=%s",
+        enquiry_id,
+        charge_source,
+        len(containers),
+    )
 
     # Fetch Shipment Status for Invoice Details (Invoice No, Date, etc.)
     status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == enquiry_id).first()
@@ -200,7 +364,7 @@ async def generate_invoice_pdf(
                               ParagraphStyle('HeaderBold', parent=header_style, fontSize=12, spaceAfter=2)))
     header_text_elements.append(Paragraph("<b>HEAD-OFFICE ADDRESS:</b>", 
                               ParagraphStyle('HeaderBold', parent=header_style, fontSize=8, spaceAfter=1)))
-    header_text_elements.append(Paragraph("803, 8TH FLOOR, TOWER 5, RPS INFINIA, 12TH AVENUE, SECTOR 27C, MATHURA ROAD, FARIDABAD, HARYANA, PIN 121003", 
+    header_text_elements.append(Paragraph("LOGIPOD LOGISTICS PRIVATE LIMITED, ENKAY SQUARE, 3rd FLOOR, 448A,UDYOG VIHAR PHASE 5,GURUGRAM, HARYANA, PIN:122016", 
                               ParagraphStyle('HeaderNormal', parent=header_style, fontSize=8, leading=10)))
     header_text_elements.append(Paragraph("[Contact Phone: +91 9988553772] GSTIN: 06AAFCL3674H1ZE", 
                               ParagraphStyle('HeaderNormal', parent=header_style, fontSize=8, leading=10)))
@@ -221,18 +385,37 @@ async def generate_invoice_pdf(
     # ... Imports ...
     from backend.models.client_origin import ClientOrigin
     from backend.models.client_master import ClientMaster
-    
-    # ... Data Fetching Logic (Keep same) ...
-    client_origin = db.query(ClientOrigin).filter(ClientOrigin.unique_client_name == enquiry.client_name).first()
+    from backend.utils.client_utils import strip_branch_suffix
+
+    # Strip branch suffix before lookup: "Acme_Mumbai" → "Acme"
+    base_client_name = strip_branch_suffix(enquiry.client_name)
+    client_origin = db.query(ClientOrigin).filter(ClientOrigin.unique_client_name == base_client_name).first()
     client_master = None
     if client_origin:
-        client_master = db.query(ClientMaster).filter(ClientMaster.origin_id == client_origin.id).first()
+        # Try to find the specific branch that matches the stored client_name
+        client_master = db.query(ClientMaster).filter(
+            ClientMaster.origin_id == client_origin.id,
+            ClientMaster.client_name == enquiry.client_name
+        ).first()
+        if not client_master:
+            # Fallback to first/main branch
+            client_master = db.query(ClientMaster).filter(ClientMaster.origin_id == client_origin.id).first()
     
-    cust_name = client_origin.unique_client_name if client_origin else enquiry.client_name
+    # Always use the clean company name (without branch suffix) on the invoice
+    cust_name = client_origin.unique_client_name if client_origin else base_client_name
     cust_addr = client_origin.office_address if client_origin else "Address specific to client..."
     cust_gst = client_origin.gst_no if client_origin else "N/A"
     cust_code = client_master.client_code if client_master else "N/A"
-    cust_pan = client_master.pan_no if client_master else "N/A"
+
+    cust_invoice_no = (customer_invoice_no or "").strip()
+    if not cust_invoice_no and status and getattr(status, "si_number", None):
+        cust_invoice_no = (status.si_number or "").strip()
+    if not cust_invoice_no:
+        saved_inv = db.query(Invoice).filter(Invoice.enquiry_id == enquiry_id).first()
+        if saved_inv and getattr(saved_inv, "customer_invoice_no", None):
+            cust_invoice_no = (saved_inv.customer_invoice_no or "").strip()
+    if not cust_invoice_no:
+        cust_invoice_no = "N/A"
     
     shipper_val = "N/A"
     if client_master:
@@ -248,11 +431,15 @@ async def generate_invoice_pdf(
     etd = status.etd.strftime("%d-%b-%y") if (status and status.etd) else "N/A"
     eta = status.eta.strftime("%d-%b-%y") if (status and status.eta) else "N/A"
     master_no = status.master_number if status else "N/A"
-    house_no = "N/A"
     reverse_charge = "No"
     
-    job_no = enquiry.enquiry_number
+    job_no = enquiry.enquiry_number or "N/A"
     job_date = enquiry.created_at.strftime("%d-%b-%y")
+    # When HBL is required, House Number on invoice = Job Number (sale/enquiry no.)
+    if getattr(enquiry, "hbl_required", False) and job_no != "N/A":
+        house_no = job_no
+    else:
+        house_no = "N/A"
     
     inv_no_val = invoice_number if invoice_number else "INV-DRAFT"
     inv_date_val = invoice_date if invoice_date else datetime.date.today().strftime("%d-%b-%y")
@@ -310,11 +497,14 @@ async def generate_invoice_pdf(
     left_col_data.append(kv_row("Final Destination", pod))
     left_col_data.append(kv_row("Vessel", vessel))
     left_col_data.append(kv_row("Voyage Number", voyage))
+    container_no = (status.container_number or "").strip() if status else ""
+    if container_no:
+        left_col_data.append(kv_row("Container No.", container_no))
     
     # Right Column Data
     right_col_data = []
     right_col_data.append(kv_row("Customer Code", cust_code))
-    right_col_data.append(kv_row("Customer PAN No.", cust_pan))
+    right_col_data.append(kv_row("Customer Invoice No.", cust_invoice_no))
     right_col_data.append([Spacer(1, 2), Spacer(1, 2)])
     right_col_data.append(kv_row("Invoice Number", inv_no_val))
     # IRN: 64-char hash — same font size as other fields, wraps naturally in the column
@@ -350,6 +540,7 @@ async def generate_invoice_pdf(
     headers = ["SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt", "ROE", "Taxable Amt", "Rate", "IGST", "Amt in INR"]
     
     table_data = [headers]
+    grand_total_taxable = 0.0
     grand_total_inr = 0.0
     sn = 1
     
@@ -361,22 +552,20 @@ async def generate_invoice_pdf(
     # Re-map headers to Paragraphs
     table_data[0] = [Paragraph(h, t_style_header) for h in headers]
 
-    # ROE is validated as mandatory at the start — use it directly
-    current_roe = roe
-    
     if item_type in ["all", "main"]:
-        for container in sorted(quote.containers, key=lambda c: c.container_sequence):
-            for charge in sorted(container.charges, key=lambda ch: (ch.charge_sequence, ch.id)):
+        for container in sorted(containers, key=lambda c: c.container_sequence or 0):
+            for charge in sorted(
+                container.charges or [],
+                key=lambda ch: (ch.charge_sequence or 0, ch.id or 0),
+            ):
                 if charge.account_type != "On Your Account":
                     continue
 
-                # Use vendor_rate (client-facing per-unit price); fall back to shipping line rate if not set
-                vendor_rate_per_unit = charge.vendor_rate if (charge.vendor_rate and charge.vendor_rate > 0) else None
+                vendor_rate_per_unit = _client_rate_for_invoice(charge)
                 if vendor_rate_per_unit is None:
-                    # Fallback: use the shipping line rate (same formula will apply below)
-                    vendor_rate_per_unit = charge.rate
+                    continue
 
-                desc_lower = charge.charge_description.lower()
+                desc_lower = (charge.charge_description or "").lower()
 
                 # Determine SAC and GST pct
                 sac_code = "996511"  # Default
@@ -392,9 +581,6 @@ async def generate_invoice_pdf(
                 elif "seal charge" in desc_lower or "seal fee" in desc_lower:
                     sac_code = "996799"
                     gst_pct = 18.0
-                elif "muc" in desc_lower:
-                    sac_code = "996711"
-                    gst_pct = 18.0
                 elif "facilitation" in desc_lower:
                     sac_code = "996711"
                     gst_pct = 18.0
@@ -402,22 +588,21 @@ async def generate_invoice_pdf(
                     gst_pct = 18.0
 
                 qty = charge.quantity
-                curr = charge.currency
+                curr = charge.currency or "INR"
 
                 unit_val = f"{qty:.2f}"
                 rate_val = f"{vendor_rate_per_unit:.2f}"
 
-                # Vendor Total = vendor_rate × qty × ex_rate  (same formula as shipping line)
-                curr_amt = vendor_rate_per_unit * qty
-                if curr == "USD":
-                    roe_display = current_roe
-                    taxable_amt = curr_amt * roe_display
-                else:
-                    roe_display = 1.0
-                    taxable_amt = curr_amt
+                try:
+                    curr_amt, roe_display, taxable_amt = invoice_quote_service.taxable_inr_for_invoice_charge(
+                        charge, vendor_rate_per_unit
+                    )
+                except ValueError as exc:
+                    raise HTTPException(status_code=422, detail=str(exc)) from exc
 
                 igst_amt = taxable_amt * (gst_pct / 100.0)
                 total_inr = taxable_amt + igst_amt
+                grand_total_taxable += taxable_amt
                 grand_total_inr += total_inr
 
                 row = [
@@ -444,6 +629,10 @@ async def generate_invoice_pdf(
             ShipmentDocument.enquiry_id == enquiry_id,
             ShipmentDocument.document_type == "additionalInvoice"
         ).all()
+        if item_type == "additional" and additional_doc_id is not None:
+            additional_docs = [
+                d for d in additional_docs if int(d.id) == int(additional_doc_id)
+            ]
 
         for add_doc in additional_docs:
             metadata = add_doc.metadata_info or {}
@@ -460,8 +649,6 @@ async def generate_invoice_pdf(
                 gst_pct = 18.0
             elif "seal charge" in desc_lower or "seal fee" in desc_lower:
                 gst_pct = 18.0
-            elif "muc" in desc_lower:
-                gst_pct = 18.0
             elif "facilitation" in desc_lower:
                 gst_pct = 18.0
             else:
@@ -471,18 +658,21 @@ async def generate_invoice_pdf(
                 curr_amt = float(metadata.get("amount", 0))
             except (ValueError, TypeError):
                 curr_amt = 0.0
-                
-            curr = "INR"
-            
-            if curr == "USD":
-                roe_display = current_roe
-                taxable_amt = curr_amt * roe_display
-            else:
-                roe_display = 1.0
-                taxable_amt = curr_amt
+
+            curr = (metadata.get("currency") or "INR").upper()
+            meta_roe = metadata.get("roe", metadata.get("exchange_rate"))
+            try:
+                curr_amt, roe_display, taxable_amt = (
+                    invoice_quote_service.taxable_inr_for_additional_amount(
+                        curr_amt, curr, containers, exchange_rate=meta_roe
+                    )
+                )
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail=str(exc)) from exc
 
             igst_amt = taxable_amt * (gst_pct / 100.0)
             total_inr = taxable_amt + igst_amt
+            grand_total_taxable += taxable_amt
             grand_total_inr += total_inr
 
             table_data.append([
@@ -501,7 +691,13 @@ async def generate_invoice_pdf(
             ])
             sn += 1
             
-    # Total Row
+    # Summary rows
+    taxable_total_val = Paragraph(f"<b>{grand_total_taxable:.2f}</b>", t_style_row)
+    table_data.append([
+        '', Paragraph('<b>Total Taxable Amount</b>', t_style_row),
+        '', '', '', '', '', '', taxable_total_val, '', '', ''
+    ])
+
     total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)
     table_data.append(['', 'Total', '', '', '', '', '', '', '', '', '', total_val])
 
@@ -510,9 +706,11 @@ async def generate_invoice_pdf(
         ('GRID', (0,0), (-1,-1), 0.5, colors.black),
         ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('SPAN', (1,-1), (10,-1)), 
-        ('ALIGN', (1,-1), (10,-1), 'RIGHT'), 
-        ('FONTNAME', (0,-1), (-1,-1), 'Helvetica-Bold'),
+        ('SPAN', (1,-2), (7,-2)),
+        ('ALIGN', (1,-2), (7,-2), 'RIGHT'),
+        ('SPAN', (1,-1), (10,-1)),
+        ('ALIGN', (1,-1), (10,-1), 'RIGHT'),
+        ('FONTNAME', (0,-2), (-1,-1), 'Helvetica-Bold'),
         ('TOPPADDING', (0,0), (-1,-1), 2),
         ('BOTTOMPADDING', (0,0), (-1,-1), 2),
     ]))

@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HBL / MTD Document – ATLAS EXIM</title>
+    <link href="css/styles.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        #hblPrintArea {
+            max-width: 900px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 0;
+            background: #fff;
+            box-sizing: border-box;
+        }
+
+        @page {
+            size: A4 portrait;
+            margin: 7mm;
+        }
+        @media print {
+            .no-print { display: none !important; }
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #fff !important;
+                overflow: hidden !important;
+                height: auto !important;
+            }
+            .mtd-page { padding: 0 !important; margin: 0 !important; }
+            body * { visibility: hidden; }
+            #hblPrintArea, #hblPrintArea *,
+            #hblTermsPrintPages, #hblTermsPrintPages * { visibility: visible; }
+            #hblPrintArea {
+                position: relative;
+                left: auto;
+                top: auto;
+                width: 100%;
+                max-width: 100%;
+                margin: 0;
+                padding: 0;
+                font-size: 8.5pt;
+                line-height: 1.22;
+                zoom: 0.9;
+            }
+            #hblTermsPrintPages {
+                position: relative;
+                left: auto;
+                top: auto;
+                width: 100%;
+                max-width: 100%;
+                margin: 0;
+                padding: 0;
+                zoom: 1 !important;
+            }
+            .mtd-sheet { box-shadow: none; margin: 0; overflow: visible; }
+            .mtd-doc-header { margin-bottom: 3px; }
+            .mtd-doc-header .mtd-bl-no-line,
+            .mtd-doc-header .mtd-title-wrap { font-size: 8.5pt; }
+            .mtd-doc-header .mtd-bl-no-line .mtd-draft-inline:not(.hidden) {
+                font-weight: 900;
+            }
+            .mtd-table td, .mtd-table th,
+            .cargo-table td, .cargo-table th,
+            .bottom-section td, .bottom-section th {
+                padding: 2px 4px;
+            }
+            .field-label { font-size: 8pt; margin-bottom: 1px; }
+            .field-val, .field-val-bold {
+                font-size: 8.5pt;
+                min-height: 0;
+                overflow-wrap: anywhere !important;
+                word-break: break-word !important;
+                word-wrap: break-word !important;
+            }
+            #consignor { min-height: 44px !important; }
+            #consignee, #deliveryAgent { min-height: 36px !important; }
+            #notifyParty1, #notifyParty2 {
+                min-height: 28px !important;
+                overflow-wrap: anywhere !important;
+                word-break: break-word !important;
+            }
+            .mtd-table td {
+                max-width: 0;
+                overflow-wrap: anywhere !important;
+                word-break: break-word !important;
+            }
+            .cargo-table {
+                table-layout: fixed !important;
+                width: 100% !important;
+                border-collapse: collapse !important;
+            }
+            .cargo-table th { font-size: 7.5pt; }
+            #hblPage2 .cargo-table tbody tr.cargo-data-row > td {
+                height: auto !important;
+                min-height: 58px !important;
+                max-height: none !important;
+                overflow: visible !important;
+                font-size: 8pt;
+                vertical-align: top !important;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+            .mtd-grid-frame {
+                display: block !important;
+            }
+            .hbl-page-2:not(.hidden) {
+                page-break-before: always;
+                break-before: page;
+            }
+            #hblPage2.hidden {
+                display: none !important;
+            }
+            #hblCargoPage1Box {
+                page-break-inside: avoid;
+                break-inside: avoid;
+                --hbl-cargo-row-h: 190px;
+                --hbl-cargo-note-h: 22px;
+            }
+            #hblCargoPage1Box.has-cargo-overflow {
+                --hbl-cargo-row-h: calc(190px - var(--hbl-cargo-note-h)) !important;
+            }
+            #hblCargoPage1Box.has-cargo-overflow .cargo-continued-note {
+                display: block !important;
+            }
+            #hblCargoPage1Box .cargo-table-preview tbody tr.cargo-data-row > td {
+                height: var(--hbl-cargo-row-h, 190px) !important;
+                min-height: var(--hbl-cargo-row-h, 190px) !important;
+                max-height: var(--hbl-cargo-row-h, 190px) !important;
+                overflow: hidden !important;
+                vertical-align: top !important;
+                padding: 0 !important;
+                font-size: 11px !important;
+                line-height: 1.35 !important;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
+            }
+            #hblCargoPage1Box .cargo-preview-inner {
+                display: block !important;
+                width: 100% !important;
+                height: 100% !important;
+                min-height: 0 !important;
+                max-height: 100% !important;
+                overflow: hidden !important;
+                font-size: 11px !important;
+                line-height: 1.35 !important;
+                box-sizing: border-box !important;
+                padding: 2px 4px !important;
+            }
+            #hblPage2 .cargo-table tbody tr.cargo-data-row > td {
+                font-size: 11px !important;
+                line-height: 1.35 !important;
+            }
+            .cargo-table tfoot td { padding: 2px 4px; font-size: 8pt; font-style: normal; }
+            .bottom-section td { font-size: 8pt; }
+            .legal-clause { font-size: 7.5pt; line-height: 1.3; }
+            .signature-block {
+                padding: 0;
+                font-size: 8pt;
+                min-height: 70px;
+            }
+            .signature-block .sig-role { margin-top: 14px; }
+            .signature-block.with-signature .sig-role { margin-top: 4px; }
+            .hbl-auth-signature:not(.hidden) {
+                display: block !important;
+                max-width: 130px;
+                max-height: 44px;
+                margin: 2px auto 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .end-of-bl { margin: 4px 0 0; padding: 2px 0; font-size: 8.5pt; }
+            @page hbl-terms {
+                size: A4 portrait;
+                margin: 5mm;
+            }
+            .hbl-terms-print-pages {
+                margin: 0;
+                padding: 0;
+                zoom: 1 !important;
+                page-break-before: always;
+                break-before: page;
+            }
+            .hbl-terms-page {
+                page: hbl-terms;
+                page-break-before: always;
+                break-before: page;
+                page-break-after: always;
+                break-after: page;
+                page-break-inside: avoid;
+                break-inside: avoid;
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                height: calc(297mm - 10mm);
+                min-height: calc(297mm - 10mm);
+                box-sizing: border-box;
+                display: block;
+                overflow: hidden;
+            }
+            .hbl-terms-page-img {
+                display: block;
+                width: 100%;
+                height: 100%;
+                max-width: 100%;
+                max-height: 100%;
+                margin: 0 auto;
+                object-fit: contain;
+                object-position: top center;
+                image-rendering: auto;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .hbl-watermark-layer:not(.hidden) {
+                display: block !important;
+                visibility: visible !important;
+            }
+            .watermark:not(.hidden) {
+                display: block !important;
+                visibility: visible !important;
+                position: absolute !important;
+                top: 50% !important;
+                left: 50% !important;
+                width: auto !important;
+                height: auto !important;
+                margin: 0 !important;
+                transform: translate(-50%, -50%) rotate(-35deg) !important;
+                color: rgba(0, 0, 0, 0.14) !important;
+                font-size: 64px !important;
+                z-index: 1 !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
+            .hbl-page-sheet {
+                position: relative;
+                min-height: var(--hbl-page-h);
+                --hbl-page-h: calc(297mm - 14mm);
+            }
+            .hbl-page-2:not(.hidden) {
+                page-break-after: always;
+                break-after: page;
+            }
+            .mtd-company-block { gap: 6px; }
+            .mtd-company { font-size: 9pt; margin-bottom: 2px; }
+            .mtd-company-logo { height: 24px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .mtd-company-addr { font-size: 7.5pt; line-height: 1.3; }
+            .mtd-mto-cell { font-size: 8pt; line-height: 1.3; }
+        }
+
+        body { background: #e5e7eb; overflow-x: auto; }
+        .mtd-page { padding: 32px 0 60px; }
+        .mtd-actions { max-width: 900px; margin: 0 auto 16px; display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+
+        .mtd-sheet {
+            margin: 0;
+            background: #fff;
+            border: none;
+            box-sizing: border-box;
+            font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #000;
+            line-height: 1.35; position: relative; overflow: visible;
+        }
+
+        /* Document title band — MTD BL left, document titles top-right */
+        .mtd-doc-header {
+            margin: 0 0 6px;
+            padding: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            font-family: Arial, Helvetica, sans-serif;
+            border: none;
+            background: transparent;
+        }
+        .mtd-doc-header .mtd-bl-no-line {
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #4b5563;
+            line-height: 1.4;
+            flex: 1 1 auto;
+            text-align: left;
+        }
+        .mtd-doc-header .mtd-bl-no-line .mtd-draft-inline {
+            font-weight: 900;
+            margin-right: 0.35em;
+        }
+        .mtd-doc-header .mtd-bl-no-line .mtd-draft-inline.hidden {
+            display: none;
+        }
+        .mtd-doc-header .mtd-title-wrap {
+            text-align: right;
+            font-size: 11px;
+            font-weight: bold;
+            line-height: 1.35;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #4b5563;
+            flex: 0 0 auto;
+            margin-top: 0;
+        }
+
+        /* Watermark — diagonal overlay on first printed page only */
+        .hbl-watermark-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--hbl-page-h);
+            pointer-events: none;
+            z-index: 100;
+            overflow: visible;
+        }
+        .hbl-watermark-layer.hidden { display: none; }
+        .watermark {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-35deg);
+            font-size: 80px;
+            font-weight: bold;
+            color: rgba(0, 0, 0, 0.08);
+            white-space: nowrap;
+            pointer-events: none;
+            letter-spacing: 4px;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        .watermark.hidden { display: none; }
+        .mtd-doc-header,
+        .mtd-sheet,
+        .mtd-table,
+        .cargo-table,
+        .bottom-section {
+            position: relative;
+            z-index: 1;
+        }
+
+        .mtd-grid-frame {
+            position: relative;
+            z-index: 1;
+            border: 1px solid #000;
+            box-sizing: border-box;
+        }
+
+        .mtd-table, .cargo-table, .bottom-section {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+            margin: 0;
+            border: none;
+        }
+        .mtd-table td, .mtd-table th,
+        .cargo-table td, .cargo-table th,
+        .bottom-section td, .bottom-section th {
+            border: 1px solid #000;
+            padding: 6px 8px;
+            vertical-align: top;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            word-wrap: break-word;
+        }
+        /* Keep long emails/addresses inside Notify Party cells (no spaces after commas) */
+        .mtd-table td {
+            max-width: 0;
+        }
+        #notifyParty1, #notifyParty2,
+        #consignor, #consignee, #deliveryAgent {
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            word-wrap: break-word;
+            max-width: 100%;
+        }
+        /* One continuous grid between stacked tables */
+        .cargo-table thead tr:first-child th,
+        .cargo-table thead tr:first-child td,
+        .cargo-table tbody tr:first-child td,
+        .bottom-section tr:first-child td {
+            border-top: none;
+        }
+
+        .mtd-bl-no-label { font-size: 12px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.02em; }
+
+        .mtd-company-block {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            grid-template-rows: auto auto;
+            column-gap: 10px;
+            row-gap: 4px;
+            align-items: start;
+            justify-items: start;
+            text-align: left;
+            padding-bottom: 4px;
+            width: fit-content;
+            max-width: 100%;
+            margin: 0 auto;
+        }
+        .mtd-company-logo {
+            grid-column: 1;
+            grid-row: 1 / 3;
+            height: 32px;
+            width: auto;
+            display: block;
+            object-fit: contain;
+            align-self: center;
+            justify-self: center;
+        }
+        .mtd-company {
+            grid-column: 2;
+            grid-row: 1;
+            font-weight: bold;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 0;
+            line-height: 1.3;
+            text-align: left;
+            align-self: center;
+        }
+        .mtd-company-addr {
+            grid-column: 2;
+            grid-row: 2;
+            font-size: 10px;
+            line-height: 1.45;
+            font-weight: normal;
+            text-transform: none;
+            text-align: left;
+        }
+
+        .mtd-mto-cell {
+            border-top: 1px solid #000;
+            font-size: 11px;
+            line-height: 1.45;
+            vertical-align: top;
+        }
+
+        .field-label {
+            font-size: 11px;
+            color: #000;
+            display: block;
+            margin-bottom: 4px;
+            font-weight: normal;
+        }
+        .field-val {
+            font-size: 12px;
+            font-weight: normal;
+            min-height: 14px;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            word-wrap: break-word;
+            max-width: 100%;
+        }
+        .field-val-bold {
+            font-size: 12px;
+            font-weight: bold;
+            min-height: 14px;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+            word-wrap: break-word;
+            max-width: 100%;
+        }
+
+        .cargo-table {
+            table-layout: fixed;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .cargo-table th {
+            font-weight: bold;
+            font-size: 10px;
+            text-transform: none;
+            text-align: left;
+            vertical-align: top;
+        }
+        .cargo-table td {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+        #hblPrintArea.hbl-print-measure #hblCargoPage1Box .cargo-preview-inner {
+            font-size: 8pt;
+            line-height: 1.22;
+        }
+        #hblPrintArea.hbl-print-measure #hblCargoPage1Box .cargo-table-preview tbody tr.cargo-data-row > td {
+            font-size: 8pt;
+        }
+        .hbl-page-sheet {
+            position: relative;
+            max-width: 900px;
+            margin: 0 auto 28px;
+            background: #fff;
+            --hbl-page-h: 1050px;
+            min-height: var(--hbl-page-h);
+        }
+        .hbl-page-2 {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 2px dashed #cbd5e1;
+        }
+        #hblPage2.hidden {
+            display: none !important;
+        }
+        .hbl-terms-print-pages {
+            max-width: 900px;
+            margin: 24px auto 0;
+            padding: 0;
+            page-break-before: always;
+            break-before: page;
+        }
+        .hbl-terms-page {
+            page-break-before: always;
+            break-before: page;
+            margin: 0 auto 20px;
+            min-height: 1050px;
+        }
+        .hbl-terms-page-img {
+            display: block;
+            width: 100%;
+            height: auto;
+            margin: 0 auto;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+        }
+        @media print {
+            .hbl-terms-print-pages {
+                max-width: 100%;
+                margin: 0;
+            }
+            .hbl-terms-page {
+                margin: 0;
+                box-shadow: none;
+            }
+            .hbl-terms-page-img { box-shadow: none; }
+        }
+        .hbl-page-label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            margin: 0 auto 8px;
+            max-width: 900px;
+            padding: 0 4px;
+        }
+        .hbl-page-label.hbl-page-2-label { color: #2563eb; }
+        @media print {
+            .hbl-page-label { display: none !important; }
+            .hbl-page-2 { border-top: none; margin-top: 0; padding-top: 0; }
+        }
+        #hblCargoPage1Box {
+            --hbl-cargo-row-h: 190px;
+            --hbl-cargo-note-h: 22px;
+            position: relative;
+        }
+        #hblCargoPage1Box.has-cargo-overflow {
+            --hbl-cargo-row-h: calc(190px - var(--hbl-cargo-note-h));
+        }
+        #hblCargoPage1Box .cargo-table tbody tr.cargo-data-row td {
+            height: var(--hbl-cargo-row-h);
+            min-height: var(--hbl-cargo-row-h);
+            max-height: var(--hbl-cargo-row-h);
+            overflow: hidden;
+            padding: 0;
+            vertical-align: top;
+        }
+        #hblCargoPage1Box .cargo-continued-note {
+            display: none;
+            height: var(--hbl-cargo-note-h);
+            line-height: var(--hbl-cargo-note-h);
+            text-align: center;
+            font-size: 11px;
+            font-weight: bold;
+            border-top: 1px solid #000;
+            background: #fff;
+            box-sizing: border-box;
+        }
+        #hblCargoPage1Box.has-cargo-overflow .cargo-continued-note {
+            display: block;
+        }
+        #hblCargoPage1Box .cargo-continued-note.hidden {
+            display: none !important;
+        }
+        #hblCargoPage1Box.has-cargo-overflow .cargo-continued-note:not(.hidden) {
+            display: block !important;
+        }
+        #hblPage2 .cargo-table tbody tr.cargo-data-row td {
+            height: auto;
+            min-height: 120px;
+            max-height: none;
+            overflow: visible;
+            vertical-align: top;
+            font-size: 11px;
+            border: 1px solid #000;
+            white-space: pre-line;
+            box-sizing: border-box;
+        }
+        #hblCargoPage1Box .cargo-preview-cell {
+            position: relative;
+        }
+        #hblCargoPage1Box .cargo-preview-inner {
+            display: block;
+            width: 100%;
+            height: 100%;
+            min-height: 0;
+            box-sizing: border-box;
+            font-size: 11px;
+            white-space: pre-line;
+            overflow: hidden;
+            outline: none;
+            direction: ltr;
+            unicode-bidi: isolate;
+            text-align: left;
+        }
+        .edit-mode #hblCargoPage1Box .cargo-preview-inner {
+            overflow-x: hidden;
+            overflow-y: auto;
+        }
+        .cargo-table thead th {
+            border: 1px solid #000;
+        }
+        .cargo-table tfoot td {
+            border: 1px solid #000;
+            border-top: 1px solid #000;
+            padding: 5px 8px;
+        }
+        .particulars-note {
+            text-align: left;
+            font-size: 11px;
+            font-style: normal;
+            font-weight: normal;
+        }
+
+        .bottom-section td { font-size: 11px; }
+
+        .freight-head { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
+        .freight-head .field-label { display: inline; margin-bottom: 0; }
+        .freight-pc { font-size: 11px; display: flex; gap: 20px; }
+
+        .legal-clause { font-size: 10px; line-height: 1.45; font-weight: normal; text-align: left; }
+
+        .signature-cell {
+            vertical-align: middle !important;
+            text-align: center;
+        }
+        .signature-block {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            min-height: 100px;
+            padding: 8px 4px;
+            font-weight: bold;
+            font-size: 11px;
+        }
+        .signature-block .sig-for { text-transform: uppercase; letter-spacing: 0.02em; }
+        .signature-block .sig-role { margin-top: 48px; font-style: italic; font-weight: normal; text-transform: none; }
+        .signature-block.with-signature .sig-role { margin-top: 6px; }
+        .hbl-auth-signature {
+            display: block;
+            max-width: 160px;
+            max-height: 56px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            margin: 4px auto 0;
+        }
+        .hbl-auth-signature.hidden { display: none; }
+
+        .end-of-bl {
+            margin: 12px 0 0; text-align: center;
+            font-weight: bold; font-size: 12px; padding: 10px 0;
+            font-family: Arial, Helvetica, sans-serif;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+
+        /* Edit mode */
+        .edit-mode .editable {
+            outline: 1px dashed #93c5fd;
+            background: #eff6ff;
+            cursor: text;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+        .edit-mode .editable:focus { outline: 2px solid #3b82f6; background: #dbeafe; }
+        .edit-badge { display: none; font-size: 11px; color: #2563eb; font-family: sans-serif; margin-left: 8px; }
+        .edit-mode .edit-badge { display: inline; }
+
+    </style>
+</head>
+
+<body>
+    <div class="mtd-page">
+        <!-- Action Buttons -->
+        <div class="mtd-actions no-print">
+            <button class="btn btn-secondary" onclick="window.history.back()" style="padding: 8px 16px; font-size: 13px;">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+            <select id="blTypeSelect" onchange="switchBlType(this.value)" style="padding: 8px 14px; font-size: 13px; border: 1px solid #d1d5db; border-radius: 6px; font-weight: 600; cursor: pointer;">
+                <option value="seaway">Seaway Bill of Lading</option>
+                <option value="original">Original</option>
+            </select>
+            <label class="no-print" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="draftMarkToggle" onchange="toggleDraftMark(this.checked)">
+                Draft
+            </label>
+            <label id="watermarkToggleWrap" class="no-print" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="watermarkToggle" checked onchange="toggleWatermark(this.checked)">
+                Watermark
+            </label>
+            <label class="no-print" style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; cursor: pointer; user-select: none;">
+                <input type="checkbox" id="applySignToggle" onchange="toggleApplySign(this.checked)">
+                Apply sign
+            </label>
+            <button class="btn btn-secondary" id="editBtn" onclick="toggleEdit()" style="padding: 8px 16px; font-size: 13px;">
+                <i class="fas fa-pen"></i> Edit
+            </button>
+            <button class="btn btn-secondary" id="viewDraftBtn" onclick="viewDraftFromToolbar()" style="padding: 8px 16px; font-size: 13px;" title="Show the document with Draft marking enabled">
+                <i class="fas fa-eye"></i> View Draft
+            </button>
+            <button class="btn btn-secondary" id="saveLocalBtn" onclick="saveDocumentToServer()" style="padding: 8px 16px; font-size: 13px;" title="Save all fields to server so you can restore later">
+                <i class="fas fa-save"></i> Save
+            </button>
+            <button class="btn btn-primary" id="printBtn" onclick="printDoc()" style="padding: 8px 16px; font-size: 13px;">
+                <i class="fas fa-print"></i> Print
+            </button>
+        </div>
+
+        <!-- MTD Document Sheet (print/PDF capture area) -->
+        <div id="hblPrintArea">
+        <div id="hblPage1" class="hbl-page-sheet">
+            <div class="hbl-watermark-layer" id="watermarkLayer">
+                <div class="watermark" id="watermark">SEAWAY BL</div>
+            </div>
+        <div class="mtd-doc-header">
+            <div class="mtd-bl-no-line">
+                <span id="mtdDraftPrefix" class="mtd-draft-inline hidden" aria-hidden="true">Draft</span><span>MTD BL NO:</span>
+                <span class="editable" id="mtdBlNo"></span>
+            </div>
+            <div class="mtd-title-wrap">MULTI-MODAL TRANSPORT DOCUMENT<br><span id="blTypeLabel">SEAWAY BILL OF LADING</span></div>
+        </div>
+        <div class="mtd-sheet">
+            <div class="mtd-grid-frame">
+            <table class="mtd-table">
+                <tr>
+                    <td colspan="3" rowspan="2">
+                        <span class="field-label">Consignor</span>
+                        <div class="field-val editable" id="consignor" style="min-height: 72px;"></div>
+                    </td>
+                    <td colspan="3" style="vertical-align: top;">
+                        <div class="mtd-company-block">
+                            <img src="Logipod_Logo.png" alt="Logipod" class="mtd-company-logo">
+                            <div class="mtd-company">LOGIPOD LOGISTICS PRIVATE LIMITED</div>
+                            <div class="mtd-company-addr">
+                                3rd floor, Plot No. 448A, Udyog Vihar Phase 5 Industrial Complex Gurugram<br>
+                                Gurgaon Haryana India - 122016<br>
+                                Tel: +91 9988553772 -<br>
+                                exim_ops@logipod.in | www.logipod.in
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3" class="mtd-mto-cell">
+                        <strong>MTO Registration Number:</strong> MTO/DGS/120260401000001/APR/2029<br>
+                        <strong>Shipment Reference No:</strong> <span id="shipmentRefNo" class="field-val"></span>
+                    </td>
+                </tr>
+
+                <!-- Consignee + Delivery Agent -->
+                <tr>
+                    <td colspan="3">
+                        <span class="field-label">Consignee (or To Order)</span>
+                        <div class="field-val editable" id="consignee" style="min-height: 60px;"></div>
+                    </td>
+                    <td colspan="3">
+                        <span class="field-label">Delivery Agent</span>
+                        <div class="field-val editable" id="deliveryAgent" style="min-height: 60px;"></div>
+                    </td>
+                </tr>
+
+                <!-- Notify parties -->
+                <tr>
+                    <td colspan="3">
+                        <span class="field-label">Notify Party1 Address</span>
+                        <div class="field-val editable" id="notifyParty1" style="min-height: 50px;"></div>
+                    </td>
+                    <td colspan="3">
+                        <span class="field-label">Notify Party2 Address</span>
+                        <div class="field-val editable" id="notifyParty2" style="min-height: 50px;"></div>
+                    </td>
+                </tr>
+
+                <!-- Place of Acceptance | Port of Loading | Date of Acceptance -->
+                <tr>
+                    <td colspan="2">
+                        <span class="field-label">Place of Acceptance</span>
+                        <div class="field-val editable" id="placeAcceptance"></div>
+                    </td>
+                    <td colspan="2">
+                        <span class="field-label">Port of Loading</span>
+                        <div class="field-val editable" id="portLoading"></div>
+                    </td>
+                    <td colspan="2">
+                        <span class="field-label">Date of Acceptance</span>
+                        <div class="field-val editable" id="dateAcceptance"></div>
+                    </td>
+                </tr>
+
+                <!-- Port of Discharge | Place of Delivery | Route -->
+                <tr>
+                    <td colspan="2">
+                        <span class="field-label">Port of Discharge</span>
+                        <div class="field-val editable" id="portDischarge"></div>
+                    </td>
+                    <td colspan="2">
+                        <span class="field-label">Place of Delivery</span>
+                        <div class="field-val editable" id="placeDelivery"></div>
+                    </td>
+                    <td colspan="2">
+                        <span class="field-label">Route / Place of Transshipment (if any)</span>
+                        <div class="field-val editable" id="routeTranshipment"></div>
+                    </td>
+                </tr>
+
+                <!-- Vessel | Voyage | Modes | Date of delivery -->
+                <tr>
+                    <td colspan="1">
+                        <span class="field-label">Vessel</span>
+                        <div class="field-val editable" id="vesselName"></div>
+                    </td>
+                    <td colspan="1">
+                        <span class="field-label">Voyage No.</span>
+                        <div class="field-val editable" id="voyageNo"></div>
+                    </td>
+                    <td colspan="2">
+                        <span class="field-label">Modes Means of Transport</span>
+                        <div class="field-val editable" id="modesTransport"></div>
+                    </td>
+                    <td colspan="2">
+                        <span class="field-label">Date or Period of Delivery (as expressly agreed upon by the consignor and MTO)</span>
+                        <div class="field-val editable" id="dateDelivery"></div>
+                    </td>
+                </tr>
+            </table>
+
+            <div id="hblCargoPage1Box" class="hbl-cargo-page1-box">
+            <table class="cargo-table cargo-table-preview">
+                <colgroup>
+                    <col style="width: 12%;">
+                    <col style="width: 12%;">
+                    <col style="width: 44%;">
+                    <col style="width: 16%;">
+                    <col style="width: 16%;">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Container No(s)</th>
+                        <th>Marks &amp; Number</th>
+                        <th>Number of packages, Kind of packages, General description of goods</th>
+                        <th>Gross Weight</th>
+                        <th>Measurement</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="cargo-data-row">
+                        <td class="cargo-preview-cell" id="containerNosPreview" data-cargo-source="containerNos"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
+                        <td class="cargo-preview-cell" id="marksNumberPreview" data-cargo-source="marksNumber"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
+                        <td class="cargo-preview-cell" id="cargoDescriptionPreview" data-cargo-source="cargoDescription"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
+                        <td class="cargo-preview-cell" id="cargoWeightPreview" data-cargo-source="cargoWeight"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
+                        <td class="cargo-preview-cell" id="cargoMeasurementPreview" data-cargo-source="cargoMeasurement"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
+                    </tr>
+                </tbody>
+            </table>
+            <div id="hblCargoContinuedNote" class="cargo-continued-note hidden" aria-hidden="true">Details Contd. on Attached Sheet.</div>
+            </div>
+
+            <!-- Bottom Section -->
+            <div id="hblBottomSection">
+            <table class="mtd-table bottom-section">
+                <tr>
+                    <td colspan="3" style="width: 50%; vertical-align: top;">
+                        <div class="freight-head">
+                            <span class="field-label">Freight amount</span>
+                            <div class="freight-pc">
+                                <span id="freightPrepaid" onclick="selectFreight('prepaid')" style="font-weight: bold; text-decoration: underline; cursor: pointer;">Prepaid</span>
+                                <span id="freightCollect" onclick="selectFreight('collect')" style="font-weight: normal; cursor: pointer;">Collect</span>
+                            </div>
+                        </div>
+                        <div class="legal-clause" style="margin-top: 10px;">
+                            <strong>Freight payable at by consignor / consignee</strong>
+                            (to be mentioned only if expressly agreed by both the consignor / consignee)
+                        </div>
+                    </td>
+                    <td colspan="3" class="legal-clause" style="vertical-align: top;">
+                        Taken in charge in apparently good condition herein at the place of receipt for
+                        transport &amp; delivery as mentioned above unless otherwise stated. The MTO in
+                        accordance with the provision contained in the MTD undertakes to perform or to
+                        procure the performance of the multimodal transport from the place at which the
+                        goods are taken in charge, to the place designated for delivery &amp; assume
+                        responsibility for such transport.<br><br>
+                        One of the MTD (3) must be surrendered, duly endorsed in exchange for the goods
+                        in witness where of the original MTD all of this force &amp; date have been signed in the
+                        number indicated below one of which being accomplished the other(s) to be void.
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3" style="vertical-align: top;">
+                        <span class="field-label" id="mtdOriginalCount" style="font-weight: bold;">Number of Original MTD: 0 / ZERO</span>
+                    </td>
+                    <td colspan="3" style="vertical-align: top;">
+                        <span class="field-label">Place and Date of Issue:</span>
+                        <div class="field-val editable" id="placeAndDateOfIssue"></div>
+                    </td>
+                </tr>
+                <tr>
+                    <td colspan="3" style="vertical-align: top;">
+                        <div style="margin-bottom: 6px;">
+                            <span class="field-label">Other particulars (if any)</span>
+                        </div>
+                        <div style="margin-top: 12px;">
+                            <span class="field-label" style="display: inline; font-weight: bold;">SOB Date:</span>
+                            <span id="sobDate" class="field-val editable"></span>
+                        </div>
+                        <div class="legal-clause" style="margin-top: 10px;">
+                            Weight and measurement of container not to be included
+                        </div>
+                    </td>
+                    <td colspan="3" class="signature-cell">
+                        <div class="signature-block" id="signatureBlock">
+                            <div class="sig-for">For LOGIPOD LOGISTICS PRIVATE LIMITED</div>
+                            <img id="hblAuthSignature" class="hbl-auth-signature hidden" src="sign_satkar.png" alt="Authorised signature">
+                            <div class="sig-role">(Authorised Signatory)</div>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+            </div>
+            <div id="hblEndOfBlAnchorPage1">
+                <div id="hblEndOfBlBlock">
+                <div class="end-of-bl">
+                    <span>******************END OF BL : <span id="endOfBlNo"></span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;******************</span>
+                </div>
+                </div>
+            </div>
+            </div>
+
+        </div>
+
+        <div id="hblPage2" class="hbl-page-sheet hbl-page-2 hidden" aria-hidden="true">
+            <div class="hbl-watermark-layer" id="watermarkLayerPage2">
+                <div class="watermark hbl-page2-watermark" id="watermarkPage2">SEAWAY BL</div>
+            </div>
+        <div class="mtd-sheet">
+            <div class="mtd-grid-frame">
+            <section id="cargoSection">
+            <table class="cargo-table" id="cargoTable">
+                <colgroup>
+                    <col style="width: 12%;">
+                    <col style="width: 12%;">
+                    <col style="width: 44%;">
+                    <col style="width: 16%;">
+                    <col style="width: 16%;">
+                </colgroup>
+                <thead>
+                    <tr>
+                        <th>Container No(s)</th>
+                        <th>Marks &amp; Number</th>
+                        <th>Number of packages, Kind of packages, General description of goods</th>
+                        <th>Gross Weight</th>
+                        <th>Measurement</th>
+                    </tr>
+                </thead>
+                <tbody id="cargoBody">
+                    <tr class="cargo-data-row">
+                        <td class="editable" id="containerNos">&nbsp;</td>
+                        <td class="editable" id="marksNumber">&nbsp;</td>
+                        <td class="editable" id="cargoDescription">&nbsp;</td>
+                        <td class="editable" id="cargoWeight">&nbsp;</td>
+                        <td class="editable" id="cargoMeasurement">&nbsp;</td>
+                    </tr>
+                </tbody>
+                <tfoot id="cargoTableFoot">
+                    <tr>
+                        <td colspan="5" class="particulars-note">
+                            Particulars above furnished by consignee/consignor
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+            </section>
+            </div>
+        </div>
+
+        <div id="hblEndOfBlAnchorPage2"></div>
+        </div>
+    </div>
+
+    <div id="hblTermsPrintPages" class="hbl-terms-print-pages" aria-label="Terms and conditions"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="js/config.js"></script>
+    <script src="js/common.js"></script>
+    <script src="js/hbl-document.js?v=48"></script>
+</body>
+
+</html>

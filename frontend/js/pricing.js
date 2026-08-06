@@ -2,40 +2,180 @@
 let currentEnquiry = null;
 let pricingQuotes = [];
 let activeQuoteIndex = 0;
-let currentExchangeRate = 86.8;
-let isConfirmMode = false;  // controls vendor rate column visibility
+// Fallback cross-rates to INR, used until /api/exchange-rate/rates resolves.
+let currentExchangeRates = { USD: 86.8, EUR: 94.35, GBP: 109.87, JPY: 0.55 };
+
+function getExchangeRateForCurrency(curr) {
+    if (curr === 'INR') return 1;
+    return currentExchangeRates[curr] || 1;
+}
+
+function getChargeCurrencies() {
+    return (CONFIG.CHARGE_CURRENCIES && CONFIG.CHARGE_CURRENCIES.length)
+        ? CONFIG.CHARGE_CURRENCIES
+        : ['USD', 'EUR', 'GBP', 'JPY', 'INR'];
+}
+let isConfirmMode = false;  // true when confirm-flow UI locks non-rate fields
+/** URL `mode=` so we can keep the calculator open for Confirm Quote flows even after a quote is already accepted */
+let pricingPageMode = '';
+let _confirmUiSetupTimer = null;
+
+function isQuoteAcceptedStatus(q) {
+    return q && String(q.status || '').toLowerCase() === 'accepted';
+}
+
+function resetSaveQuoteButtonAppearance() {
+    const saveBtn = document.querySelector('.form-actions button[onclick="savePricing()"]');
+    if (!saveBtn) return;
+    saveBtn.disabled = false;
+    saveBtn.style.opacity = '';
+    saveBtn.style.cursor = '';
+    saveBtn.innerHTML =
+        '<i class="fas fa-save" style="color: var(--navy-600)"></i> Save Quote';
+}
+
+/** Show Confirm This Quote while drafts exist; hide once accepted. */
+function syncConfirmQuoteButtonVisibility() {
+    const confirmBtn = document.getElementById('confirmQuoteBtn');
+    const saveBtn = document.querySelector('.form-actions button[onclick="savePricing()"]');
+    const hasAccepted = pricingQuotes.some(isQuoteAcceptedStatus);
+    const hasQuotes = pricingQuotes.length > 0;
+
+    if (confirmBtn) {
+        if (!hasAccepted && hasQuotes && pricingPageMode !== 'view') {
+            confirmBtn.style.display = 'inline-flex';
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML =
+                'Confirm This Quote <i class="fas fa-check-circle" style="margin-left: 8px;"></i>';
+            confirmBtn.style.background = '';
+            confirmBtn.style.opacity = '1';
+            confirmBtn.style.cursor = 'pointer';
+        } else {
+            confirmBtn.style.display = 'none';
+        }
+    }
+
+    // After confirmation, Edit Quote must not offer Save / Confirm.
+    if (saveBtn) {
+        if (hasAccepted || pricingPageMode === 'view') {
+            saveBtn.style.display = 'none';
+        } else {
+            saveBtn.style.display = '';
+        }
+    }
+}
+
+/** Clear any leftover soft-lock flags from older sessions (quotes stay editable until accepted). */
+function clearPricingSavedLock() {
+    resetSaveQuoteButtonAppearance();
+    if (!currentEnquiry || currentEnquiry.id == null) return;
+    try {
+        sessionStorage.removeItem(`pricing_saved_lock_${currentEnquiry.id}`);
+    } catch (_) { /* ignore */ }
+}
 
 document.addEventListener('DOMContentLoaded', async function () {
+    if (new URLSearchParams(window.location.search).get('embedded') === '1') {
+        document.documentElement.classList.add('embedded-mode');
+        document.body.classList.add('embedded-mode');
+    }
     // 1. Initial UI Setup
     populateInitialDropdowns();
+    bindQuoteConfirmationActions();
 
     // 2. Load Data
     const urlParams = new URLSearchParams(window.location.search);
     const enquiryId = urlParams.get('enquiry_id');
     const mode = urlParams.get('mode');
+    pricingPageMode = mode ? String(mode) : '';
 
     if (enquiryId) {
         await fetchEnquiryData(enquiryId);
         updateEnquirySummary(); // Populate the top summary bar
         await fetchQuotesForEnquiry(enquiryId);
         await fetchExchangeRate();
+        clearPricingSavedLock();
 
-        if (mode === 'confirm') {
-            initConfirmMode();
-        } else if (mode === 'view') {
-            initViewMode();
-        } else if (mode === 'edit') {
-            initPricingTable(true); // true means force edit
-        } else {
-            // Default behavior
-            initPricingTable();
+        const hasAcceptedQuote = pricingQuotes.some(isQuoteAcceptedStatus);
+
+        // Once confirmed, pricing is permanently read-only in Quotes & Pricing.
+        if (hasAcceptedQuote && pricingPageMode !== 'view') {
+            pricingPageMode = 'view';
         }
+
+        if (pricingPageMode === 'confirm') {
+            initConfirmMode();
+        } else if (pricingPageMode === 'view') {
+            isConfirmMode = false;
+            document.body.classList.remove('confirm-mode');
+            initViewMode();
+        } else if (pricingPageMode === 'edit') {
+            const hasAcceptedEdit = pricingQuotes.some(isQuoteAcceptedStatus);
+            if (hasAcceptedEdit) {
+                isConfirmMode = true;
+                document.body.classList.add('confirm-mode');
+            } else {
+                isConfirmMode = false;
+                document.body.classList.remove('confirm-mode');
+            }
+            initPricingTable(true); // true means force edit
+            resetSaveQuoteButtonAppearance();
+            syncConfirmQuoteButtonVisibility();
+        } else {
+            // Default behaviour — stay editable until quote is accepted
+            isConfirmMode = false;
+            document.body.classList.remove('confirm-mode');
+            initPricingTable();
+            resetSaveQuoteButtonAppearance();
+            syncConfirmQuoteButtonVisibility();
+        }
+
+        hideEmbeddedDrawerBackButtons();
+        applyLockedQuoteViewChrome();
     }
 });
 
+function applyLockedQuoteViewChrome() {
+    const pg = document.getElementById('quoteConfirmationPage');
+    if (!pg) return;
+
+    // Legacy / cached markup — remove edit affordances on confirmed quote
+    pg.querySelector('#postConfirmEditDetailsBtn')?.remove();
+    pg.querySelectorAll('.pricing-card-header button').forEach((btn) => {
+        btn.remove();
+    });
+
+    const embedded = typeof isEmbeddedDrawer === 'function' && isEmbeddedDrawer();
+    const viewOnly = pricingPageMode === 'view' || embedded;
+
+    if (viewOnly) {
+        pg.querySelectorAll('#postConfirmGoTrackingBtn, #postConfirmViewBreakdownBtn').forEach((btn) => {
+            btn.style.display = 'none';
+        });
+        const footer = pg.querySelector('.pricing-card-body > div:last-of-type');
+        if (footer && footer.querySelector('#postConfirmGoTrackingBtn, #postConfirmViewBreakdownBtn')) {
+            const visible = footer.querySelectorAll('button:not([style*="display: none"])');
+            if (visible.length === 0) footer.style.display = 'none';
+        }
+    }
+
+    if (embedded) {
+        const hint = document.getElementById('confirmPricingHint');
+        if (hint) {
+            hint.innerHTML =
+                '<i class="fas fa-info-circle" style="margin-right: 8px; color: var(--navy-400);"></i>' +
+                'This quote is confirmed and locked. Rate changes after SI submission are done from ' +
+                '<strong>Tracking → Update Quote</strong>.';
+        }
+    }
+}
+
 function initViewMode() {
     console.log('👁️ Entering View-Only Mode');
-    initPricingTable(false, true); // forceView = true
+    const formActions = document.querySelector('.form-actions');
+    if (formActions) formActions.style.display = 'none';
+    initPricingTable(false, true); // forceView = true (unused in table; kept for future)
+    applyLockedQuoteViewChrome();
 
     // Disable all inputs after a short delay to ensure dynamic content is loaded
     setTimeout(() => {
@@ -54,39 +194,51 @@ function initViewMode() {
             }
         });
 
-        // Specifically hide add/remove buttons
         document.querySelectorAll('.btn-add, .btn-remove, .btn-primary, .tab-actions').forEach(el => {
+            if (el.closest('#quoteConfirmationPage')) return;
             el.style.display = 'none';
         });
+        applyLockedQuoteViewChrome();
     }, 500);
 }
 
 function initConfirmMode() {
-    console.log('🛡️ Entering Confirm Mode — Vendor Rate editable only');
-    isConfirmMode = true;                          // show vendor column in newly rendered rows
-    document.body.classList.add('confirm-mode');   // show vendor total card via CSS
+    console.log('🛡️ Entering Confirm Mode — shipping line rate & client rate editable');
+    isConfirmMode = true;
+    document.body.classList.add('confirm-mode');
 
-    // Show calculator but mostly read-only
     initPricingTable(false, true);
 
-    // Hide administrative actions
-    const saveBtn = document.querySelector('button[onclick="savePricing()"]');
+    const hasAccepted = pricingQuotes.some(isQuoteAcceptedStatus);
+
+    resetSaveQuoteButtonAppearance();
+
+    // Hide administrative actions in confirm flow until a quote exists.
     const addQuoteBtn = document.querySelector('button[onclick="addNewQuote()"]');
-    if (saveBtn) saveBtn.style.display = 'none';
     if (addQuoteBtn) addQuoteBtn.style.display = 'none';
 
-    // Show the Confirm button
-    const confirmBtn = document.getElementById('confirmQuoteBtn');
-    if (confirmBtn) confirmBtn.style.display = 'flex';
+    syncConfirmQuoteButtonVisibility();
 
-    // Lock everything EXCEPT .p-vendor inputs
-    setTimeout(() => {
+    // Confirm flow: never show Save Quote (only Confirm This Quote).
+    const saveBtn = document.querySelector('button[onclick="savePricing()"]');
+    if (saveBtn) saveBtn.style.display = 'none';
+
+    const confirmBtn = document.getElementById('confirmQuoteBtn');
+    if (confirmBtn && hasAccepted) {
+        confirmBtn.style.display = 'none';
+    }
+
+    // Lock everything EXCEPT shipping line rate / ex. rate + client rate columns
+    const confirmEditableInputs = '.p-vendor, .p-rate, .p-ex';
+    if (_confirmUiSetupTimer) clearTimeout(_confirmUiSetupTimer);
+    _confirmUiSetupTimer = setTimeout(() => {
+        _confirmUiSetupTimer = null;
         const containers = ['#calculatorSection', '.route-section'];
         containers.forEach(selector => {
             const container = document.querySelector(selector);
             if (container) {
                 const elements = container.querySelectorAll(
-                    'input:not(.p-vendor), select, textarea, button:not(.btn-secondary):not(#confirmQuoteBtn)'
+                    'input:not(.p-vendor, .p-rate, .p-ex), select, textarea, button:not(.btn-secondary):not(#confirmQuoteBtn):not(.btn-icon-overlay):not(.btn-add-integrated)'
                 );
                 elements.forEach(el => {
                     el.disabled = true;
@@ -95,8 +247,8 @@ function initConfirmMode() {
                 });
             }
         });
-        // Keep vendor rate cells clearly editable
-        document.querySelectorAll('.p-vendor').forEach(el => {
+        document.querySelectorAll(confirmEditableInputs).forEach(el => {
+            el.readOnly = false;
             el.style.opacity = '1';
             el.style.cursor = 'text';
             el.disabled = false;
@@ -106,7 +258,14 @@ function initConfirmMode() {
 
 function confirmQuoteFromPage() {
     if (activeQuoteIndex < 0 || activeQuoteIndex >= pricingQuotes.length) return;
-    finalizeSelectedQuote(activeQuoteIndex);
+    const quote = pricingQuotes[activeQuoteIndex];
+    const quoteName = quote?.name || 'This quote';
+    showModal(
+        'Confirm Quote',
+        `<strong>${quoteName}</strong> will be locked after confirmation. You will not be able to edit rates from Quotes & Pricing. Do you want to continue?`,
+        'warning',
+        () => finalizeSelectedQuote(activeQuoteIndex, { alreadyConfirmed: true })
+    );
 }
 
 function renderSelectionGrid() {
@@ -186,19 +345,31 @@ async function fetchQuotesForEnquiry(enquiryId) {
                     transit_time: q.transit_time_days,
                     validity: q.rate_validity_date ? q.rate_validity_date.split('T')[0] : '',
                     free_days: q.destination_free_days,
-                    container_prices: q.containers ? q.containers.map(c => ({
-                        container_type: c.container_type,
-                        charges: c.charges ? c.charges.map(ch => ({
-                            desc: ch.charge_description,
-                            account: ch.account_type,
-                            curr: ch.currency,
-                            on: ch.charged_on,
-                            qty: ch.quantity,
-                            rate: ch.rate,
-                            ex: ch.exchange_rate,
-                            vendor_rate: ch.vendor_rate || 0
-                        })) : []
-                    })) : [],
+                    container_prices: q.containers
+                        ? [...q.containers]
+                            .sort((a, b) =>
+                                (a.container_sequence ?? 0) - (b.container_sequence ?? 0) ||
+                                (a.id ?? 0) - (b.id ?? 0))
+                            .map(c => ({
+                                container_type: c.container_type,
+                                charges: c.charges
+                                    ? [...c.charges]
+                                        .sort((a, b) =>
+                                            (a.charge_sequence ?? 0) - (b.charge_sequence ?? 0) ||
+                                            (a.id ?? 0) - (b.id ?? 0))
+                                        .map(ch => ({
+                                            desc: ch.charge_description,
+                                            account: ch.account_type,
+                                            curr: ch.currency,
+                                            on: ch.charged_on,
+                                            qty: ch.quantity,
+                                            rate: ch.rate,
+                                            ex: ch.exchange_rate,
+                                            vendor_rate: ch.vendor_rate != null ? ch.vendor_rate : null
+                                        }))
+                                    : []
+                            }))
+                        : [],
                     status: q.status || 'draft'
                 }));
             }
@@ -210,13 +381,13 @@ async function fetchQuotesForEnquiry(enquiryId) {
 
 async function fetchExchangeRate() {
     try {
-        const response = await fetch(`${CONFIG.API_URL}/api/exchange-rate/rate`);
+        const response = await fetch(`${CONFIG.API_URL}/api/exchange-rate/rates`);
         if (response.ok) {
             const data = await response.json();
-            if (data.rate) currentExchangeRate = data.rate;
+            if (data && !data.error) Object.assign(currentExchangeRates, data);
         }
     } catch (e) {
-        console.warn('Using default exchange rate');
+        console.warn('Using default exchange rates');
     }
 }
 
@@ -261,10 +432,13 @@ function initPricingTable(forceEdit = false, forceView = false) {
     } else {
         renderQuoteTabs();
 
-        const confirmedIdx = pricingQuotes.findIndex(q => q.status === 'accepted');
+        const confirmedIdx = pricingQuotes.findIndex(isQuoteAcceptedStatus);
 
-        // Auto-lock logic (Skip if forceEdit is true)
-        if (confirmedIdx !== -1 && !forceEdit) {
+        // Locked summary sheet: accepted quote exists — always read-only here.
+        const useLockedSummary =
+            confirmedIdx !== -1 && !forceEdit;
+
+        if (useLockedSummary) {
             activeQuoteIndex = confirmedIdx;
             loadQuote(confirmedIdx);
 
@@ -274,13 +448,15 @@ function initPricingTable(forceEdit = false, forceView = false) {
 
             renderConfirmedTable(pricingQuotes[confirmedIdx]);
 
-            // Sync action button
-            const btn = document.getElementById('confirmQuoteBtn');
-            if (btn) {
-                btn.innerHTML = 'Quote Confirmed <i class="fas fa-check-circle" style="margin-left:8px;"></i>';
-                btn.style.background = 'var(--success)';
-                btn.disabled = true;
-            }
+            const formActions = document.querySelector('.form-actions');
+            if (formActions) formActions.style.display = 'none';
+
+            applyLockedQuoteViewChrome();
+
+            // Sync action button — confirmed quotes leave Edit Quote without Save/Confirm
+            syncConfirmQuoteButtonVisibility();
+            const formActionsConfirm = document.querySelector('.form-actions');
+            if (formActionsConfirm) formActionsConfirm.style.display = 'none';
         } else {
             loadQuote(activeQuoteIndex);
         }
@@ -363,19 +539,30 @@ function saveCurrentQuoteState() {
     const sections = document.querySelectorAll('.container-pricing-section');
     quote.container_prices = Array.from(sections).map(section => ({
         container_type: section.querySelector('.c-type').value,
-        charges: Array.from(section.querySelectorAll('tbody tr')).map(row => ({
-            desc: row.querySelector('.p-desc').value,
-            account: row.querySelector('.p-account').value,
-            curr: row.querySelector('.p-curr').value,
-            on: row.querySelector('.p-on').value,
-            qty: row.querySelector('.p-qty').value,
-            rate: row.querySelector('.p-rate').value,
-            ex: row.querySelector('.p-ex').value,
-            // If vendor input exists use it; otherwise default to rate (mirrors rate in normal mode)
-            vendor_rate: row.querySelector('.p-vendor')
-                ? (row.querySelector('.p-vendor').value || row.querySelector('.p-rate').value)
-                : row.querySelector('.p-rate').value
-        }))
+        charges: Array.from(section.querySelectorAll('tbody tr')).map(row => {
+            const vendorInput = row.querySelector('.p-vendor');
+            const rateVal = row.querySelector('.p-rate').value;
+            let vendorRateVal;
+            if (vendorInput) {
+                vendorRateVal = vendorInput.value !== ''
+                    ? vendorInput.value
+                    : (row.dataset.vendorRate !== undefined && row.dataset.vendorRate !== '' ? row.dataset.vendorRate : rateVal);
+            } else {
+                vendorRateVal = (row.dataset.vendorRate !== undefined && row.dataset.vendorRate !== '')
+                    ? row.dataset.vendorRate
+                    : rateVal;
+            }
+            return {
+                desc: row.querySelector('.p-desc').value,
+                account: row.querySelector('.p-account').value,
+                curr: row.querySelector('.p-curr').value,
+                on: row.querySelector('.p-on').value,
+                qty: row.querySelector('.p-qty').value,
+                rate: rateVal,
+                ex: row.querySelector('.p-ex').value,
+                vendor_rate: vendorRateVal
+            };
+        })
     }));
 }
 
@@ -427,13 +614,13 @@ function renderContainerSection(data, index) {
                         <th class="col-amt">Rate</th>
                         <th class="col-ex">Ex. Rate</th>
                         <th class="col-inr">Shipping Line (INR)</th>
-                        ${isConfirmMode ? '<th class="col-vendor">Client Rate</th>' : ''}
+                        <th class="col-vendor">Client Rate</th>
                     </tr>
                 </thead>
                 <tbody></tbody>
                 <tfoot>
                     <tr>
-                        <td colspan="${isConfirmMode ? 9 : 8}" style="padding: 0;">
+                        <td colspan="9" style="padding: 0;">
                             <button type="button" class="btn-add-integrated" style="padding: 10px !important; font-size: 0.7rem;" onclick="addPricingRowToSection(this)">
                                 <i class="fas fa-plus-circle"></i> Add Charge Item
                             </button>
@@ -469,33 +656,37 @@ function addPricingRowToSection(btn) {
     calculatePricingTotal();
 }
 
+function removePricingRow(btn) {
+    const row = btn.closest('tr');
+    if (!row) return;
+    row.remove();
+    calculatePricingTotal();
+}
+
 function addPricingRowToTbody(tbody, data = {}) {
     const row = document.createElement('tr');
     const defaultQty = currentEnquiry ? (currentEnquiry.container_count || 1) : 1;
-    const core = ["Ocean Freight", "BL Fee", "Origin THC", "Seal Charge", "MUC"];
-    const isCore = data.desc && core.includes(data.desc);
-    const defaultEx = data.on === 'Per BL' ? 1 : (data.ex || (data.curr === 'USD' ? currentExchangeRate : 1));
-    // Default vendor_rate mirrors rate — user can override in confirm mode
-    const defaultVendorRate = (data.vendor_rate != null && data.vendor_rate > 0) ? data.vendor_rate : (data.rate || '');
-    // Was vendor_rate explicitly set to a different value than rate?
-    const vendorManual = (data.vendor_rate != null && data.vendor_rate > 0 && data.vendor_rate !== data.rate) ? 'true' : 'false';
+    const defaultEx = data.ex || getExchangeRateForCurrency(data.curr || 'USD');
+    const hasStoredVendor = data.vendor_rate != null && data.vendor_rate !== '';
+    const defaultVendorRate = hasStoredVendor ? data.vendor_rate : (data.rate || '');
+    const vendorManual = hasStoredVendor && String(data.vendor_rate) !== String(data.rate ?? '') ? 'true' : 'false';
 
-    // Delete button overlaid on the INR cell (only for non-core rows)
-    const deleteBtn = !isCore
-        ? `<button type="button" class="btn-icon-overlay" onclick="this.closest('tr').remove(); calculatePricingTotal()" title="Remove row"><i class="fas fa-trash"></i></button>`
-        : '';
+    const deleteBtn =
+        '<button type="button" class="btn-icon-overlay" onclick="removePricingRow(this)" title="Remove charge line"><i class="fas fa-trash"></i></button>';
 
     row.innerHTML = `
-        <td><input type="text" class="p-desc" value="${data.desc || ''}" ${isCore ? 'readonly' : ''} oninput="calculatePricingTotal()"></td>
+        <td><input type="text" class="p-desc" value="${data.desc || ''}" oninput="calculatePricingTotal()"></td>
         <td><select class="p-account" onchange="calculatePricingTotal()"><option value="On Your Account" ${data.account === 'On Your Account' ? 'selected' : ''}>On Your Account</option><option value="Consignee Account" ${data.account === 'Consignee Account' ? 'selected' : ''}>Consignee Account</option></select></td>
-        <td><select class="p-curr" onchange="handleCurrencyChange(this)"><option value="USD" ${data.curr === 'USD' ? 'selected' : ''}>USD</option><option value="INR" ${data.curr === 'INR' ? 'selected' : ''}>INR</option></select></td>
+        <td><select class="p-curr" onchange="handleCurrencyChange(this)">${getChargeCurrencies().map(c => `<option value="${c}" ${(data.curr || 'USD') === c ? 'selected' : ''}>${c}</option>`).join('')}</select></td>
         <td><select class="p-on" onchange="handleChargedOnChange(this)"><option value="Per BL" ${data.on === 'Per BL' ? 'selected' : ''}>Per BL</option><option value="Per Container" ${data.on === 'Per Container' ? 'selected' : ''}>Per Container</option></select></td>
         <td><input type="number" class="p-qty" value="${data.on === 'Per BL' ? 1 : (data.qty || defaultQty)}" ${data.on === 'Per BL' ? 'readonly' : ''} min="0" oninput="if(this.value<0)this.value=0; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td><input type="number" class="p-rate" value="${data.rate || ''}" min="0" oninput="if(this.value<0)this.value=0; syncVendorRate(this); calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td><input type="number" class="p-ex" value="${defaultEx}" min="0" oninput="if(this.value<0)this.value=0; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
         <td class="col-inr" style="position:relative; font-weight:600; color:#1e3a8a;"><span class="p-inr-val">₹0</span>${deleteBtn}</td>
-        ${isConfirmMode ? `<td class="col-vendor"><input type="number" class="p-vendor" value="${defaultVendorRate}" data-manual="${vendorManual}" min="0" placeholder="0" oninput="if(this.value<0)this.value=0; this.dataset.manual='true'; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>` : ''}
+        <td class="col-vendor"><input type="number" class="p-vendor" value="${defaultVendorRate}" data-manual="${vendorManual}" min="0" placeholder="0" oninput="if(this.value<0)this.value=0; this.dataset.manual='true'; const tr=this.closest('tr'); if(tr) tr.dataset.vendorRate=this.value; calculatePricingTotal()" onkeydown="if(event.key==='-')event.preventDefault()"></td>
     `;
+    const vrPersist = hasStoredVendor ? String(data.vendor_rate) : String(data.rate ?? '');
+    row.dataset.vendorRate = vrPersist;
     tbody.appendChild(row);
 }
 
@@ -521,13 +712,15 @@ function calculatePricingTotal() {
             const vendorEl = row.querySelector('.p-vendor');
             const vendorRate = parseFloat(vendorEl ? vendorEl.value : 0) || 0;
 
-            // Shipping Line Total INR: qty × rate × ex_rate
+            // INR calculation: non-INR charges always multiply by exchange rate;
+            // INR charges don't need conversion.
+            // Per BL + non-INR → qty(1) × rate × ex  (exchange rate still applies)
+            // Per BL + INR → qty(1) × rate  (no conversion needed)
             const tot = qty * rate;
-            const inr = on === 'Per BL' ? tot : (curr === 'USD' ? tot * ex : tot);
+            const inr = curr !== 'INR' ? tot * ex : tot;
 
-            // Vendor Total INR: vendor_rate × qty × ex_rate (same formula)
             const vendorTot = qty * vendorRate;
-            const vendorInr = on === 'Per BL' ? vendorTot : (curr === 'USD' ? vendorTot * ex : vendorTot);
+            const vendorInr = curr !== 'INR' ? vendorTot * ex : vendorTot;
 
             row.querySelector('.p-inr-val').textContent = '₹' + Math.round(inr).toLocaleString();
 
@@ -548,19 +741,19 @@ function handleChargedOnChange(sel) {
     const ex = row.querySelector('.p-ex');
     if (sel.value === 'Per BL') {
         qty.value = 1; qty.readOnly = true;
-        ex.value = 1; ex.readOnly = true;
     } else {
-        qty.readOnly = false; ex.readOnly = false;
-        ex.value = row.querySelector('.p-curr').value === 'USD' ? currentExchangeRate : 1;
+        qty.readOnly = false;
     }
+    // Exchange rate still applies for Per BL + non-INR; reset to 1 for INR.
+    ex.value = getExchangeRateForCurrency(row.querySelector('.p-curr').value);
+    ex.readOnly = false; // Always allow override
     calculatePricingTotal();
 }
 
 function handleCurrencyChange(sel) {
     const row = sel.closest('tr');
     const ex = row.querySelector('.p-ex');
-    if (row.querySelector('.p-on').value === 'Per BL') ex.value = 1;
-    else ex.value = sel.value === 'USD' ? currentExchangeRate : 1;
+    ex.value = getExchangeRateForCurrency(sel.value);
     calculatePricingTotal();
 }
 
@@ -600,7 +793,8 @@ async function savePricingData(silent = false) {
                     quantity: parseFloat(ch.qty) || 1,
                     rate: parseFloat(ch.rate) || 0,
                     exchange_rate: parseFloat(ch.ex) || 1,
-                    vendor_rate: parseFloat(ch.vendor_rate) || 0
+                    vendor_rate: parseFloat(ch.vendor_rate) || 0,
+                    vendor_exchange_rate: parseFloat(ch.ex) || 1,
                 }))
             }))
         };
@@ -618,10 +812,35 @@ async function savePricingData(silent = false) {
     }
 }
 
+function syncPostConfirmChromeAfterQuoteSave() {
+    const pg = document.getElementById('quoteConfirmationPage');
+    const hint = document.getElementById('confirmPricingHint');
+    if (!pg) return;
+    let confirmPageVisible = false;
+    try {
+        confirmPageVisible = window.getComputedStyle(pg).display !== 'none';
+    } catch (_) {
+        confirmPageVisible = pg.style.display === 'block';
+    }
+    if (!confirmPageVisible) return;
+    if (hint) {
+        hint.innerHTML =
+            '<i class="fas fa-info-circle" style="margin-right: 8px; color: var(--navy-400);"></i>' +
+            'This quote is saved. Review the <strong>Final rate breakdown</strong>, or proceed to tracking.';
+    }
+}
+
 async function savePricing() {
     try {
         await savePricingData();
-        showModal('Success', 'Pricing saved successfully!', 'success');
+        syncPostConfirmChromeAfterQuoteSave();
+        resetSaveQuoteButtonAppearance();
+        syncConfirmQuoteButtonVisibility();
+        showModal(
+            'Success',
+            'Pricing saved. You can keep editing until the quote is confirmed.',
+            'success'
+        );
     } catch (e) {
         showModal('Error', 'Failed to save pricing: ' + e.message, 'error');
     }
@@ -675,10 +894,10 @@ function getQuoteSummary(quote) {
             const ex = parseFloat(ch.ex) || 1;
             const vendorRate = parseFloat(ch.vendor_rate) || 0;
             const tot = qty * rate;
-            const inr = ch.on === 'Per BL' ? tot : (ch.curr === 'USD' ? tot * ex : tot);
-            // Vendor total: vendor_rate × qty × ex_rate (same formula)
+            // Non-INR charges always multiply by exchange rate (including Per BL)
+            const inr = ch.curr !== 'INR' ? tot * ex : tot;
             const vendorTot = qty * vendorRate;
-            const vendorInr = ch.on === 'Per BL' ? vendorTot : (ch.curr === 'USD' ? vendorTot * ex : vendorTot);
+            const vendorInr = ch.curr !== 'INR' ? vendorTot * ex : vendorTot;
             if (ch.account === 'On Your Account') {
                 totShippingLine += inr;
                 totVendor += vendorInr;
@@ -688,57 +907,177 @@ function getQuoteSummary(quote) {
     return { origin: totShippingLine, vendor: totVendor, destination: 0 };
 }
 
-async function finalizeSelectedQuote(idx) {
+function isFirstTimeQuoteConfirmation() {
+    return !pricingQuotes.some(isQuoteAcceptedStatus) && (currentEnquiry?.stage || 1) < 3;
+}
+
+function promptFinalizeQuoteConfirmation(quote, remarks = null) {
+    showModal(
+        'Confirm Quote',
+        `<strong>${quote.name}</strong> (${quote.line || '-'}) will be locked after confirmation. You will not be able to edit rates from Quotes & Pricing. Do you want to continue?`,
+        'warning',
+        async () => {
+            await executeFinalizeQuote(quote, remarks);
+        }
+    );
+}
+
+async function finalizeSelectedQuote(idx, options = {}) {
     const quote = pricingQuotes[idx];
-    activeQuoteIndex = idx; // Switch to the selected one for rendering
+    activeQuoteIndex = idx;
 
     closeModal();
 
-    showModal('Confirm Selection', `Are you sure you want to finalize <strong>${quote.name}</strong> (${quote.line})? This will lock the pricing sheet.`, 'warning', async () => {
-        try {
-            console.log('Finalizing quote:', quote);
-            await savePricingData(true);
-            console.log('Post-save quote ID:', quote.id);
-
-            // Update backend status to accepted
-            if (quote.id) {
-                const statusRes = await fetch(`${CONFIG.API_URL}/api/quotes/${quote.id}/status?status=accepted`, {
-                    method: 'PATCH'
-                });
-                if (!statusRes.ok) console.error('Failed to update quote status:', await statusRes.text());
-                else console.log('✅ Quote status updated to accepted');
-            }
-
-            // Update enquiry stage to 3 (Upload & Track)
-            const stageRes = await fetch(`${CONFIG.API_URL}/api/enquiry/${currentEnquiry.id}/stage?stage=3`, {
-                method: 'PATCH'
-            });
-            if (!stageRes.ok) console.error('Failed to update enquiry stage:', await stageRes.text());
-            else console.log('✅ Enquiry stage updated to 3');
-
-
-
-            // Update UI
-            document.getElementById('calculatorSection').style.display = 'none';
-            document.getElementById('quoteConfirmationPage').style.display = 'block';
-
-            renderConfirmedTable(quote);
-
-            showModal('Quote Finalized', `Quotation for <strong>${quote.line}</strong> has been confirmed. You can now proceed to Tracking.`, 'success', () => {
-                window.location.href = `/upload-track?enquiry_id=${currentEnquiry.id}`;
-            });
-        } catch (e) {
-            showModal('Error', 'Failed to lock quote: ' + e.message, 'error');
+    if (isFirstTimeQuoteConfirmation()) {
+        if (options.alreadyConfirmed) {
+            await executeFinalizeQuote(quote);
+            return;
         }
+        promptFinalizeQuoteConfirmation(quote);
+        return;
+    }
+
+    showQuoteRemarksModal({
+        title: 'Remarks before finalizing quote',
+        confirmLabel: 'Continue',
+        onConfirm: (remarks) => {
+            if (options.alreadyConfirmed) {
+                executeFinalizeQuote(quote, remarks);
+            } else {
+                promptFinalizeQuoteConfirmation(quote, remarks);
+            }
+        },
     });
 }
 
-function renderConfirmedTable(quote) {
+async function executeFinalizeQuote(quote, remarks) {
+    try {
+        console.log('Finalizing quote:', quote);
+        await savePricingData(true);
+        console.log('Post-save quote ID:', quote.id);
+
+        if (quote.id) {
+            const statusRes = await fetch(
+                `${CONFIG.API_URL}/api/quotes/${quote.id}/status?status=accepted`,
+                {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        remarks_reason: remarks?.remarks_reason || null,
+                        remarks_other: remarks?.remarks_other || null,
+                    }),
+                }
+            );
+            if (!statusRes.ok) {
+                const err = await statusRes.json().catch(() => ({}));
+                throw new Error(err.detail || 'Failed to update quote status');
+            }
+            quote.status = 'accepted';
+            if (remarks) {
+                quote.accepted_remarks_reason = remarks.remarks_reason;
+                quote.accepted_remarks_other = remarks.remarks_other;
+            }
+            console.log('✅ Quote status updated to accepted');
+        }
+
+        const stageRes = await fetch(`${CONFIG.API_URL}/api/enquiry/${currentEnquiry.id}/stage?stage=3`, {
+            method: 'PATCH',
+        });
+        if (!stageRes.ok) console.error('Failed to update enquiry stage:', await stageRes.text());
+        else console.log('✅ Enquiry stage updated to 3');
+
+        document.getElementById('calculatorSection').style.display = 'none';
+        document.getElementById('quoteConfirmationPage').style.display = 'block';
+
+        renderConfirmedTable(quote, remarks);
+
+        clearPricingSavedLock();
+        pricingPageMode = 'view';
+        syncConfirmQuoteButtonVisibility();
+        const formActions = document.querySelector('.form-actions');
+        if (formActions) formActions.style.display = 'none';
+
+        showPostConfirmOptions(quote);
+    } catch (e) {
+        showModal('Error', 'Failed to lock quote: ' + e.message, 'error');
+    }
+}
+
+function showPostConfirmOptions(quote) {
+    const enquiryId = currentEnquiry?.id;
+    const quoteName = quote?.name || 'this quote';
+    const lineName = quote?.line || '-';
+
+    const message = `
+        <div style="display:flex; flex-direction:column; gap:12px;">
+            <div style="color: var(--text-secondary); font-weight: 600;">
+                <strong>${quoteName}</strong> (${lineName}) is confirmed. What would you like to do next?
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; justify-content:flex-end;">
+                <button class="btn btn-primary" onclick="postConfirmViewBreakdown()" style="padding: 10px 14px; background: #2563eb; border: none;">
+                    <i class="fas fa-list"></i> Final rate breakdown
+                </button>
+                <button class="btn btn-primary" onclick="postConfirmGoTracking(${enquiryId})" style="padding: 10px 14px; background: #059669; border: none;">
+                    <i class="fas fa-route"></i> Proceed to tracking
+                </button>
+            </div>
+        </div>
+    `;
+
+    showModal('Quote Confirmed', message, 'success');
+}
+
+function postConfirmViewBreakdown() {
+    closeModal();
+    const confirmedPage = document.getElementById('quoteConfirmationPage');
+    if (confirmedPage) confirmedPage.style.display = 'block';
+    const anchor = document.getElementById('confirmationDocumentTable') || confirmedPage;
+    if (anchor && anchor.scrollIntoView) {
+        setTimeout(() => anchor.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    }
+}
+
+function postConfirmGoTracking(enquiryId) {
+    if (!enquiryId) return;
+    closeModal();
+    window.location.href = `/upload-track?enquiry_id=${enquiryId}`;
+}
+
+/** Inline onclick uses a legacy scope; expose handlers on window for modal HTML + consistency */
+window.postConfirmViewBreakdown = postConfirmViewBreakdown;
+window.postConfirmGoTracking = postConfirmGoTracking;
+
+function bindQuoteConfirmationActions() {
+    const breakdownBtn = document.getElementById('postConfirmViewBreakdownBtn');
+    const trackingBtn = document.getElementById('postConfirmGoTrackingBtn');
+    if (breakdownBtn) {
+        breakdownBtn.addEventListener('click', () => postConfirmViewBreakdown());
+    }
+    if (trackingBtn) {
+        trackingBtn.addEventListener('click', () => {
+            const id = currentEnquiry?.id;
+            if (id) postConfirmGoTracking(id);
+        });
+    }
+}
+
+function renderConfirmedTable(quote, remarks = null) {
     const container = document.getElementById('confirmationDocumentTable');
     if (!container) return;
 
     const summary = getQuoteSummary(quote);
-    let html = `
+    const remarkLabel = remarks?.remarks_label
+        || (quote.accepted_remarks_reason ? getQuoteRemarkLabel(quote.accepted_remarks_reason) : '');
+    const remarkOther = remarks?.remarks_other || quote.accepted_remarks_other;
+    const remarksHtml = remarkLabel ? `
+        <div style="background:#f8fafc; border:1px solid var(--border-light); border-radius:10px; padding:14px 16px; margin-bottom:20px;">
+            <div style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.05em; color:var(--text-tertiary); margin-bottom:6px;">Finalization remarks</div>
+            <div style="font-size:14px; font-weight:600; color:var(--navy-800);">${escapeHtml(remarkLabel)}</div>
+            ${remarkOther ? `<div style="font-size:13px; color:var(--text-secondary); margin-top:6px;">${escapeHtml(remarkOther)}</div>` : ''}
+        </div>
+    ` : '';
+
+    let html = remarksHtml + `
         <div style="background: white; padding: 20px; border: 1px solid var(--border-medium); border-radius: 12px; margin-bottom: 24px;">
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: left;">
                 <div>
@@ -826,10 +1165,6 @@ function renderConfirmedTable(quote) {
     `;
     container.innerHTML = html;
     document.getElementById('confirmedQuoteNumber').textContent = `Ref: ${quote.quote_number || 'QT-' + Math.floor(1000 + Math.random() * 9000)}`;
-}
-
-function goBack() {
-    window.location.href = '/#dashboard';
 }
 
 async function generatePDF() {

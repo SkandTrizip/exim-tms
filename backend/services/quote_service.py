@@ -1,11 +1,134 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from backend.models.quote import Quote, QuoteContainer, QuoteCharge
 from backend.models.enquiry import Enquiry
+from backend.models.shipment_status import ShipmentStatus
 from backend.schemas.quote import QuoteCreate, QuoteUpdate
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from fastapi import HTTPException
 import datetime
+import json
+from backend.constants.quote_remarks import validate_quote_remarks
 from backend.utils.logger import logger
+
+def _load_quote_full(db: Session, quote_id: int) -> Optional[Quote]:
+    return (
+        db.query(Quote)
+        .options(
+            joinedload(Quote.containers).joinedload(QuoteContainer.charges)
+        )
+        .filter(Quote.id == quote_id)
+        .first()
+    )
+
+
+def _quote_to_snapshot_dict(quote: Quote) -> dict:
+    containers = []
+    for c in sorted(quote.containers, key=lambda x: (x.container_sequence or 0, x.id or 0)):
+        charges = []
+        for ch in sorted(c.charges, key=lambda x: (x.charge_sequence or 0, x.id or 0)):
+            qty = ch.quantity or 0
+            rate = ch.rate or 0
+            ex = ch.exchange_rate or 1
+            curr = (ch.currency or "INR").upper()
+            inr = qty * rate * ex if curr != "INR" else qty * rate
+            vendor = ch.vendor_rate if ch.vendor_rate is not None else ch.rate
+            # Prefer shipping-line ROE when client ROE is missing or placeholder 1 on non-INR
+            vendor_ex = ch.vendor_exchange_rate
+            if vendor_ex is None or (curr != "INR" and float(vendor_ex or 0) == 1.0 and float(ex or 1) != 1.0):
+                vendor_ex = ex
+            vendor_tot = qty * (vendor or 0)
+            vendor_inr = vendor_tot * vendor_ex if curr != "INR" else vendor_tot
+            charges.append({
+                "charge_description": ch.charge_description,
+                "account_type": ch.account_type,
+                "currency": ch.currency,
+                "charged_on": ch.charged_on,
+                "quantity": ch.quantity,
+                "rate": ch.rate,
+                "exchange_rate": ch.exchange_rate,
+                "vendor_rate": ch.vendor_rate,
+                "vendor_exchange_rate": vendor_ex,
+                "shipping_line_inr": round(inr, 2),
+                "client_rate_inr": round(vendor_inr, 2),
+            })
+        containers.append({
+            "container_type": c.container_type,
+            "container_sequence": c.container_sequence,
+            "charges": charges,
+        })
+    return {
+        "quote_id": quote.id,
+        "quote_name": quote.quote_name,
+        "shipping_line": quote.shipping_line,
+        "total_origin_charges_inr": quote.total_origin_charges_inr,
+        "final_quote_inr": quote.final_quote_inr,
+        "containers": containers,
+        "snapshotted_at": datetime.datetime.utcnow().isoformat(),
+    }
+
+
+def ensure_initial_snapshot(db: Session, quote: Quote) -> None:
+    """Persist a one-time snapshot of the accepted quote for tracking comparisons."""
+    if quote.initial_quote_snapshot:
+        return
+    full = _load_quote_full(db, quote.id)
+    if not full:
+        return
+    quote.initial_quote_snapshot = json.dumps(_quote_to_snapshot_dict(full))
+    quote.updated_at = datetime.datetime.utcnow()
+    db.commit()
+    db.refresh(quote)
+
+
+def get_initial_snapshot_dict(quote: Quote) -> Optional[dict]:
+    if not quote.initial_quote_snapshot:
+        return None
+    try:
+        return json.loads(quote.initial_quote_snapshot)
+    except json.JSONDecodeError:
+        logger.warning(f"Invalid initial_quote_snapshot JSON for quote {quote.id}")
+        return None
+
+
+def get_final_snapshot_dict(quote: Quote) -> Optional[dict]:
+    if not quote.final_quote_snapshot:
+        return None
+    try:
+        return json.loads(quote.final_quote_snapshot)
+    except json.JSONDecodeError:
+        logger.warning(f"Invalid final_quote_snapshot JSON for quote {quote.id}")
+        return None
+
+
+def get_initial_snapshot_for_api(db: Session, quote_id: int) -> dict:
+    quote = _load_quote_full(db, quote_id)
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    if quote.status != "accepted":
+        raise HTTPException(status_code=400, detail="Initial snapshot is only available for accepted quotes")
+    ensure_initial_snapshot(db, quote)
+    db.refresh(quote)
+    snapshot = get_initial_snapshot_dict(quote)
+    return {"snapshot": snapshot, "quote_id": quote_id}
+
+
+def get_final_snapshot_for_api(db: Session, quote_id: int) -> dict:
+    quote = _load_quote_full(db, quote_id)
+    if not quote:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    if quote.status != "accepted":
+        raise HTTPException(status_code=400, detail="Final snapshot is only available for accepted quotes")
+    ensure_initial_snapshot(db, quote)
+    db.refresh(quote)
+    snapshot = get_final_snapshot_dict(quote)
+    initial = get_initial_snapshot_dict(quote)
+    return {
+        "snapshot": snapshot,
+        "initial_snapshot": initial,
+        "quote_id": quote_id,
+        "has_final": snapshot is not None,
+    }
+
 
 def generate_quote_number(db: Session, enquiry_id: int) -> str:
     """Generate a unique quote number based on enquiry and sequence"""
@@ -64,12 +187,12 @@ def create_quote(db: Session, quote_data: QuoteCreate) -> Quote:
     quote_final_inr = 0.0
 
     # Create containers and charges
-    for container_data in quote_data.containers:
+    for container_seq, container_data in enumerate(quote_data.containers):
         db_container = QuoteContainer(
             quote_id=db_quote.id,
             enquiry_id=db_quote.enquiry_id,
             container_type=container_data.container_type,
-            container_sequence=container_data.container_sequence
+            container_sequence=container_seq,
         )
         db.add(db_container)
         db.flush()  # Get the container ID
@@ -94,6 +217,7 @@ def create_quote(db: Session, quote_data: QuoteCreate) -> Quote:
                 exchange_rate=charge_data.exchange_rate,
                 final_inr_amount=calculated_inr,
                 vendor_rate=charge_data.vendor_rate,
+                vendor_exchange_rate=charge_data.vendor_exchange_rate,
                 charge_sequence=seq          # preserve row order
             )
             db.add(db_charge)
@@ -115,26 +239,45 @@ def create_quote(db: Session, quote_data: QuoteCreate) -> Quote:
     # Update quote totals
     db_quote.total_origin_charges_inr = quote_total_origin_inr
     db_quote.final_quote_inr = quote_final_inr
-    
-    db.commit()
-    db.refresh(db_quote)
+
+    try:
+        db.commit()
+        db.refresh(db_quote)
+    except Exception:
+        db.rollback()
+        raise
     logger.info(f"Quote {db_quote.quote_number} created successfully with ID {db_quote.id}")
     return db_quote
 
 
 def get_quote_by_id(db: Session, quote_id: int) -> Optional[Quote]:
     """Get a quote by ID with all related data"""
-    return db.query(Quote).filter(Quote.id == quote_id).first()
+    return _load_quote_full(db, quote_id)
 
 
 def get_quotes_by_enquiry(db: Session, enquiry_id: int) -> List[Quote]:
-    """Get all quotes for a specific enquiry"""
-    return db.query(Quote).filter(Quote.enquiry_id == enquiry_id).order_by(Quote.created_at.desc()).all()
+    """Get all quotes for a specific enquiry with containers and charges eager-loaded."""
+    return (
+        db.query(Quote)
+        .options(joinedload(Quote.containers).joinedload(QuoteContainer.charges))
+        .filter(Quote.enquiry_id == enquiry_id)
+        .order_by(Quote.created_at.desc())
+        .all()
+    )
 
 
 def get_all_quotes(db: Session, skip: int = 0, limit: int = 100) -> List[Quote]:
-    """Get all quotes with pagination"""
-    return db.query(Quote).order_by(Quote.created_at.desc()).offset(skip).limit(limit).all()
+    """Get all quotes with pagination and related data eager-loaded."""
+    safe_limit = max(1, min(limit, 10_000))
+    safe_skip = max(0, skip)
+    return (
+        db.query(Quote)
+        .options(joinedload(Quote.containers).joinedload(QuoteContainer.charges))
+        .order_by(Quote.created_at.desc())
+        .offset(safe_skip)
+        .limit(safe_limit)
+        .all()
+    )
 
 
 def update_quote(db: Session, quote_id: int, quote_data: QuoteUpdate) -> Quote:
@@ -142,6 +285,12 @@ def update_quote(db: Session, quote_id: int, quote_data: QuoteUpdate) -> Quote:
     db_quote = db.query(Quote).filter(Quote.id == quote_id).first()
     if not db_quote:
         raise HTTPException(status_code=404, detail="Quote not found")
+
+    if db_quote.status == "accepted":
+        raise HTTPException(
+            status_code=403,
+            detail="Accepted quotes are locked. Update the final quote from Tracking after SI is submitted.",
+        )
     
     # Update basic fields
     update_data = quote_data.dict(exclude_unset=True, exclude={'containers'})
@@ -161,12 +310,12 @@ def update_quote(db: Session, quote_id: int, quote_data: QuoteUpdate) -> Quote:
         quote_final_inr = 0.0
         
         # Create new containers and charges
-        for container_data in quote_data.containers:
+        for container_seq, container_data in enumerate(quote_data.containers):
             db_container = QuoteContainer(
                 quote_id=db_quote.id,
                 enquiry_id=db_quote.enquiry_id,
                 container_type=container_data.container_type,
-                container_sequence=container_data.container_sequence
+                container_sequence=container_seq,
             )
             db.add(db_container)
             db.flush()
@@ -190,6 +339,7 @@ def update_quote(db: Session, quote_id: int, quote_data: QuoteUpdate) -> Quote:
                     exchange_rate=charge_data.exchange_rate,
                     final_inr_amount=calculated_inr,
                     vendor_rate=charge_data.vendor_rate,
+                    vendor_exchange_rate=charge_data.vendor_exchange_rate,
                     charge_sequence=seq
                 )
                 db.add(db_charge)
@@ -202,9 +352,13 @@ def update_quote(db: Session, quote_id: int, quote_data: QuoteUpdate) -> Quote:
         # Update quote totals
         db_quote.total_origin_charges_inr = quote_total_origin_inr
         db_quote.final_quote_inr = quote_final_inr
-    
-    db.commit()
-    db.refresh(db_quote)
+
+    try:
+        db.commit()
+        db.refresh(db_quote)
+    except Exception:
+        db.rollback()
+        raise
     return db_quote
 
 
@@ -219,14 +373,50 @@ def delete_quote(db: Session, quote_id: int) -> bool:
     return True
 
 
-def update_quote_status(db: Session, quote_id: int, status: str) -> Quote:
+def update_quote_status(
+    db: Session,
+    quote_id: int,
+    status: str,
+    remarks_reason: Optional[str] = None,
+    remarks_other: Optional[str] = None,
+) -> Quote:
     """Update only the status of a quote"""
-    db_quote = db.query(Quote).filter(Quote.id == quote_id).first()
+    db_quote = _load_quote_full(db, quote_id)
     if not db_quote:
         raise HTTPException(status_code=404, detail="Quote not found")
-    
+
+    if status == "accepted":
+        if remarks_reason:
+            try:
+                remarks_reason, remarks_other = validate_quote_remarks(remarks_reason, remarks_other)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e))
+        else:
+            remarks_reason, remarks_other = None, None
+        db_quote.accepted_remarks_reason = remarks_reason
+        db_quote.accepted_remarks_other = remarks_other
+
     db_quote.status = status
     db_quote.updated_at = datetime.datetime.utcnow()
+
+    if status == "accepted":
+        # Move enquiry into operations so it appears in Tracking / Finance lists.
+        enquiry = db.query(Enquiry).filter(Enquiry.id == db_quote.enquiry_id).first()
+        if enquiry and (enquiry.stage or 1) < 3:
+            enquiry.stage = 3
+            logger.info(f"Enquiry {enquiry.id} stage set to 3 after quote {quote_id} accepted")
+
+        try:
+            from backend.services.enquiry_economics_service import sync_enquiry_economics
+
+            sync_enquiry_economics(db, db_quote.enquiry_id, commit=False)
+        except Exception as e:
+            logger.warning(
+                "Could not sync enquiry economics after quote %s accepted: %s",
+                quote_id,
+                e,
+            )
+
     db.commit()
     db.refresh(db_quote)
     return db_quote

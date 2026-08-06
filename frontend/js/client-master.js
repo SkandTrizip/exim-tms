@@ -25,29 +25,232 @@ function authHeaders() {
     return t ? { 'Authorization': `Bearer ${t}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
 }
 
+function isEmbeddedMaster() {
+    return document.documentElement.classList.contains('embedded-mode');
+}
+
+function notifyMasterSaved(entity, details = {}) {
+    if (isEmbeddedMaster() && window.parent !== window) {
+        window.parent.postMessage({
+            type: 'master-saved',
+            entity,
+            updated: !!details.updated,
+            name: details.name || '',
+            code: details.code || '',
+            message: details.message || '',
+        }, '*');
+    }
+}
+
 // ── Boot ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-    await loadOrigins();
+    const params = new URLSearchParams(window.location.search);
+    const embedded = params.get('embedded') === '1';
+    const isViewMode = params.get('view') === '1';
 
     document.getElementById('originForm').addEventListener('submit', handleOriginSubmit);
     document.getElementById('masterForm').addEventListener('submit', handleMasterSubmit);
-
     document.getElementById('m_payment_terms').addEventListener('change', toggleCreditFields);
-    toggleCreditFields();   // initial state
+    toggleCreditFields();
+
+    await loadOrigins();
+
+    if (embedded) {
+        document.documentElement.classList.add('embedded-mode');
+        document.body.classList.add('embedded-mode', 'cm-embedded');
+        const tab = parseInt(params.get('tab') || '1', 10);
+        const editId = params.get('id');
+        if (editId) {
+            setEmbeddedPanelVisible(2);
+            updateEmbeddedStepbar(2);
+            await editClient(parseInt(editId, 10), isViewMode);
+            notifyEmbeddedMasterStepChange(2);
+        } else {
+            await switchTab(tab);
+            notifyEmbeddedMasterStepChange(tab);
+        }
+        initEmbeddedStepToggles();
+    }
+    hideEmbeddedDrawerBackButtons();
 });
 
+function setEmbeddedPanelVisible(n) {
+    [1, 2, 3].forEach((i) => {
+        const panel = document.getElementById(`panel${i}`);
+        if (!panel) return;
+        const isActive = i === n;
+        panel.classList.toggle('active', isActive);
+        if (isActive) panel.removeAttribute('hidden');
+        else panel.setAttribute('hidden', '');
+    });
+}
+
+function initEmbeddedStepToggles() {
+    document.querySelectorAll('.embedded-drawer-steps .embedded-step').forEach((btn) => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const step = parseInt(btn.dataset.step, 10);
+            if (step === 1 || step === 2) switchEmbeddedStep(step);
+        });
+    });
+}
+
+function applyEmbeddedViewMode() {
+    document.querySelectorAll('#originForm input, #originForm select, #originForm textarea, #masterForm input, #masterForm select, #masterForm textarea').forEach((el) => {
+        if (el.type === 'hidden') return;
+        el.disabled = true;
+        if (el.tagName !== 'SELECT') el.readOnly = true;
+    });
+    document.querySelectorAll('#saveOriginBtn, #saveMasterBtn').forEach((btn) => {
+        if (btn) btn.style.display = 'none';
+    });
+    const originSelect = document.getElementById('masterOriginSelect');
+    if (originSelect) originSelect.disabled = true;
+}
+
+function notifyEmbeddedMasterStepChange(step) {
+    if (!isEmbeddedMaster() || window.parent === window) return;
+    const panel2 = document.getElementById('panel2');
+    const onMasterStep = step === 2 || (panel2 && !panel2.hasAttribute('hidden'));
+    const label = onMasterStep
+        ? (editingMasterId ? 'Update Client Master' : 'Save Client Master')
+        : 'Save Origin & Continue';
+    window.parent.postMessage({ type: 'master-step-changed', step, label }, '*');
+}
+
+async function saveEmbeddedMaster() {
+    if (!isEmbeddedMaster()) return;
+
+    // Prefer Client Master panel when editing an existing branch or when step 2 is active.
+    const panel2 = document.getElementById('panel2');
+    const onMasterStep = !!(
+        panel2
+        && !panel2.hasAttribute('hidden')
+        && (panel2.classList.contains('active') || editingMasterId)
+    );
+
+    try {
+        if (onMasterStep) {
+            await handleMasterSubmit({ preventDefault() {} });
+        } else {
+            await handleOriginSubmit({ preventDefault() {} });
+        }
+    } catch (err) {
+        notifyMasterSaveError(err.message || 'Could not save client master.');
+        throw err;
+    }
+}
+
+window.saveEmbeddedMaster = saveEmbeddedMaster;
+
+function notifyMasterSaveError(message) {
+    if (isEmbeddedMaster() && window.parent !== window) {
+        window.parent.postMessage({ type: 'master-save-error', message: String(message || '') }, '*');
+    }
+}
+
+function updateEmbeddedStepbar(step) {
+    document.querySelectorAll('.embedded-drawer-steps .embedded-step').forEach((el) => {
+        const isActive = parseInt(el.dataset.step, 10) === step;
+        el.classList.toggle('active', isActive);
+        el.setAttribute('aria-selected', isActive ? 'true' : 'false');
+    });
+    notifyEmbeddedMasterStepChange(step);
+}
+
+function populateOriginForm(origin) {
+    if (!origin) return;
+    const fields = {
+        o_group_client: 'group_client',
+        o_unique_client_name: 'unique_client_name',
+        o_office_location: 'office_location',
+        o_office_address: 'office_address',
+        o_gst_no: 'gst_no',
+        o_gst_address: 'gst_address',
+        o_country: 'country',
+        o_pin_code: 'pin_code',
+        o_contact_person: 'contact_person',
+        o_contact_no: 'contact_no',
+        o_email_id: 'email_id',
+        o_contact_person_logistics: 'contact_person_logistics',
+        o_contact_no_logistics: 'contact_no_logistics',
+        o_email_id_logistics: 'email_id_logistics',
+        o_contact_person_finance: 'contact_person_finance',
+        o_contact_no_finance: 'contact_no_finance',
+        o_email_id_finance: 'email_id_finance',
+        o_commodity: 'commodity',
+        o_sales_branch: 'sales_branch',
+        o_sales_person: 'sales_person',
+        o_cs_name: 'cs_name'
+    };
+    Object.entries(fields).forEach(([fieldId, key]) => {
+        const el = document.getElementById(fieldId);
+        if (el) el.value = origin[key] || '';
+    });
+}
+
+async function loadOriginFormForCurrentContext() {
+    const selectVal = parseInt(document.getElementById('masterOriginSelect')?.value, 10);
+    const originId = savedOriginId || (Number.isNaN(selectVal) ? null : selectVal);
+    if (!originId) return;
+    savedOriginId = originId;
+    await loadOrigins();
+    const origin = allOrigins.find((o) => o.id === originId);
+    if (origin) populateOriginForm(origin);
+}
+
 // ── Tab switching ─────────────────────────────────────────────────────────────
-function switchTab(n) {
+async function switchTab(n) {
+    if (isEmbeddedMaster() && n === 3) return;
+
     [1, 2, 3].forEach(i => {
         const tab = document.getElementById(`tab${i}`);
-        const panel = document.getElementById(`panel${i}`);
         if (tab) tab.classList.toggle('active', i === n);
-        if (panel) panel.classList.toggle('active', i === n);
     });
-    if (n === 2) loadOrigins();   // refresh list when switching to Step 2
-    if (n === 3) loadClients();   // refresh clients table
+
+    if (isEmbeddedMaster()) {
+        setEmbeddedPanelVisible(n);
+        updateEmbeddedStepbar(n);
+    } else {
+        [1, 2, 3].forEach(i => {
+            const panel = document.getElementById(`panel${i}`);
+            if (panel) panel.classList.toggle('active', i === n);
+        });
+    }
+
+    try {
+        if (n === 1 && isEmbeddedMaster()) {
+            await loadOriginFormForCurrentContext();
+        }
+
+        if (n === 2) {
+            await loadOrigins();
+            const originId = savedOriginId || parseInt(document.getElementById('masterOriginSelect')?.value, 10);
+            if (originId) {
+                savedOriginId = originId;
+                const select = document.getElementById('masterOriginSelect');
+                if (select) select.value = String(originId);
+                await onOriginSelect();
+            }
+        }
+
+        if (n === 3) loadClients();
+
+        if (isEmbeddedMaster() && new URLSearchParams(window.location.search).get('view') === '1') {
+            applyEmbeddedViewMode();
+        }
+    } catch (err) {
+        console.error('switchTab failed:', err);
+    }
 }
 window.switchTab = switchTab;
+
+window.switchEmbeddedStep = function switchEmbeddedStep(n) {
+    switchTab(n);
+};
 
 // ── Load origins into Step 2 dropdown ────────────────────────────────────────
 async function loadOrigins() {
@@ -226,8 +429,17 @@ async function handleOriginSubmit(e) {
         if (res.ok) {
             const result = await res.json();
             const created = result.origin;
-            const branch = result.main_branch;
             savedOriginId = created.id;
+
+            if (isEmbeddedMaster()) {
+                switchTab(2);
+                notifyEmbeddedMasterStepChange(2);
+                await loadOrigins();
+                document.getElementById('masterOriginSelect').value = String(savedOriginId);
+                await onOriginSelect();
+                return;
+            }
+
             showModal('success', 'Client Origin Saved!', '',
                 () => {
                     document.getElementById('tab1').classList.add('completed');
@@ -251,13 +463,26 @@ async function handleOriginSubmit(e) {
     }
 }
 
+function formatClientApiDetail(detail) {
+    if (!detail) return 'Request failed';
+    if (typeof detail === 'string') return detail;
+    if (Array.isArray(detail)) {
+        return detail.map((d) => d.msg || d.message || JSON.stringify(d)).join('; ');
+    }
+    if (typeof detail === 'object') {
+        return detail.msg || detail.message || JSON.stringify(detail);
+    }
+    return String(detail);
+}
+
 // ── Step 2 – Save Client Master ───────────────────────────────────────────────
 async function handleMasterSubmit(e) {
     e.preventDefault();
 
     if (!savedOriginId) {
-        showModal('warning', 'Origin Required', 'Please select or create a Client Origin first.');
-        return;
+        const msg = 'Please select or create a Client Origin first.';
+        showModal('warning', 'Origin Required', msg);
+        throw new Error(msg);
     }
 
     const clientCode = val('m_client_code');
@@ -265,14 +490,21 @@ async function handleMasterSubmit(e) {
     const contactPerson = val('m_contact_person');
 
     if (!clientCode || !clientName || !contactPerson) {
-        showModal('warning', 'Missing Fields',
-            'Client Code, Branch Name, and Contact Person are required.');
-        return;
+        const msg = 'Client Code, Branch Name, and Contact Person are required.';
+        showModal('warning', 'Missing Fields', msg);
+        throw new Error(msg);
     }
 
+    // Prefer id from state, fall back to URL (drawer edit mode)
+    const editIdFromUrl = parseInt(new URLSearchParams(window.location.search).get('id') || '', 10);
+    const masterId = editingMasterId || (Number.isFinite(editIdFromUrl) ? editIdFromUrl : null);
+    if (masterId && !editingMasterId) editingMasterId = masterId;
+
     const btn = document.getElementById('saveMasterBtn');
-    btn.disabled = true;
-    btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${editingMasterId ? 'Updating' : 'Saving'}…`;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> ${masterId ? 'Updating' : 'Saving'}…`;
+    }
 
     const payload = {
         origin_id: savedOriginId,
@@ -310,35 +542,47 @@ async function handleMasterSubmit(e) {
         sales_branch: val('m_sales_branch'),
         sales_person: val('m_sales_person'),
         cs_name: val('m_cs_name'),
-        created_by: val('m_created_by'),
+        created_by: val('m_created_by') || getUsername() || null,
     };
 
-    // Strip empty/null
-    Object.keys(payload).forEach(k => {
+    // Strip empty/null for create; keep explicit values on update
+    Object.keys(payload).forEach((k) => {
         if (payload[k] === '' || payload[k] === null || payload[k] === undefined) delete payload[k];
     });
 
     try {
-        const url = editingMasterId
-            ? `${API}/api/client/masters/${editingMasterId}`
+        const url = masterId
+            ? `${API}/api/client/masters/${masterId}`
             : `${API}/api/client/masters`;
-        const method = editingMasterId ? 'PATCH' : 'POST';
+        const method = masterId ? 'PATCH' : 'POST';
 
         const res = await fetch(url, {
-            method: method,
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            method,
+            headers: authHeaders(),
+            body: JSON.stringify(payload),
         });
 
         if (res.ok) {
             const savedItem = await res.json();
-            showModal('success', `Client Master ${editingMasterId ? 'Updated' : 'Saved'}!`,
-                `Branch "${savedItem.client_name}" (Code: ${savedItem.client_code}) has been ${editingMasterId ? 'updated' : 'created'} successfully.`,
+            if (isEmbeddedMaster()) {
+                notifyMasterSaved('client', {
+                    updated: !!masterId,
+                    name: savedItem.client_name || clientName,
+                    code: savedItem.client_code || clientCode,
+                    message: masterId
+                        ? `Branch "${savedItem.client_name || clientName}" was updated successfully.`
+                        : `Branch "${savedItem.client_name || clientName}" was created successfully.`,
+                });
+                return savedItem;
+            }
+            showModal('success', `Client Master ${masterId ? 'Updated' : 'Saved'}!`,
+                `Branch "${savedItem.client_name}" (Code: ${savedItem.client_code}) has been ${masterId ? 'updated' : 'created'} successfully.`,
                 () => {
-                    if (editingMasterId) {
+                    if (masterId) {
                         resetMasterForm();
                         editingMasterId = null;
-                        document.getElementById('saveMasterBtn').innerHTML = '<i class="fas fa-save"></i> Save Client Master';
+                        const saveBtn = document.getElementById('saveMasterBtn');
+                        if (saveBtn) saveBtn.innerHTML = '<i class="fas fa-save"></i> Save Client Master';
                         switchTab(3);
                     } else if (confirm('Add another branch to the same Origin?')) {
                         resetMasterForm();
@@ -348,31 +592,67 @@ async function handleMasterSubmit(e) {
                     }
                 }
             );
-        } else {
-            const err = await res.json();
-            showModal('error', 'Save Failed', err.detail || 'Could not save Client Master.');
+            return savedItem;
         }
+
+        const err = await res.json().catch(() => ({}));
+        const msg = formatClientApiDetail(err.detail) || 'Could not save Client Master.';
+        showModal('error', 'Save Failed', msg);
+        throw new Error(msg);
     } catch (err) {
-        showModal('error', 'Network Error', err.message);
+        if (err && !err._clientMasterHandled) {
+            const msg = err.message || 'Network error while saving Client Master.';
+            // Avoid double-toast when we already showed Save Failed above
+            if (!/Could not save|required|Origin Required|Missing Fields/i.test(msg)) {
+                showModal('error', 'Network Error', msg);
+            }
+            err._clientMasterHandled = true;
+        }
+        throw err;
     } finally {
-        btn.disabled = false;
-        btn.innerHTML = editingMasterId
-            ? '<i class="fas fa-save"></i> Update Client Master'
-            : '<i class="fas fa-save"></i> Save Client Master';
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = (editingMasterId || masterId)
+                ? '<i class="fas fa-save"></i> Update Client Master'
+                : '<i class="fas fa-save"></i> Save Client Master';
+        }
     }
 }
 
 // ── Edit Client Master ───────────────────────────────────────────────────────
-async function editClient(id) {
+async function editClient(id, viewOnly = false) {
+    setEmbeddedPanelVisible(2);
+    updateEmbeddedStepbar(2);
+
+    const panel2 = document.getElementById('panel2');
+    const showLoadError = (message) => {
+        if (panel2 && isEmbeddedMaster()) {
+            panel2.insertAdjacentHTML('afterbegin',
+                `<div class="embedded-load-error" style="margin-bottom:12px;padding:12px;border-radius:10px;background:#fee2e2;color:#b91c1c;font-size:13px;font-weight:600;">${message}</div>`);
+        } else {
+            showModal('error', 'Error', message);
+        }
+    };
+
     try {
+        panel2?.querySelector('.embedded-load-error')?.remove();
+
         const res = await fetch(`${API}/api/client/master/${id}`);
         if (!res.ok) throw new Error('Failed to load client details.');
         const master = await res.json();
 
-        // Populate fields
         editingMasterId = master.id;
-        document.getElementById('masterOriginSelect').value = master.origin_id;
-        onOriginSelect(); // triggers UI changes for the selected origin
+        savedOriginId = master.origin_id || null;
+
+        await loadOrigins();
+
+        if (savedOriginId) {
+            const select = document.getElementById('masterOriginSelect');
+            if (select) select.value = String(savedOriginId);
+            await onOriginSelect();
+            const origin = allOrigins.find((o) => o.id === savedOriginId);
+            if (origin) populateOriginForm(origin);
+        }
 
         const fields = [
             'm_client_code', 'm_client_name', 'm_gst_name', 'm_gst_no', 'm_pan_no', 'm_iec_code',
@@ -385,27 +665,33 @@ async function editClient(id) {
             'm_sales_branch', 'm_sales_person', 'm_cs_name', 'm_created_by'
         ];
 
-        fields.forEach(f => {
+        fields.forEach((f) => {
             const el = document.getElementById(f);
-            if (el) {
-                const key = f.substring(2); // remove 'm_' prefix
-                el.value = master[key] || '';
-            }
+            if (!el) return;
+            const key = f.startsWith('m_') ? f.slice(2) : f;
+            const value = master[key];
+            el.value = value == null ? '' : String(value);
         });
 
         toggleCreditFields();
 
-        // Update button text
-        document.getElementById('saveMasterBtn').innerHTML = '<i class="fas fa-save"></i> Update Client Master';
+        const saveBtn = document.getElementById('saveMasterBtn');
+        if (saveBtn) {
+            saveBtn.innerHTML = '<i class="fas fa-save"></i> Update Client Master';
+        }
 
-        // Switch to form tab
-        switchTab(2);
+        setEmbeddedPanelVisible(2);
+        updateEmbeddedStepbar(2);
 
+        if (viewOnly || isEmbeddedMaster() && new URLSearchParams(window.location.search).get('view') === '1') {
+            applyEmbeddedViewMode();
+        }
     } catch (e) {
         console.error(e);
-        showModal('error', 'Error', 'Could not load client details for editing.');
+        showLoadError(e.message || 'Could not load client details for editing.');
     }
 }
+window.editClient = editClient;
 
 // ── Credit field toggle ───────────────────────────────────────────────────────
 function toggleCreditFields() {

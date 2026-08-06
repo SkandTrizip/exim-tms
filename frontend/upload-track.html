@@ -4,10 +4,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document Upload - Exim TMS</title>
+    <title>Tracking &amp; Documents - ATLAS EXIM</title>
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/action-modal.css">
     <link rel="stylesheet" href="css/modal.css">
+    <link rel="stylesheet" href="css/quote-remarks.css">
+    <link rel="stylesheet" href="css/pricing-refined.css">
+    <link rel="stylesheet" href="css/update-quote-modal.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        (function () {
+            if (new URLSearchParams(location.search).get('embedded') === '1') {
+                document.documentElement.classList.add('embedded-mode');
+                document.addEventListener('DOMContentLoaded', function () {
+                    document.body.classList.add('embedded-mode');
+                });
+            }
+        })();
+    </script>
 </head>
 
 <body>
@@ -15,8 +29,7 @@
         <div class="container">
             <div class="header-content">
                 <div class="logo">
-                    <div class="logo-icon">SF</div>
-                    <div class="logo-text">ShipFlow</div>
+                    <img src="Logipod_Logo.png" alt="Logipod" class="logo-img">
                 </div>
                 <div class="header-actions">
                     <div class="user-profile"
@@ -41,10 +54,10 @@
             <div class="content" id="mainContent" style="margin: 0 auto; max-width: 1200px;">
                 <div class="page-header" style="margin-bottom: 32px;">
                     <h1 style="font-size: 32px; margin: 0; color: var(--navy-800);">
-                        <i class="fas fa-upload" style="color: var(--primary);"></i> Document Upload
+                        <i class="fas fa-route" style="color: var(--primary);"></i> Tracking &amp; Documents
                     </h1>
                     <p style="color: var(--text-secondary); margin-top: 8px;">
-                        Upload required shipping and customs documents
+                        Manage shipment milestones and status updates
                     </p>
                 </div>
 
@@ -69,8 +82,7 @@
                                             <span
                                                 style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Sale
                                                 Number</span>
-                                            <span id="display_enquiry_number"
-                                                style="font-size: 13px; color: var(--navy-800); font-weight: 600;">-</span>
+                                            <span id="display_enquiry_number" class="job-no">-</span>
                                         </div>
                                         <div
                                             style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
@@ -197,6 +209,14 @@
                                                 style="font-size: 13px; color: var(--navy-800);">-</span>
                                         </div>
                                         <div
+                                            style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border-light);">
+                                            <span
+                                                style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Initial
+                                                Quote (INR)</span>
+                                            <span id="display_initial_quote"
+                                                style="font-size: 14px; color: #6b7280; font-weight: 700;">-</span>
+                                        </div>
+                                        <div
                                             style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 10px 0; background: var(--primary-light); margin: 8px -12px -12px; padding: 12px; border-radius: 6px;">
                                             <span
                                                 style="font-size: 14px; color: var(--primary); font-weight: 700;">Final
@@ -316,18 +336,7 @@
                                             id="date_stuffing_done">-</td>
                                         <td style="padding: 12px 16px;">-</td>
                                     </tr>
-                                    <tr style="border-bottom: 1px solid #f1f5f9;">
-                                        <td style="padding: 12px 16px; font-size: 13px; color: var(--navy-800);">
-                                            Container Gated in</td>
-                                        <td style="padding: 12px 16px; text-align: center;">
-                                            <input type="checkbox" id="status_container_gated"
-                                                onchange="updateStatusDate(this, 'date_container_gated')"
-                                                style="width: 18px; height: 18px; cursor: pointer;">
-                                        </td>
-                                        <td style="padding: 12px 16px; font-size: 13px; color: var(--text-secondary);"
-                                            id="date_container_gated">-</td>
-                                        <td style="padding: 12px 16px;">-</td>
-                                    </tr>
+
                                     <tr style="border-bottom: 1px solid #f1f5f9;">
                                         <td style="padding: 12px 16px; font-size: 13px; color: var(--navy-800);">Draft
                                             SI Rec</td>
@@ -378,17 +387,20 @@
                                             </div>
                                         </td>
                                     </tr>
-                                    <tr style="border-bottom: 1px solid #f1f5f9;">
-                                        <td style="padding: 12px 16px; font-size: 13px; color: var(--navy-800);">Form 13
-                                            Updated</td>
-                                        <td style="padding: 12px 16px; text-align: center;">
-                                            <input type="checkbox" id="status_form13"
-                                                onchange="updateStatusDate(this, 'date_form13')"
-                                                style="width: 18px; height: 18px; cursor: pointer;">
+                                    <tr id="row_generate_hbl" style="display: none; background: #f8fafc; border-bottom: 1px solid #f1f5f9;">
+                                        <td colspan="4" style="padding: 12px 16px;">
+                                            <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;">
+                                                <div style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--navy-800); font-weight: 600;">
+                                                    <i class="fas fa-file-contract" style="color: var(--primary);"></i>
+                                                    House Bill of Lading
+                                                </div>
+                                                <button type="button" class="btn btn-primary" id="btnGenerateHbl"
+                                                    onclick="openGenerateHblFromTracking()"
+                                                    style="padding: 6px 14px; font-size: 12px; white-space: nowrap;">
+                                                    <i class="fas fa-file-contract"></i> Generate HBL
+                                                </button>
+                                            </div>
                                         </td>
-                                        <td style="padding: 12px 16px; font-size: 13px; color: var(--text-secondary);"
-                                            id="date_form13">-</td>
-                                        <td style="padding: 12px 16px;">-</td>
                                     </tr>
                                     <tr style="border-bottom: 1px solid #f1f5f9;">
                                         <td style="padding: 12px 16px; font-size: 13px; color: var(--navy-800);">
@@ -411,6 +423,18 @@
                                             <div id="shippingBillFileName"
                                                 style="font-size: 10px; color: var(--primary); margin-top: 4px;"></div>
                                         </td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid #f1f5f9;">
+                                        <td style="padding: 12px 16px; font-size: 13px; color: var(--navy-800);">
+                                            Container Gated in</td>
+                                        <td style="padding: 12px 16px; text-align: center;">
+                                            <input type="checkbox" id="status_container_gated"
+                                                onchange="updateStatusDate(this, 'date_container_gated')"
+                                                style="width: 18px; height: 18px; cursor: pointer;">
+                                        </td>
+                                        <td style="padding: 12px 16px; font-size: 13px; color: var(--text-secondary);"
+                                            id="date_container_gated">-</td>
+                                        <td style="padding: 12px 16px;">-</td>
                                     </tr>
                                     <tr style="border-bottom: 1px solid #f1f5f9;">
                                         <td style="padding: 12px 16px; font-size: 13px; color: var(--navy-800);">SOB
@@ -449,6 +473,20 @@
                                             </button>
                                             <div id="shippingInvoiceFileName"
                                                 style="font-size: 10px; color: var(--primary); margin-top: 4px;"></div>
+                                        </td>
+                                    </tr>
+                                    <tr id="row_update_quote" style="display: none;" class="update-quote-row">
+                                        <td colspan="4" style="padding: 12px 16px;">
+                                            <div class="update-quote-row-inner">
+                                                <div class="update-quote-row-copy">
+                                                    <i class="fas fa-file-invoice-dollar" aria-hidden="true"></i>
+                                                    <span>Revise quote after SI — compare initial vs final rates</span>
+                                                </div>
+                                                <button type="button" class="btn btn-update-quote" id="btnUpdateQuote"
+                                                    onclick="openUpdateQuoteModal()">
+                                                    <i class="fas fa-pen-to-square" aria-hidden="true"></i> Update Quote
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
 
@@ -495,7 +533,7 @@
                                                 </div>
 
                                                 <div
-                                                    style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;">
+                                                    style="display: grid; grid-template-columns: 1.3fr 0.8fr 0.65fr 0.65fr 0.9fr; gap: 12px;">
                                                     <div class="form-group" style="margin-bottom: 0;">
                                                         <label
                                                             style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block; font-weight: 500;">Charge
@@ -515,11 +553,30 @@
                                                     </div>
                                                     <div class="form-group" style="margin-bottom: 0;">
                                                         <label
-                                                            style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block; font-weight: 500;">Amount
-                                                            (INR)</label>
+                                                            style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block; font-weight: 500;">Currency</label>
+                                                        <select id="add_inv_currency" class="form-control"
+                                                            onchange="onAdditionalInvoiceCurrencyChange()"
+                                                            style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 12px; color: #334155;">
+                                                            <option value="INR">INR</option>
+                                                            <option value="USD">USD</option>
+                                                            <option value="EUR">EUR</option>
+                                                            <option value="GBP">GBP</option>
+                                                            <option value="JPY">JPY</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="form-group" style="margin-bottom: 0;">
+                                                        <label
+                                                            style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block; font-weight: 500;">ROE</label>
+                                                        <input type="number" id="add_inv_roe" class="form-control"
+                                                            style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 12px; color: #334155; background: #f1f5f9;"
+                                                            placeholder="1.00" value="1" step="0.01" min="0" readonly>
+                                                    </div>
+                                                    <div class="form-group" style="margin-bottom: 0;">
+                                                        <label
+                                                            style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block; font-weight: 500;">Amount</label>
                                                         <input type="number" id="add_inv_amount" class="form-control"
                                                             style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 12px; color: #334155;"
-                                                            placeholder="Enter invoice amount">
+                                                            placeholder="Enter invoice amount" step="0.01">
                                                     </div>
                                                 </div>
                                                 <div
@@ -565,7 +622,7 @@
                                     <div style="font-size: 13px; color: #475569; font-weight: 500;"
                                         id="date_bl_received">-</div>
                                 </div>
-                                <div style="display: flex; gap: 12px; align-items: center;">
+                                <div style="display: flex; gap: 12px; align-items: center; flex-wrap: wrap;">
                                     <input type="file" id="blUpload" style="display: none;"
                                         onchange="handleFileUpload(this, 'blFileName')">
                                     <button type="button" class="btn btn-outline" id="btn_bl_received"
@@ -573,6 +630,11 @@
                                         style="padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; opacity: 0.6; cursor: not-allowed; border: 1px solid #e2e8f0; color: #334155; background: white; display: flex; align-items: center; gap: 6px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
                                         <i class="fas fa-file-upload"></i> Upload BL Document
                                     </button>
+                                    <a id="link_view_bl_received" href="#" target="_blank" rel="noopener noreferrer"
+                                        class="btn btn-outline"
+                                        style="display: none; padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; align-items: center; gap: 6px; text-decoration: none; border: 1px solid #e2e8f0; color: #334155; background: white; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+                                        <i class="fas fa-eye"></i> View BL
+                                    </a>
                                     <div id="blFileName" style="font-size: 11px; color: var(--primary);"></div>
                                 </div>
                             </div>
@@ -639,181 +701,25 @@
                                         <input type="date" id="bl_eta" class="form-control"
                                             style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 8px 12px; font-size: 13px; color: #334155; height: 38px;">
                                     </div>
-                                </div>
-                            </div>
-                        </div>
-                        <!-- Certificate of Origin, Customs Declaration, and Insurance Certificate moved to Document Upload section -->
-                    </div>
-
-                    <!-- Document Upload Section -->
-                    <div class="form-section">
-                        <h3 class="section-title">📎 Document Upload</h3>
-                        <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">
-                            Upload all required shipping and customs documents. Supported formats: PDF,
-                            JPG, PNG, DOC, DOCX (Max 10MB per file)
-                        </p>
-
-                        <div style="display: grid; gap: 16px;">
-
-
-                            <!-- Document 2: Commercial Invoice -->
-                            <div
-                                style="background: var(--gray-50); padding: 16px; border-radius: 8px; border: 1px solid var(--border-light);">
-                                <div
-                                    style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center;">
-                                    <div>
+                                    <div class="form-group" style="margin-bottom: 0;">
                                         <label
-                                            style="font-weight: 600; color: var(--navy-800); display: block; margin-bottom: 4px;">
-                                            Commercial Invoice
-                                        </label>
-                                        <p style="font-size: 12px; color: var(--text-tertiary); margin: 0;">
-                                            Invoice for customs and commercial purposes
-                                        </p>
+                                            style="font-size: 11px; color: #64748b; margin-bottom: 6px; display: block; font-weight: 500;">Container
+                                            No.</label>
+                                        <input type="text" id="bl_container_number" class="form-control"
+                                            style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 8px 12px; font-size: 13px; color: #334155; height: 38px;"
+                                            placeholder="e.g. MSCU1234567">
                                     </div>
-                                    <div>
-                                        <input type="file" id="commercialInvoiceUpload"
-                                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
-                                            onchange="handleFileUpload(this, 'commercialInvoiceFileName')">
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="document.getElementById('commercialInvoiceUpload').click()"
-                                            style="padding: 8px 16px; font-size: 13px; white-space: nowrap;">
-                                            <i class="fas fa-upload"></i> Choose File
-                                        </button>
-                                    </div>
-                                </div>
-                                <div id="commercialInvoiceFileName"
-                                    style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
-                                </div>
-                            </div>
-
-                            <!-- Document 3: Packing List -->
-                            <div
-                                style="background: var(--gray-50); padding: 16px; border-radius: 8px; border: 1px solid var(--border-light);">
-                                <div
-                                    style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center;">
-                                    <div>
-                                        <label
-                                            style="font-weight: 600; color: var(--navy-800); display: block; margin-bottom: 4px;">
-                                            Packing List
-                                        </label>
-                                        <p style="font-size: 12px; color: var(--text-tertiary); margin: 0;">
-                                            Detailed list of packed items and quantities
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <input type="file" id="packingListUpload"
-                                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
-                                            onchange="handleFileUpload(this, 'packingListFileName')">
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="document.getElementById('packingListUpload').click()"
-                                            style="padding: 8px 16px; font-size: 13px; white-space: nowrap;">
-                                            <i class="fas fa-upload"></i> Choose File
-                                        </button>
-                                    </div>
-                                </div>
-                                <div id="packingListFileName"
-                                    style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
-                                </div>
-                            </div>
-
-                            <!-- Document 4: Certificate of Origin -->
-                            <div
-                                style="background: var(--gray-50); padding: 16px; border-radius: 8px; border: 1px solid var(--border-light);">
-                                <div
-                                    style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center;">
-                                    <div>
-                                        <label
-                                            style="font-weight: 600; color: var(--navy-800); display: block; margin-bottom: 4px;">
-                                            Certificate of Origin
-                                        </label>
-                                        <p style="font-size: 12px; color: var(--text-tertiary); margin: 0;">
-                                            Official document certifying the country of origin
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <input type="file" id="originCertUpload"
-                                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
-                                            onchange="handleFileUpload(this, 'originCertFileName')">
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="document.getElementById('originCertUpload').click()"
-                                            style="padding: 8px 16px; font-size: 13px; white-space: nowrap;">
-                                            <i class="fas fa-upload"></i> Choose File
-                                        </button>
-                                    </div>
-                                </div>
-                                <div id="originCertFileName"
-                                    style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
-                                </div>
-                            </div>
-
-                            <!-- Document 5: Customs Declaration -->
-                            <div
-                                style="background: var(--gray-50); padding: 16px; border-radius: 8px; border: 1px solid var(--border-light);">
-                                <div
-                                    style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center;">
-                                    <div>
-                                        <label
-                                            style="font-weight: 600; color: var(--navy-800); display: block; margin-bottom: 4px;">
-                                            Customs Declaration
-                                        </label>
-                                        <p style="font-size: 12px; color: var(--text-tertiary); margin: 0;">
-                                            Official document for customs clearance
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <input type="file" id="customsDeclarationUpload"
-                                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
-                                            onchange="handleFileUpload(this, 'customsDeclarationFileName')">
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="document.getElementById('customsDeclarationUpload').click()"
-                                            style="padding: 8px 16px; font-size: 13px; white-space: nowrap;">
-                                            <i class="fas fa-upload"></i> Choose File
-                                        </button>
-                                    </div>
-                                </div>
-                                <div id="customsDeclarationFileName"
-                                    style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
-                                </div>
-                            </div>
-
-                            <!-- Document 6: Insurance Certificate -->
-                            <div
-                                style="background: var(--gray-50); padding: 16px; border-radius: 8px; border: 1px solid var(--border-light);">
-                                <div
-                                    style="display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: center;">
-                                    <div>
-                                        <label
-                                            style="font-weight: 600; color: var(--navy-800); display: block; margin-bottom: 4px;">
-                                            Insurance Certificate
-                                        </label>
-                                        <p style="font-size: 12px; color: var(--text-tertiary); margin: 0;">
-                                            Proof of insurance coverage for the shipment
-                                        </p>
-                                    </div>
-                                    <div>
-                                        <input type="file" id="insuranceCertUpload"
-                                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="display: none;"
-                                            onchange="handleFileUpload(this, 'insuranceCertFileName')">
-                                        <button type="button" class="btn btn-secondary"
-                                            onclick="document.getElementById('insuranceCertUpload').click()"
-                                            style="padding: 8px 16px; font-size: 13px; white-space: nowrap;">
-                                            <i class="fas fa-upload"></i> Choose File
-                                        </button>
-                                    </div>
-                                </div>
-                                <div id="insuranceCertFileName"
-                                    style="margin-top: 8px; font-size: 12px; color: var(--text-secondary);">
                                 </div>
                             </div>
                         </div>
                     </div>
 
                     <div class="form-actions" style="display: flex; gap: 16px; margin-top: 32px;">
-                        <button type="button" class="btn btn-secondary" onclick="window.location.href='/#dashboard'">
+                        <button type="button" class="btn btn-secondary" onclick="goBack()">
                             <i class="fas fa-th-large"></i> Back to Dashboard
                         </button>
                         <button type="button" class="btn btn-primary" onclick="saveTracking()">
-                            <i class="fas fa-save"></i> Save documents
+                            <i class="fas fa-save"></i> Save tracking
                         </button>
                     </div>
                 </div>
@@ -858,8 +764,71 @@
         </div>
     </div>
 
+    <!-- Update Quote Modal -->
+    <div id="updateQuoteModal" class="update-quote-overlay" style="display: none;" aria-hidden="true"
+        onclick="if(event.target===this) closeUpdateQuoteModal()">
+        <div class="update-quote-dialog" role="dialog" aria-modal="true" aria-labelledby="updateQuoteTitle">
+            <div class="update-quote-header">
+                <h2 id="updateQuoteTitle"><i class="fas fa-file-invoice-dollar" style="color:#059669"></i> Update Quote</h2>
+                <button type="button" class="update-quote-close" onclick="closeUpdateQuoteModal()" aria-label="Close">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="update-quote-body" id="uqModalBody">
+                <div id="uqModalLoading" class="action-modal-loading" style="display:none;">
+                    <i class="fas fa-spinner fa-spin"></i> Loading quote data…
+                </div>
+                <div id="uqModalContent">
+                    <section class="uq-section" aria-labelledby="uqInitialHeading">
+                        <div class="uq-section-title initial" id="uqInitialHeading">
+                            <i class="fas fa-lock"></i> Initial Quote
+                            <span class="uq-initial-badge">Confirmed at client sign-off</span>
+                        </div>
+                        <div id="uqInitialTables"></div>
+                        <div class="uq-totals-grid" style="margin-top:12px;">
+                            <div class="uq-total-card">
+                                <label>Initial Quote Total (INR)</label>
+                                <div class="amount" id="uqInitialTotal">₹0</div>
+                            </div>
+                        </div>
+                    </section>
+                    <section class="uq-section" aria-labelledby="uqFinalHeading">
+                        <div class="uq-section-title final" id="uqFinalHeading">
+                            <i class="fas fa-pen"></i> Final Quote
+                            <span class="uq-initial-badge" style="background:#ecfdf5;color:#059669;">Editable after SI</span>
+                        </div>
+                        <div id="uqFinalTables"></div>
+                        <div class="uq-totals-grid">
+                            <div class="uq-total-card">
+                                <label><i class="fas fa-ship"></i> Shipping Line Total (INR)</label>
+                                <div class="amount" id="uqFinalLineTotal" style="color:#2563eb">₹0</div>
+                            </div>
+                            <div class="uq-total-card">
+                                <label><i class="fas fa-plane"></i> Client Rate Total (INR)</label>
+                                <div class="amount" id="uqFinalClientTotal" style="color:#374151">₹0</div>
+                            </div>
+                            <div class="uq-total-card highlight">
+                                <label><i class="fas fa-money-bill-wave"></i> Final Quote Amount</label>
+                                <div class="amount" id="uqFinalQuoteAmount">₹0</div>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+            <div class="update-quote-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeUpdateQuoteModal()">Cancel</button>
+                <button type="button" class="btn btn-primary" id="uqSaveBtn" onclick="saveFinalQuoteRevision()"
+                    style="background:#059669;border:none;">
+                    <i class="fas fa-save"></i> Save Final Quote
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script src="js/config.js"></script>
     <script src="js/common.js"></script>
+    <script src="js/quote-remarks.js"></script>
+    <script src="js/update-quote-modal.js"></script>
     <script src="js/upload-track.js"></script>
 </body>
 

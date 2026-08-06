@@ -1,0 +1,47 @@
+{
+  "enquiry_number": "LLP/OFE/26/06/00014",
+  "blType": "seaway",
+  "draftMark": false,
+  "watermarkEnabled": true,
+  "applySign": false,
+  "freight": "prepaid",
+  "fields": {
+    "mtdBlNo": "LLP/OFE/26/06/00014",
+    "shipmentRefNo": "LLP/OFE/26/06/00014",
+    "endOfBlNo": "LLP/OFE/26/06/00014",
+
+    "consignor": "CAMBAY TECHNOPACK PRIVATE LIMITED\nBLOCK NO. 1000, SURVEY NO 667 & 691, VILLAGE TADKESHWAR,\nKIM-MANDVI HIGHWAY, SURAT-394170, GUJARAT, INDIA\nSURAT, India, 394170\nTel: +919313925094\nEmail: info@cambaytechnopack.com",
+
+    "consignee": "BIDFOOD B.V\nMAXWELLSTRAAT 5, 6716 BX, EDE, THE NETHERLANDS\nPhone: +31 0621426266\nEmail: SITE.SUPPORT@BIDFOOD.NL\nTax ID: NL 001511798 B01",
+
+    "deliveryAgent": "BLACKSTONE SHIPPING NETHERLANDS BV\nAlbert Plesmanweg 41F, 3088 GB Rotterdam, The Netherlands\nTel: +31 10 899 5822\nEmail: carrier.eu@blackstoneshipping.co",
+
+    "notifyParty1": "ROTRA AIR & OCEAN BV,\nHOEFHOEK 5 3176 PD PORTUGAL, THE NETHERLANDS\nEmail: RTM.IMPORT@ROTRA.NL",
+
+    "notifyParty2": "",
+
+    "placeAcceptance": "HAZIRA, INDIA",
+    "portLoading": "HAZIRA, INDIA",
+    "portDischarge": "ROTTERDAM, NL",
+    "placeDelivery": "ROTTERDAM, NL",
+    "dateAcceptance": "",
+    "routeTranshipment": "",
+
+    "vesselName": "HMM COLOMBO",
+    "voyageNo": "0149W(INX/HMM)",
+    "modesTransport": "",
+    "dateDelivery": "",
+
+    "containerNos": "HMMU4935049\nSEAL:1528566\n\nHMMU6359066\nSEAL:1528561",
+    "marksNumber": "NO MARKS",
+
+    "cargoDescription": "2x 40 HC\n955 CFC BOXES, PRINTED PAPER BOARD CUPS\nHS CODE:48236900\nINV NO:CE/26-27/0266 DATE:16/06/2026\nCOUNTRY OF ORIGIN: INDIA\nGROSS WEIGHT:9356.276 KGS\nNET WEIGHT:8968.426 KGS\nSHIPPING BILL NO: 4213769 DT:17/06/2026\n\n1077 CFC BOXES, PRINTED PAPER BOARD CUPS\nHS CODE:48236900\nINV NO:CE/26-27/0268 DATE:16/06/2026\nCOUNTRY OF ORIGIN: INDIA\nGROSS WEIGHT: 10821.662 KGS\nNET WEIGHT: 10349.372 KGS\nSHIPPING BILL NO: 4208401 DT:16/06/2026\n\nTOTAL PKGS:2032 CFC BOXES\nTOTAL GROSS WEIGHT: 20177.938 KGS\nTOTAL NET WEIGHT: 19317.798 KGS\n\nCIF UPTO ROTTERDAM PORT, NETHERLANDS",
+
+    "cargoWeight": "20177.938 KGS",
+
+    "cargoMeasurement": "",
+
+    "sobDate": "",
+    "placeAndDateOfIssue": "Gurugram, 17 Jun 2026"
+  }
+}

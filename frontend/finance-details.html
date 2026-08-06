@@ -4,10 +4,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Finance Management - Exim TMS</title>
+    <title>Finance Management - ATLAS EXIM</title>
     <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/action-modal.css">
     <link rel="stylesheet" href="css/modal.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        (function () {
+            if (new URLSearchParams(location.search).get('embedded') === '1') {
+                document.documentElement.classList.add('embedded-mode');
+            }
+        })();
+    </script>
 </head>
 
 <body>
@@ -15,8 +23,7 @@
         <div class="container">
             <div class="header-content">
                 <div class="logo">
-                    <div class="logo-icon">SF</div>
-                    <div class="logo-text">ShipFlow</div>
+                    <img src="Logipod_Logo.png" alt="Logipod" class="logo-img">
                 </div>
                 <div class="header-actions">
                     <div class="user-profile"
@@ -66,8 +73,7 @@
                                             <span
                                                 style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Sale
                                                 Number</span>
-                                            <span id="display_enquiry_number"
-                                                style="font-size: 13px; color: var(--navy-800); font-weight: 600;">-</span>
+                                            <span id="display_enquiry_number" class="job-no">-</span>
                                         </div>
                                         <div
                                             style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
@@ -96,11 +102,24 @@
                                     </h3>
                                     <div style="display: grid; gap: 8px;">
                                         <div
-                                            style="display: grid; grid-template-columns: 140px 1fr; gap: 12px; padding: 10px 0; background: var(--primary-light); margin: 8px -12px -12px; padding: 12px; border-radius: 6px;">
+                                            style="display: grid; grid-template-columns: 160px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
+                                            <span style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">Base Shipping Line</span>
+                                            <span id="display_base_line" style="font-size: 13px; color: var(--navy-800);">-</span>
+                                        </div>
+                                        <div id="row_overhead_line"
+                                            style="display: none; grid-template-columns: 160px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
+                                            <span style="font-size: 13px; color: var(--text-tertiary); font-weight: 500;">+ Overheads → Line</span>
+                                            <span id="display_overhead_line" style="font-size: 13px; color: var(--navy-800);">₹0</span>
+                                        </div>
+                                        <div id="row_overhead_deduct"
+                                            style="display: none; grid-template-columns: 160px 1fr; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--border-light);">
+                                            <span style="font-size: 13px; color: #b45309; font-weight: 500;">− Deducted from Client</span>
+                                            <span id="display_overhead_deduct" style="font-size: 13px; color: #b45309;">₹0</span>
+                                        </div>
+                                        <div
+                                            style="display: grid; grid-template-columns: 160px 1fr; gap: 12px; padding: 10px 0; background: var(--primary-light); margin: 8px -12px -12px; padding: 12px; border-radius: 6px;">
                                             <span
-                                                style="font-size: 14px; color: var(--primary); font-weight: 700;">Final
-                                                Quote
-                                                (INR)</span>
+                                                style="font-size: 14px; color: var(--primary); font-weight: 700;">Shipping Line Cost (incl. Overheads)</span>
                                             <span id="display_final_quote"
                                                 style="font-size: 16px; color: var(--primary); font-weight: 700;">-</span>
                                         </div>
@@ -216,6 +235,177 @@
                             </div>
                         </div>
 
+                        <!-- Overheads (Intermittent Charges to be Booked) -->
+                        <div class="form-section"
+                            style="background: white; border: 1px solid var(--border-light); padding: 24px; border-radius: 8px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                                <h3 style="font-size: 18px; color: var(--navy-800); display: flex; align-items: center; gap: 10px; margin: 0;">
+                                    <i class="fas fa-coins" style="color: var(--primary);"></i> Overheads &amp; Other Payments
+                                </h3>
+                            </div>
+                            <p style="color: var(--text-tertiary); font-size: 13px; margin: 0 0 16px;">
+                                Add intermittent overheads as payable line items and record who they are paid to.
+                            </p>
+
+                            <div class="quick-entry-form"
+                                style="background: var(--gray-50); padding: 16px; border-radius: 8px; border: 1px solid var(--border-light); margin-bottom: 20px;">
+                                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">Overhead <span style="color:var(--danger,#dc2626);">*</span></label>
+                                        <select id="ovp_overhead" class="form-control" style="padding: 8px; font-size: 13px;"
+                                            onchange="onOverheadSelected()">
+                                            <option value="">Select overhead…</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">Pay To (Payee) <span style="color:var(--danger,#dc2626);">*</span></label>
+                                        <select id="ovp_payee" class="form-control" style="padding: 8px; font-size: 13px;"
+                                            onchange="onPayeeSelected()">
+                                            <option value="">Select payee…</option>
+                                            <option value="__new__">➕ Add new payee…</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">Cost Treatment <span style="color:var(--danger,#dc2626);">*</span></label>
+                                        <select id="ovp_cost_impact" class="form-control" style="padding: 8px; font-size: 13px;">
+                                            <option value="add_to_shipping_line">Add to Shipping Line cost</option>
+                                            <option value="deduct_from_client">Deduct from Client</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Inline new-payee details (shown when "Add new payee" chosen) -->
+                                <div id="ovp_new_payee_box" style="display:none; border:1px dashed var(--border-medium); border-radius:8px; padding:14px; margin-bottom:12px; background:white;">
+                                    <div style="font-size:12px; font-weight:700; color:var(--navy-700); margin-bottom:10px;">
+                                        <i class="fas fa-user-plus"></i> New Payee Details
+                                    </div>
+                                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label style="font-size:11px; margin-bottom:4px;">Payee Name *</label>
+                                            <input type="text" id="ovp_np_name" class="form-control" style="padding:6px; font-size:12px;" placeholder="e.g. ABC Transport">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label style="font-size:11px; margin-bottom:4px;">Type</label>
+                                            <select id="ovp_np_type" class="form-control" style="padding:6px; font-size:12px;">
+                                                <option value="Company">Company</option>
+                                                <option value="Individual">Individual</option>
+                                            </select>
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label style="font-size:11px; margin-bottom:4px;">Contact Number</label>
+                                            <input type="text" id="ovp_np_contact" class="form-control" style="padding:6px; font-size:12px;" placeholder="+91…">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label style="font-size:11px; margin-bottom:4px;">Beneficiary Name</label>
+                                            <input type="text" id="ovp_np_beneficiary" class="form-control" style="padding:6px; font-size:12px;" placeholder="As per bank">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label style="font-size:11px; margin-bottom:4px;">Account Number</label>
+                                            <input type="text" id="ovp_np_account" class="form-control" style="padding:6px; font-size:12px;" placeholder="Account no.">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label style="font-size:11px; margin-bottom:4px;">IFSC Code</label>
+                                            <input type="text" id="ovp_np_ifsc" class="form-control" style="padding:6px; font-size:12px;" placeholder="e.g. HDFC0001234">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label style="font-size:11px; margin-bottom:4px;">Bank</label>
+                                            <input type="text" id="ovp_np_bank" class="form-control" style="padding:6px; font-size:12px;" placeholder="Bank name">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label style="font-size:11px; margin-bottom:4px;">Bank Branch</label>
+                                            <input type="text" id="ovp_np_branch" class="form-control" style="padding:6px; font-size:12px;" placeholder="Branch">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom:0;">
+                                            <label style="font-size:11px; margin-bottom:4px;">GST Number</label>
+                                            <input type="text" id="ovp_np_gst" class="form-control" style="padding:6px; font-size:12px;" placeholder="GSTIN">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div style="display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 12px; align-items: end;">
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">Description</label>
+                                        <input type="text" id="ovp_description" class="form-control" style="padding: 8px; font-size: 13px;" placeholder="Optional note">
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">Currency</label>
+                                        <select id="ovp_currency" class="form-control" style="padding: 8px; font-size: 13px;">
+                                            <option value="INR">INR</option>
+                                            <option value="USD">USD</option>
+                                            <option value="EUR">EUR</option>
+                                            <option value="GBP">GBP</option>
+                                            <option value="JPY">JPY</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 11px; margin-bottom: 4px;">Amount *</label>
+                                        <input type="number" id="ovp_amount" class="form-control" style="padding: 8px; font-size: 13px;" placeholder="0.00">
+                                    </div>
+                                    <button type="button" class="btn btn-primary" onclick="submitOverheadPayment(this)"
+                                        style="padding: 9px 16px; font-size: 13px; height: 38px;">
+                                        <i class="fas fa-plus"></i> Add to Booking
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div class="table-container" style="overflow-x: auto;">
+                                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                                    <thead>
+                                        <tr style="background: #f8fafc; text-align: left; border-bottom: 2px solid #e2e8f0;">
+                                            <th style="padding: 12px; color: var(--text-tertiary);">Overhead</th>
+                                            <th style="padding: 12px; color: var(--text-tertiary);">Pay To</th>
+                                            <th style="padding: 12px; color: var(--text-tertiary);">Treatment</th>
+                                            <th style="padding: 12px; color: var(--text-tertiary);">Status</th>
+                                            <th style="padding: 12px; color: var(--text-tertiary);">UTR / Date</th>
+                                            <th style="padding: 12px; text-align: right; color: var(--text-tertiary);">Amount</th>
+                                            <th style="padding: 12px; text-align: center; color: var(--text-tertiary);">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="overheadPaymentsTableBody">
+                                        <tr>
+                                            <td colspan="7" style="padding: 24px; text-align: center; color: var(--text-tertiary);">
+                                                No overheads booked yet.</td>
+                                        </tr>
+                                    </tbody>
+                                    <tfoot>
+                                        <tr style="background: #fdfdfd; font-weight: 700; border-top: 2px solid #e2e8f0;">
+                                            <td colspan="5" style="padding: 12px; text-align: right; color: var(--navy-700);">Total Overheads:</td>
+                                            <td id="totalOverheadsAmount" style="padding: 12px; text-align: right; color: var(--primary); font-size: 15px;">₹0.00</td>
+                                            <td></td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Book Overhead Payment Modal -->
+                        <div id="bookOverheadModal" class="modal" style="display: none;">
+                            <div class="modal-content" style="max-width: 460px;">
+                                <div class="modal-header">
+                                    <h3><i class="fas fa-check-circle"></i> Book Overhead Payment</h3>
+                                    <span class="close" onclick="closeBookOverheadModal()">&times;</span>
+                                </div>
+                                <div class="modal-body" style="padding: 20px;">
+                                    <p id="bookOverheadSummary" style="font-size:13px;color:var(--text-secondary);margin:0 0 16px;"></p>
+                                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                                        <div class="form-group">
+                                            <label>UTR Number</label>
+                                            <input type="text" id="book_ovp_utr" class="form-control" placeholder="Enter UTR Number">
+                                        </div>
+                                        <div class="form-group">
+                                            <label>Payment Date</label>
+                                            <input type="date" id="book_ovp_date" class="form-control">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer"
+                                    style="padding: 16px; border-top: 1px solid var(--border-light); display: flex; justify-content: flex-end; gap: 12px;">
+                                    <button type="button" class="btn btn-secondary" onclick="closeBookOverheadModal()">Cancel</button>
+                                    <button type="button" class="btn btn-primary" onclick="confirmBookOverheadPayment(this)">Mark as Paid</button>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Additional Charge Modal -->
                         <div id="additionalChargeModal" class="modal" style="display: none;">
                             <div class="modal-content" style="max-width: 500px;">
@@ -268,8 +458,7 @@
 
 
                         <div class="form-actions" style="display: flex; gap: 16px; margin-top: 32px;">
-                            <button type="button" class="btn btn-secondary"
-                                onclick="window.location.href='/#finance-payments'">
+                            <button type="button" class="btn btn-secondary" onclick="goBack()">
                                 <i class="fas fa-arrow-left"></i> Back to Finance
                             </button>
                             <button type="button" class="btn btn-primary" onclick="saveFinance()">

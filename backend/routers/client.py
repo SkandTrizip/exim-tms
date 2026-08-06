@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import datetime
 from backend.routers.auth import require_admin, get_current_user
@@ -18,9 +18,57 @@ router = APIRouter()
 def get_all_origins(db: Session = Depends(get_db)):
     return db.query(ClientOrigin).all()
 
-@router.get("/masters", response_model=List[ClientMasterSchema])
+@router.get("/masters")
 def get_all_client_masters(db: Session = Depends(get_db)):
-    return db.query(ClientMaster).all()
+    from backend.utils.client_utils import strip_branch_suffix
+    """
+    Returns all masters joined with their origin so the frontend can build
+    CompanyName_Main / CompanyName_City labels without extra API calls.
+    """
+    masters = (
+        db.query(ClientMaster)
+        .options(joinedload(ClientMaster.origin))
+        .all()
+    )
+
+    # For each origin, the branch with the smallest id is treated as "main"
+    from collections import defaultdict
+    origin_min_id: dict = defaultdict(lambda: float('inf'))
+    for m in masters:
+        if m.origin_id and m.id < origin_min_id[m.origin_id]:
+            origin_min_id[m.origin_id] = m.id
+
+    result = []
+    for m in masters:
+        origin = m.origin
+        base_name = origin.unique_client_name if origin else m.client_name
+        is_main = (m.id == origin_min_id.get(m.origin_id))
+        d = {
+            "id": m.id,
+            "origin_id": m.origin_id,
+            "client_code": m.client_code,
+            "client_name": m.client_name,
+            "unique_client_name": base_name,
+            "is_main": is_main,
+            "office_location": m.office_location,
+            "office_address": m.office_address,
+            "gst_name": m.gst_name,
+            "gst_no": m.gst_no,
+            "pan_no": m.pan_no,
+            "iec_code": m.iec_code,
+            "contact_person": m.contact_person,
+            "contact_no": m.contact_no,
+            "email_id": m.email_id,
+            "sales_branch": m.sales_branch,
+            "sales_person": m.sales_person,
+            "cs_name": m.cs_name,
+            "credit_period": m.credit_period,
+            "credit_amount": m.credit_amount,
+            "payment_terms": m.payment_terms,
+            "status": m.status,
+        }
+        result.append(d)
+    return result
 
 # ── Create endpoints ───────────────────────────────────────────────────────────
 
@@ -123,15 +171,20 @@ def get_masters_by_origin(origin_id: int, db: Session = Depends(get_db)):
 @router.get("/master/by-enquiry/{enquiry_id}")
 def get_client_details_for_enquiry(enquiry_id: int, db: Session = Depends(get_db)):
     from backend.models.enquiry import Enquiry
+    from backend.utils.client_utils import strip_branch_suffix
     enquiry = db.query(Enquiry).filter(Enquiry.id == enquiry_id).first()
     if not enquiry:
         raise HTTPException(status_code=404, detail="Enquiry not found")
 
+    # Strip the branch suffix ("Acme_Mumbai" → "Acme") before looking up the origin
+    base_name = strip_branch_suffix(enquiry.client_name)
+
     origin = db.query(ClientOrigin).filter(
-        ClientOrigin.unique_client_name == enquiry.client_name
+        ClientOrigin.unique_client_name == base_name
     ).first()
 
     if not origin:
+        # Fallback: try matching by branch client_name directly
         master = db.query(ClientMaster).filter(
             ClientMaster.client_name == enquiry.client_name
         ).first()
@@ -139,7 +192,14 @@ def get_client_details_for_enquiry(enquiry_id: int, db: Session = Depends(get_db
             origin = db.query(ClientOrigin).filter(ClientOrigin.id == master.origin_id).first()
         else:
             return {"error": f"No client origin or master found matching '{enquiry.client_name}'"}
-    else:
+    
+    # Find the specific branch matching the stored client_name (for branch-specific details)
+    # First try exact match, then fallback to first branch of origin
+    master = db.query(ClientMaster).filter(
+        ClientMaster.origin_id == origin.id,
+        ClientMaster.client_name == enquiry.client_name
+    ).first()
+    if not master:
         master = db.query(ClientMaster).filter(ClientMaster.origin_id == origin.id).first()
 
     if not master:
