@@ -41,10 +41,6 @@ def create_overhead(
     if not data.overhead_name:
         raise HTTPException(status_code=400, detail="Overhead name is required")
 
-    existing = db.query(Overhead).filter(Overhead.overhead_name == data.overhead_name).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="An overhead with this name already exists")
-
     payload = data.dict(exclude_none=True)
     payload.pop("status", None)
     payload.pop("submitted_by", None)

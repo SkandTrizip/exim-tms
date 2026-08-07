@@ -13,7 +13,7 @@ class Overhead(Base):
     id = Column(Integer, primary_key=True, index=True)
 
     # Identity
-    overhead_name = Column(String, unique=True, index=True)
+    overhead_name = Column(String, index=True)
     category      = Column(String)          # e.g. Detention, Demurrage, Documentation
     description   = Column(String)
 

@@ -85,6 +85,23 @@ with engine.connect() as _conn:
             logger.info(f"Index already exists or skipped: {_index_name}")
     _conn.commit()
 
+# Allow duplicate overhead names (drop legacy unique constraint/index if present)
+with engine.connect() as _conn:
+    try:
+        _conn.execute(text("ALTER TABLE overheads DROP CONSTRAINT IF EXISTS overheads_overhead_name_key"))
+        logger.info("Dropped unique constraint overheads_overhead_name_key (if present)")
+    except ProgrammingError:
+        logger.info("Unique constraint overheads_overhead_name_key already absent or skipped")
+    try:
+        _conn.execute(text("DROP INDEX IF EXISTS ix_overheads_overhead_name"))
+        _conn.execute(
+            text("CREATE INDEX IF NOT EXISTS ix_overheads_overhead_name ON overheads (overhead_name)")
+        )
+        logger.info("Ensured non-unique index ix_overheads_overhead_name on overheads.overhead_name")
+    except ProgrammingError:
+        logger.info("Overheads overhead_name index migration skipped")
+    _conn.commit()
+
 app = FastAPI(
     title="Exim TMS API",
     description="Backend API for Exim Transport Management System",
