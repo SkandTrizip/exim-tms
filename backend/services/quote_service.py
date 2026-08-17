@@ -373,6 +373,89 @@ def delete_quote(db: Session, quote_id: int) -> bool:
     return True
 
 
+def _charge_amounts(quantity: float, rate: float, exchange_rate: float) -> Tuple[float, float]:
+    """Return (total_amount, final_inr_amount) using the same formula as quote create/update."""
+    qty = float(quantity or 0)
+    rt = float(rate or 0)
+    ex = float(exchange_rate or 1)
+    total = qty * rt
+    return total, total * ex
+
+
+def sync_per_container_quantities(
+    db: Session,
+    enquiry_id: int,
+    container_count: int,
+    *,
+    commit: bool = False,
+) -> int:
+    """
+    Set quantity on all Per Container charge lines for an enquiry's quotes.
+    Recalculates charge totals and quote header totals. Does not commit unless commit=True.
+    Returns the number of charge rows updated.
+    """
+    try:
+        new_qty = int(container_count)
+    except (TypeError, ValueError):
+        return 0
+    if new_qty < 1:
+        return 0
+
+    charges = (
+        db.query(QuoteCharge)
+        .filter(QuoteCharge.enquiry_id == enquiry_id)
+        .all()
+    )
+    if not charges:
+        return 0
+
+    touched_quote_ids = set()
+    updated = 0
+
+    for ch in charges:
+        if (ch.charged_on or "").strip().lower() != "per container":
+            continue
+        if float(ch.quantity or 0) == float(new_qty):
+            continue
+        total, inr = _charge_amounts(new_qty, ch.rate, ch.exchange_rate)
+        ch.quantity = float(new_qty)
+        ch.total_amount = total
+        ch.final_inr_amount = inr
+        touched_quote_ids.add(ch.quote_id)
+        updated += 1
+
+    if not touched_quote_ids:
+        return 0
+
+    # Recalculate header totals from in-memory charge set (no extra charge queries).
+    origin_by_quote = {qid: 0.0 for qid in touched_quote_ids}
+    for ch in charges:
+        if ch.quote_id not in origin_by_quote:
+            continue
+        if ch.account_type == "On Your Account":
+            origin_by_quote[ch.quote_id] += float(ch.final_inr_amount or 0)
+
+    quotes = db.query(Quote).filter(Quote.id.in_(touched_quote_ids)).all()
+    now = datetime.datetime.utcnow()
+    for quote in quotes:
+        origin_inr = origin_by_quote.get(quote.id, 0.0)
+        quote.total_origin_charges_inr = origin_inr
+        quote.final_quote_inr = origin_inr
+        quote.updated_at = now
+
+    if commit:
+        db.commit()
+
+    logger.info(
+        "Synced Per Container qty to %s for enquiry %s (%s charge(s), %s quote(s))",
+        new_qty,
+        enquiry_id,
+        updated,
+        len(touched_quote_ids),
+    )
+    return updated
+
+
 def update_quote_status(
     db: Session,
     quote_id: int,
