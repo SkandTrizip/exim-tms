@@ -477,6 +477,7 @@ async function saveSaleFromModal() {
     showModal('Updated', 'Sale details saved successfully.', 'success');
     closeActionModal();
 
+
     if (typeof updateAllEnquiriesTable === 'function') updateAllEnquiriesTable(currentAllEnquiriesFilter);
     if (typeof updateDashboardTable === 'function') updateDashboardTable();
     if (typeof refreshBulkStatusCache === 'function') refreshBulkStatusCache();

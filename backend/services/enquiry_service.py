@@ -52,10 +52,26 @@ def update_enquiry_logic(db: Session, enquiry_id: int, data: dict):
     if not enquiry:
         logger.warning(f"Update failed: Enquiry ID {enquiry_id} not found")
         return None
-    
+
+    # Before tracking (stage < 3): keep quote Per Container qty in sync with sales.
+    old_stage = enquiry.stage or 1
+    old_count = enquiry.container_count
+    new_count = data["container_count"] if "container_count" in data else old_count
+
     for key, value in data.items():
         setattr(enquiry, key, value)
-    
+
+    if old_stage < 3 and "container_count" in data:
+        try:
+            old_n = int(old_count) if old_count is not None else None
+            new_n = int(new_count) if new_count is not None else None
+        except (TypeError, ValueError):
+            old_n, new_n = old_count, new_count
+        if new_n is not None and new_n != old_n:
+            from backend.services.quote_service import sync_per_container_quantities
+
+            sync_per_container_quantities(db, enquiry_id, new_n, commit=False)
+
     db.commit()
     db.refresh(enquiry)
     logger.info(f"Updated enquiry ID {enquiry_id}")

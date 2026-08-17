@@ -29,7 +29,20 @@ let bookingOverheadId = null;
 let baseShippingLineTotal = 0;
 let overheadAddToLineTotal = 0;
 let overheadDeductClientTotal = 0;
-let oceanFreightRoe = null;
+let oceanFreightLineRoe = null;
+let oceanFreightClientRoe = null;
+
+function overheadConversionRoe(row) {
+    if (row.applied_roe != null && Number(row.applied_roe) > 0) {
+        return Number(row.applied_roe);
+    }
+    if (row.cost_impact === 'deduct_from_client') {
+        if (row.ocean_freight_client_roe != null) return Number(row.ocean_freight_client_roe);
+        return oceanFreightClientRoe;
+    }
+    if (row.ocean_freight_roe != null) return Number(row.ocean_freight_roe);
+    return oceanFreightLineRoe;
+}
 
 function overheadInrAmount(row) {
     if (row.amount_inr != null && !Number.isNaN(Number(row.amount_inr))) {
@@ -38,7 +51,8 @@ function overheadInrAmount(row) {
     const curr = String(row.currency || 'INR').toUpperCase();
     const amount = Number(row.amount) || 0;
     if (curr === 'INR') return amount;
-    if (oceanFreightRoe && oceanFreightRoe > 0) return Math.round(amount * oceanFreightRoe);
+    const roe = overheadConversionRoe(row);
+    if (roe && roe > 0) return Math.round(amount * roe);
     return 0;
 }
 
@@ -49,11 +63,11 @@ function formatOverheadAmountCell(row) {
     if (String(row.currency || 'INR').toUpperCase() === 'INR') {
         return `₹${inr.toLocaleString()}`;
     }
-    const roeNote = row.ocean_freight_roe
-        ? `<br><span style="color:var(--text-tertiary);font-size:11px;font-weight:500;">₹${inr.toLocaleString()} @ ${Number(row.ocean_freight_roe).toFixed(2)}</span>`
-        : (inr > 0
-            ? `<br><span style="color:var(--text-tertiary);font-size:11px;font-weight:500;">₹${inr.toLocaleString()}</span>`
-            : '<br><span style="color:#b45309;font-size:11px;font-weight:500;">ROE missing</span>');
+    const roe = overheadConversionRoe(row);
+    const roeLabel = row.cost_impact === 'deduct_from_client' ? 'client ROE' : 'line ROE';
+    const roeNote = roe
+        ? `<br><span style="color:var(--text-tertiary);font-size:11px;font-weight:500;">₹${inr.toLocaleString()} @ ${Number(roe).toFixed(2)} (${roeLabel})</span>`
+        : '<br><span style="color:#b45309;font-size:11px;font-weight:500;">ROE missing</span>';
     return `${curr} ${amount.toLocaleString()}${roeNote}`;
 }
 
@@ -255,7 +269,10 @@ function renderOverheadPaymentsTable(rows) {
     let total = 0;
     tbody.innerHTML = rows.map(r => {
         if (r.ocean_freight_roe != null && r.ocean_freight_roe > 0) {
-            oceanFreightRoe = Number(r.ocean_freight_roe);
+            oceanFreightLineRoe = Number(r.ocean_freight_roe);
+        }
+        if (r.ocean_freight_client_roe != null && r.ocean_freight_client_roe > 0) {
+            oceanFreightClientRoe = Number(r.ocean_freight_client_roe);
         }
         const inrAmount = overheadInrAmount(r);
         total += inrAmount;
@@ -369,15 +386,29 @@ async function deleteOverheadPayment(id) {
 }
 
 /** Sum On-Your-Account charges from quote/final-quote containers into INR totals. */
-function findOceanFreightRoe(containers) {
+/** Ocean Freight ROEs from final quote containers. */
+function findOceanFreightRoes(containers) {
+    let lineRoe = null;
+    let clientRoe = null;
     for (const c of containers || []) {
         for (const ch of c.charges || []) {
             if (String(ch.charge_description || '').trim().toLowerCase() !== 'ocean freight') continue;
             const ex = Number(ch.exchange_rate);
-            if (Number.isFinite(ex) && ex > 0) return ex;
+            if (Number.isFinite(ex) && ex > 0) lineRoe = ex;
+            const curr = String(ch.currency || 'INR').toUpperCase();
+            if (curr === 'INR') {
+                clientRoe = 1;
+            } else {
+                let vex = Number(ch.vendor_exchange_rate);
+                if (!Number.isFinite(vex) || vex <= 0 || (vex === 1 && lineRoe && lineRoe !== 1)) {
+                    vex = lineRoe;
+                }
+                if (Number.isFinite(vex) && vex > 0) clientRoe = vex;
+            }
+            return { lineRoe, clientRoe };
         }
     }
-    return null;
+    return { lineRoe, clientRoe };
 }
 
 function computeQuoteTotalsInr(containers) {
@@ -430,8 +461,9 @@ async function fetchEnquiryDetails() {
                     }
 
                     const { shippingLineTotal, vendorTotal } = computeQuoteTotalsInr(quoteContainers);
-                    const roe = findOceanFreightRoe(quoteContainers);
-                    if (roe != null) oceanFreightRoe = roe;
+                    const roes = findOceanFreightRoes(quoteContainers);
+                    if (roes.lineRoe != null) oceanFreightLineRoe = roes.lineRoe;
+                    if (roes.clientRoe != null) oceanFreightClientRoe = roes.clientRoe;
 
                     // Base shipping-line total (before overheads); overheads adjust this later.
                     baseShippingLineTotal = shippingLineTotal;
