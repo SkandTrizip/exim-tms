@@ -733,10 +733,13 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
             const quotesRes = await fetch(`${CONFIG.API_URL}/api/quotes/enquiry/${enquiryId}`);
             if (loadId !== actionModalLoadId) return;
             const quotes = quotesRes.ok ? await quotesRes.json() : [];
-            const hasAccepted = quotes.some((q) => String(q.status || '').toLowerCase() === 'accepted');
+            const list = Array.isArray(quotes) ? quotes : (quotes.quotes || []);
+            const hasAccepted = list.some((q) => String(q.status || '').toLowerCase() === 'accepted');
             let effectiveMode = mode;
             if (hasAccepted && mode !== 'view-quotes') {
                 effectiveMode = 'view-quotes';
+            } else if (!hasAccepted && mode === 'view-quotes') {
+                effectiveMode = 'edit-quotes';
             }
             const modeMap = { 'edit-quotes': 'edit', 'confirm-quote': 'confirm', 'view-quotes': 'view' };
             const iframeSrc = `/pricing?enquiry_id=${enquiryId}&mode=${modeMap[effectiveMode]}&embedded=1`;
@@ -756,11 +759,17 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
             const quotesRes = await fetch(`${CONFIG.API_URL}/api/quotes/enquiry/${enquiryId}`);
             if (loadId !== actionModalLoadId) return;
             const quotes = quotesRes.ok ? await quotesRes.json() : [];
-            const list = Array.isArray(quotes) ? quotes : [];
+            const list = Array.isArray(quotes) ? quotes : (quotes.quotes || []);
             const hasAccepted = list.some((q) => String(q.status || '').toLowerCase() === 'accepted');
             if (!hasAccepted) {
                 bodyEl.className = 'action-modal-body';
-                bodyEl.innerHTML = '<div class="action-modal-loading">Confirm the quote first. Tracking is available only after the quote is locked.</div>';
+                bodyEl.innerHTML = `
+                    <div class="action-modal-loading" style="flex-direction:column;gap:14px;text-align:center;">
+                        <p style="margin:0;">This quote is not confirmed yet. Confirm it before tracking.</p>
+                        <button type="button" class="btn btn-primary" onclick="openActionModal('edit-quotes', ${enquiryId})">
+                            Confirm Quote
+                        </button>
+                    </div>`;
                 return;
             }
             bodyEl.innerHTML = renderIframeSection(`/upload-track?enquiry_id=${enquiryId}&embedded=1`);

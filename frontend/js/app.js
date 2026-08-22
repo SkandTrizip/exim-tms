@@ -2311,14 +2311,13 @@ function isAcceptedQuoteRecord(q) {
     return String(q?.status || '').toLowerCase() === 'accepted';
 }
 
-/** Prefer the accepted quote; fall back to newest. Locked sales (stage 3+) show Accepted even if a sibling draft remains. */
+/** Prefer the accepted quote; otherwise show the newest quote's real status. */
 function quoteInfoForEnquiryList(e, quotes = []) {
     const list = Array.isArray(quotes) ? quotes : [];
     const accepted = list.find(isAcceptedQuoteRecord);
     const display = accepted || list[0];
     const raw = String(display?.status || 'draft');
-    const locked = (e.stage || 1) >= 3;
-    const status = accepted || locked
+    const status = accepted
         ? 'Accepted'
         : raw.charAt(0).toUpperCase() + raw.slice(1);
 
@@ -2851,10 +2850,10 @@ function renderEnquiryActions(e, quoteStatus = null) {
         </button>
     `;
 
-    // Quotes stay editable until accepted (stage 3+ / status Accepted)
+    // Quotes stay editable until a quote record is actually accepted.
     if (!e.is_void) {
         const statusKey = String(quoteStatus || '').toLowerCase();
-        const isAccepted = e.stage >= 3 || statusKey === 'accepted';
+        const isAccepted = statusKey === 'accepted';
         if (isAccepted) {
             html += `
                 <button class="actions-item" onclick="openActionModal('view-quotes', ${e.id})">

@@ -99,8 +99,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         const hasAcceptedQuote = pricingQuotes.some(isQuoteAcceptedStatus);
 
         // Once confirmed, pricing is permanently read-only in Quotes & Pricing.
+        // View mode without an accepted quote is a stale lock — keep Confirm available.
         if (hasAcceptedQuote && pricingPageMode !== 'view') {
             pricingPageMode = 'view';
+        } else if (!hasAcceptedQuote && pricingPageMode === 'view') {
+            pricingPageMode = 'edit';
         }
 
         if (pricingPageMode === 'confirm') {
