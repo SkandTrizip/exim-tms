@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Depends, HTTPException, status, Body, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from backend.database import get_db
@@ -115,8 +115,8 @@ def update_quote(
 
 @router.patch("/{quote_id}/status", response_model=Quote)
 def update_quote_status(
-    quote_id: int, 
-    status: str,
+    quote_id: int,
+    status_value: Optional[str] = Query(None, alias="status"),
     body: Optional[QuoteStatusUpdate] = Body(None),
     db: Session = Depends(get_db),
 ):
@@ -127,8 +127,9 @@ def update_quote_status(
     When accepting after SI, include remarks_reason (and remarks_other if reason is 'other') in the body.
     Remarks are optional for the first client confirmation.
     """
+    new_status = (body.status if body and body.status else None) or status_value
     valid_statuses = ["draft", "sent", "accepted", "rejected"]
-    if status not in valid_statuses:
+    if not new_status or new_status not in valid_statuses:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
@@ -136,9 +137,9 @@ def update_quote_status(
 
     remarks_reason = body.remarks_reason if body else None
     remarks_other = body.remarks_other if body else None
-    
+
     return quote_service.update_quote_status(
-        db, quote_id, status, remarks_reason, remarks_other
+        db, quote_id, new_status, remarks_reason, remarks_other
     )
 
 

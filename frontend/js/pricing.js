@@ -765,6 +765,9 @@ async function savePricingData(silent = false) {
     }
 
     for (const quote of pricingQuotes) {
+        if (quote.id && isQuoteAcceptedStatus(quote)) {
+            continue;
+        }
         const summary = getQuoteSummary(quote);
         const body = {
             enquiry_id: currentEnquiry.id,
@@ -956,29 +959,32 @@ async function executeFinalizeQuote(quote, remarks) {
         await savePricingData(true);
         console.log('Post-save quote ID:', quote.id);
 
-        if (quote.id) {
-            const statusRes = await fetch(
-                `${CONFIG.API_URL}/api/quotes/${quote.id}/status?status=accepted`,
-                {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        remarks_reason: remarks?.remarks_reason || null,
-                        remarks_other: remarks?.remarks_other || null,
-                    }),
-                }
-            );
-            if (!statusRes.ok) {
-                const err = await statusRes.json().catch(() => ({}));
-                throw new Error(err.detail || 'Failed to update quote status');
-            }
-            quote.status = 'accepted';
-            if (remarks) {
-                quote.accepted_remarks_reason = remarks.remarks_reason;
-                quote.accepted_remarks_other = remarks.remarks_other;
-            }
-            console.log('✅ Quote status updated to accepted');
+        if (!quote.id) {
+            throw new Error('Quote was saved without an ID, so it could not be marked accepted.');
         }
+
+        const statusRes = await fetch(
+            `${CONFIG.API_URL}/api/quotes/${quote.id}/status?status=accepted`,
+            {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'accepted',
+                    remarks_reason: remarks?.remarks_reason || null,
+                    remarks_other: remarks?.remarks_other || null,
+                }),
+            }
+        );
+        if (!statusRes.ok) {
+            const err = await statusRes.json().catch(() => ({}));
+            throw new Error(err.detail || 'Failed to update quote status');
+        }
+        quote.status = 'accepted';
+        if (remarks) {
+            quote.accepted_remarks_reason = remarks.remarks_reason;
+            quote.accepted_remarks_other = remarks.remarks_other;
+        }
+        console.log('✅ Quote status updated to accepted');
 
         const stageRes = await fetch(`${CONFIG.API_URL}/api/enquiry/${currentEnquiry.id}/stage?stage=3`, {
             method: 'PATCH',

@@ -751,7 +751,24 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
 
     if (mode === 'view-tracking' && enquiryId) {
         bodyEl.className = 'action-modal-body action-modal-body-iframe';
-        bodyEl.innerHTML = renderIframeSection(`/upload-track?enquiry_id=${enquiryId}&embedded=1`);
+        bodyEl.innerHTML = '<div class="action-modal-loading">Loading…</div>';
+        try {
+            const quotesRes = await fetch(`${CONFIG.API_URL}/api/quotes/enquiry/${enquiryId}`);
+            if (loadId !== actionModalLoadId) return;
+            const quotes = quotesRes.ok ? await quotesRes.json() : [];
+            const list = Array.isArray(quotes) ? quotes : [];
+            const hasAccepted = list.some((q) => String(q.status || '').toLowerCase() === 'accepted');
+            if (!hasAccepted) {
+                bodyEl.className = 'action-modal-body';
+                bodyEl.innerHTML = '<div class="action-modal-loading">Confirm the quote first. Tracking is available only after the quote is locked.</div>';
+                return;
+            }
+            bodyEl.innerHTML = renderIframeSection(`/upload-track?enquiry_id=${enquiryId}&embedded=1`);
+        } catch (err) {
+            if (loadId !== actionModalLoadId) return;
+            bodyEl.className = 'action-modal-body';
+            bodyEl.innerHTML = `<div class="action-modal-loading" style="color:var(--error);">${escapeHtml(err.message || 'Failed to load')}</div>`;
+        }
         return;
     }
 

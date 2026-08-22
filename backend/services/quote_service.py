@@ -255,6 +255,16 @@ def get_quote_by_id(db: Session, quote_id: int) -> Optional[Quote]:
     return _load_quote_full(db, quote_id)
 
 
+def enquiry_has_accepted_quote(db: Session, enquiry_id: int) -> bool:
+    """True when this enquiry has a confirmed (accepted) quote."""
+    return (
+        db.query(Quote.id)
+        .filter(Quote.enquiry_id == enquiry_id, Quote.status == "accepted")
+        .first()
+        is not None
+    )
+
+
 def get_quotes_by_enquiry(db: Session, enquiry_id: int) -> List[Quote]:
     """Get all quotes for a specific enquiry with containers and charges eager-loaded."""
     return (

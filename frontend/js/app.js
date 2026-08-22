@@ -425,14 +425,12 @@ function countTrackingSection(section) {
     const ops = enquiries.filter((e) => isTrackingListEnquiry(e));
     return ops.filter((e) => {
         const s = cachedBulkStatus[e.id] || null;
-        // Stage-2 rows only count once they have a shipment status record.
-        if ((e.stage || 1) < 3 && !s) return false;
         return matchesTrackingSection(section, s);
     }).length;
 }
 
 function isTrackingListEnquiry(e) {
-    return !!(e && !e.is_void && (e.stage || 1) >= 2);
+    return !!(e && !e.is_void && (e.stage || 1) >= 3);
 }
 
 function isShippingLinePaymentDone(status) {
@@ -2309,6 +2307,28 @@ function createEnquiryRowWithStatus(e, status = null, compact = false) {
     return wrapper.firstElementChild;
 }
 
+function isAcceptedQuoteRecord(q) {
+    return String(q?.status || '').toLowerCase() === 'accepted';
+}
+
+/** Prefer the accepted quote; fall back to newest. Locked sales (stage 3+) show Accepted even if a sibling draft remains. */
+function quoteInfoForEnquiryList(e, quotes = []) {
+    const list = Array.isArray(quotes) ? quotes : [];
+    const accepted = list.find(isAcceptedQuoteRecord);
+    const display = accepted || list[0];
+    const raw = String(display?.status || 'draft');
+    const locked = (e.stage || 1) >= 3;
+    const status = accepted || locked
+        ? 'Accepted'
+        : raw.charAt(0).toUpperCase() + raw.slice(1);
+
+    return {
+        line: display?.shipping_line || '—',
+        total: display?.final_quote_inr ? `₹${Number(display.final_quote_inr).toLocaleString()}` : '—',
+        status,
+    };
+}
+
 function renderQuotesListRow(e, quoteInfo = {}) {
     const line = quoteInfo.line || '—';
     const total = quoteInfo.total || '—';
@@ -2467,23 +2487,18 @@ async function updateQuotesTable() {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading...</td></tr>';
 
     const rowsHtml = await Promise.all(paginatedEnquiries.map(async (e) => {
-        let quoteInfo = { line: '—', total: '—', status: 'Draft' };
+        let quotes = [];
         try {
             const res = await fetch(`${CONFIG.API_URL}/api/quotes/enquiry/${e.id}`);
             if (res.ok) {
-                const quotes = await res.json();
-                const accepted = quotes.find((q) => q.status === 'accepted') || quotes[0];
-                if (accepted) {
-                    quoteInfo.line = accepted.shipping_line || 'Multiple';
-                    quoteInfo.total = accepted.final_quote_inr ? `₹${accepted.final_quote_inr.toLocaleString()}` : '—';
-                    quoteInfo.status = accepted.status.charAt(0).toUpperCase() + accepted.status.slice(1);
-                }
+                const payload = await res.json();
+                quotes = Array.isArray(payload) ? payload : (payload.quotes || []);
             }
         } catch (err) {
             console.error('Error fetching quote info:', err);
         }
 
-        return renderQuotesListRow(e, quoteInfo);
+        return renderQuotesListRow(e, quoteInfoForEnquiryList(e, quotes));
     }));
 
     tbody.innerHTML = rowsHtml.join('');
@@ -2515,11 +2530,7 @@ async function updateTrackingTable(filterType = null) {
         : await fetchBulkStatus(ids);
     if (!Object.keys(cachedBulkStatus).length) cachedBulkStatus = bulkStatus;
 
-    // Stage 3+ always eligible; stage 2 only if tracking has already started.
-    const trackingEnquiries = candidates.filter((e) => {
-        if ((e.stage || 1) >= 3) return true;
-        return !!bulkStatus[e.id];
-    });
+    const trackingEnquiries = candidates;
 
     const sectionKey = shouldBypassTrackingSectionFilter() ? null : currentTrackingFilter;
 

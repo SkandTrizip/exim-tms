@@ -6,6 +6,7 @@ let currentEnquiryData = null;
 let currentPricingData = null;
 let currentFinalQuoteData = null;
 let uploadedFiles = {};
+let trackingQuoteConfirmed = false;
 
 function syncPricingDataToWindow(quote) {
     currentPricingData = quote;
@@ -13,6 +14,33 @@ function syncPricingDataToWindow(quote) {
 }
 
 window.currentPricingData = null;
+
+function isAcceptedQuoteRecord(q) {
+    return String(q?.status || '').toLowerCase() === 'accepted';
+}
+
+function setTrackingBlockedUntilConfirm(blocked) {
+    trackingQuoteConfirmed = !blocked;
+    let banner = document.getElementById('trackingConfirmRequired');
+    if (blocked) {
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'trackingConfirmRequired';
+            banner.setAttribute('role', 'status');
+            banner.style.cssText = 'margin-bottom:16px;padding:14px 16px;border-radius:8px;background:#fef3c7;color:#92400e;font-weight:600;';
+            const host = document.querySelector('.upload-track-container') || document.getElementById('mainContent');
+            if (host) host.prepend(banner);
+        }
+        banner.textContent = 'Confirm the quote first. Tracking is available only after the quote is locked.';
+        const saveBtn = document.querySelector('#saveTrackingBtn, button[onclick="saveTracking()"]');
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.setAttribute('aria-disabled', 'true');
+        }
+    } else if (banner) {
+        banner.remove();
+    }
+}
 
 // ==========================================
 // Initialization
@@ -144,17 +172,25 @@ async function fetchPricingData(enquiryId) {
         if (response.ok) {
             const pricingList = await response.json();
             if (pricingList && pricingList.length > 0) {
-                // Find the quote that was actually accepted
-                const acceptedQuote = pricingList.find(q => q.status === 'accepted') || pricingList[0];
+                const acceptedQuote = pricingList.find(isAcceptedQuoteRecord);
+                if (!acceptedQuote) {
+                    setTrackingBlockedUntilConfirm(true);
+                    return;
+                }
+                setTrackingBlockedUntilConfirm(false);
                 syncPricingDataToWindow(acceptedQuote);
                 populateInvoiceInfo();
                 updateUpdateQuoteRowVisibility();
+            } else {
+                setTrackingBlockedUntilConfirm(true);
             }
         } else {
             console.warn('No pricing data found for this enquiry');
+            setTrackingBlockedUntilConfirm(true);
         }
     } catch (error) {
         console.error('Error fetching pricing data:', error);
+        setTrackingBlockedUntilConfirm(true);
     }
 }
 
@@ -667,7 +703,7 @@ function getChecklistState() {
  * Save the current state of all checkboxes and dates to localStorage and Backend
  */
 async function saveChecklistState() {
-    if (!currentEnquiryData?.id) return;
+    if (!currentEnquiryData?.id || !trackingQuoteConfirmed) return;
 
     const state = getChecklistState();
     localStorage.setItem(`checklist_${currentEnquiryData.id}`, JSON.stringify(state));
@@ -1030,6 +1066,10 @@ function removeFile(inputId, displayId) {
 async function saveTracking() {
     if (!currentEnquiryData?.id) {
         showModal('Error', 'Enquiry not loaded. Please refresh the page.', 'error');
+        return;
+    }
+    if (!trackingQuoteConfirmed) {
+        showModal('Quote not confirmed', 'Confirm the quote first. Tracking is available only after the quote is locked.', 'warning');
         return;
     }
 
