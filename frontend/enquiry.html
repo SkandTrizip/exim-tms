@@ -209,29 +209,42 @@
                                     <div>Quantity <span class="required">*</span></div>
                                     <div class="air-header-with-unit">
                                         <span>Weight Per Piece <span class="required">*</span></span>
-                                        <select id="airWeightUnit" class="air-unit-select" onchange="updateAirCargoTotals()">
+                                        <select id="airWeightUnit" class="air-unit-select" onchange="updateAirCargoTotals()" aria-label="Weight unit">
                                             <option value="Kgs">Kgs</option>
                                             <option value="Lbs">Lbs</option>
+                                            <option value="Tonn">Tonn</option>
                                         </select>
                                     </div>
                                     <div class="air-header-with-unit">
-                                        <span>Dimensions <span class="required">*</span></span>
-                                        <select id="airDimUnit" class="air-unit-select" onchange="updateAirCargoTotals()">
+                                        <span>Dimensions L×W×H <span class="required">*</span></span>
+                                        <select id="airDimUnit" class="air-unit-select" onchange="updateAirCargoTotals()" aria-label="Dimension unit">
                                             <option value="Cms">Cms</option>
+                                            <option value="MM">MM</option>
                                             <option value="Inches">Inches</option>
+                                            <option value="Meters">Meters</option>
+                                            <option value="Feet">Feet</option>
                                         </select>
                                     </div>
-                                    <div class="air-col-actions"></div>
+                                    <div class="air-col-actions" aria-hidden="true"></div>
                                 </div>
                                 <div id="airCargoRows"></div>
                             </div>
                             <div class="air-cargo-footer">
                                 <div class="air-cargo-totals">
-                                    <span>Total Quantity : <strong id="airTotalQty">0</strong></span>
-                                    <span>Total Weight: <strong id="airTotalWeight">0 Kgs</strong></span>
-                                    <span>Chargeable Weight: <strong id="airChargeableWeight">0 Kgs</strong></span>
+                                    <div class="air-total-chip">
+                                        <span class="air-total-label">Total Quantity</span>
+                                        <strong id="airTotalQty">0</strong>
+                                    </div>
+                                    <div class="air-total-chip">
+                                        <span class="air-total-label">Total Weight</span>
+                                        <strong id="airTotalWeight">0 Kgs</strong>
+                                    </div>
+                                    <div class="air-total-chip air-total-chip--charge">
+                                        <span class="air-total-label">Chargeable Weight</span>
+                                        <strong id="airChargeableWeight">0 Kgs</strong>
+                                    </div>
                                 </div>
-                                <button type="button" class="btn btn-add" onclick="addAirCargoRow()">
+                                <button type="button" class="btn btn-add air-add-row-btn" onclick="addAirCargoRow()">
                                     <i class="fas fa-plus"></i> Add Row
                                 </button>
                             </div>

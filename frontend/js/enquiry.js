@@ -404,17 +404,19 @@ function updateShipmentTypeUI() {
 }
 
 function syncAirCargoToggle(checkbox) {
+    // Visual state is handled by CSS :has(input:checked); keep inline fallback for older browsers.
     const track = checkbox.closest('.air-flag-toggle')?.querySelector('.toggle-track');
     const thumb = track?.querySelector('.toggle-thumb');
     if (!track || !thumb) return;
     if (checkbox.checked) {
-        track.style.background = 'var(--primary, #2563eb)';
-        thumb.style.transform = 'translateX(20px)';
+        track.style.background = 'var(--info, #3B82F6)';
+        thumb.style.transform = 'translateX(18px)';
     } else {
         track.style.background = '#cbd5e1';
         thumb.style.transform = 'translateX(0)';
     }
 }
+
 
 function createAirCargoRow(data = {}) {
     const rows = document.getElementById('airCargoRows');
@@ -430,39 +432,42 @@ function createAirCargoRow(data = {}) {
     ).join('');
 
     div.innerHTML = `
-        <div class="form-group air-field">
+        <div class="form-group air-field" data-label="Package Type">
             <select class="air-package-type" required>
-                <option value="" disabled ${data.package_type ? '' : 'selected'} hidden>Select</option>
+                <option value="" disabled ${data.package_type ? '' : 'selected'} hidden>Select type</option>
                 ${packageOptions}
             </select>
         </div>
-        <div class="form-group air-field">
+        <div class="form-group air-field" data-label="Quantity">
             <div class="air-qty-control">
                 <button type="button" class="air-qty-btn" onclick="adjustAirQuantity(this, -1)" aria-label="Decrease quantity">−</button>
                 <input type="number" class="air-quantity" min="1" step="1" value="${data.quantity ?? 1}" required>
                 <button type="button" class="air-qty-btn" onclick="adjustAirQuantity(this, 1)" aria-label="Increase quantity">+</button>
             </div>
         </div>
-        <div class="form-group air-field">
+        <div class="form-group air-field" data-label="Weight Per Piece">
             <div class="air-weight-input">
-                <input type="number" class="air-weight-piece" min="0" step="0.01" value="${data.weight_per_piece ?? 0}" required>
+                <input type="number" class="air-weight-piece" min="0" step="0.01" value="${data.weight_per_piece ?? 0}" required placeholder="0">
                 <span class="air-unit-addon air-weight-unit-label">Kgs</span>
             </div>
         </div>
-        <div class="form-group air-field air-dims">
-            <div class="air-dim-group">
-                <label>L</label>
-                <input type="number" class="air-dim-l" min="0" step="0.01" value="${data.length ?? 0}">
-            </div>
-            <span class="air-dim-x">x</span>
-            <div class="air-dim-group">
-                <label>W</label>
-                <input type="number" class="air-dim-w" min="0" step="0.01" value="${data.width ?? 0}">
-            </div>
-            <span class="air-dim-x">x</span>
-            <div class="air-dim-group">
-                <label>H</label>
-                <input type="number" class="air-dim-h" min="0" step="0.01" value="${data.height ?? 0}">
+        <div class="form-group air-field air-dims" data-label="Dimensions L×W×H">
+            <div class="air-dim-box">
+                <div class="air-dim-group">
+                    <span class="air-dim-prefix">L</span>
+                    <input type="number" class="air-dim-l" min="0" step="0.01" value="${data.length ?? 0}" placeholder="0" aria-label="Length">
+                </div>
+                <span class="air-dim-x" aria-hidden="true">×</span>
+                <div class="air-dim-group">
+                    <span class="air-dim-prefix">W</span>
+                    <input type="number" class="air-dim-w" min="0" step="0.01" value="${data.width ?? 0}" placeholder="0" aria-label="Width">
+                </div>
+                <span class="air-dim-x" aria-hidden="true">×</span>
+                <div class="air-dim-group">
+                    <span class="air-dim-prefix">H</span>
+                    <input type="number" class="air-dim-h" min="0" step="0.01" value="${data.height ?? 0}" placeholder="0" aria-label="Height">
+                </div>
+                <span class="air-unit-addon air-dim-unit-label">Cms</span>
             </div>
         </div>
         <div class="air-row-actions">
@@ -478,7 +483,7 @@ function createAirCargoRow(data = {}) {
     });
 
     rows.appendChild(div);
-    syncAirWeightUnitLabels();
+    syncAirUnitLabels();
     updateAirCargoTotals();
     updateAirRowRemoveButtons();
 }
@@ -523,23 +528,45 @@ function adjustAirQuantity(btn, delta) {
     updateAirCargoTotals();
 }
 
-function syncAirWeightUnitLabels() {
-    const unit = document.getElementById('airWeightUnit')?.value || 'Kgs';
+function syncAirUnitLabels() {
+    const weightUnit = document.getElementById('airWeightUnit')?.value || 'Kgs';
+    const dimUnit = document.getElementById('airDimUnit')?.value || 'Cms';
     document.querySelectorAll('.air-weight-unit-label').forEach(el => {
-        el.textContent = unit;
+        el.textContent = weightUnit;
+    });
+    document.querySelectorAll('.air-dim-unit-label').forEach(el => {
+        el.textContent = dimUnit;
     });
 }
 
-function lbsToKgs(lbs) {
-    return lbs * 0.45359237;
+function weightToKgs(value, unit) {
+    const n = Number(value) || 0;
+    if (unit === 'Lbs') return n * 0.45359237;
+    if (unit === 'Tonn') return n * 1000;
+    return n; // Kgs
+}
+
+function kgsToWeightUnit(kgs, unit) {
+    if (unit === 'Lbs') return kgs / 0.45359237;
+    if (unit === 'Tonn') return kgs / 1000;
+    return kgs; // Kgs
 }
 
 function toCms(value, unit) {
-    return unit === 'Inches' ? value * 2.54 : value;
+    const n = Number(value) || 0;
+    switch (unit) {
+        case 'MM': return n / 10;
+        case 'Inches': return n * 2.54;
+        case 'Meters': return n * 100;
+        case 'Feet': return n * 30.48;
+        case 'Cms':
+        default:
+            return n;
+    }
 }
 
 function updateAirCargoTotals() {
-    syncAirWeightUnitLabels();
+    syncAirUnitLabels();
     const weightUnit = document.getElementById('airWeightUnit')?.value || 'Kgs';
     const dimUnit = document.getElementById('airDimUnit')?.value || 'Cms';
     const rows = document.querySelectorAll('#airCargoRows .air-cargo-row');
@@ -556,8 +583,7 @@ function updateAirCargoTotals() {
         const h = parseFloat(row.querySelector('.air-dim-h')?.value) || 0;
 
         totalQty += qty;
-        const pieceKg = weightUnit === 'Lbs' ? lbsToKgs(wpp) : wpp;
-        totalWeightKgs += qty * pieceKg;
+        totalWeightKgs += qty * weightToKgs(wpp, weightUnit);
 
         const lCm = toCms(l, dimUnit);
         const wCm = toCms(w, dimUnit);
@@ -567,19 +593,18 @@ function updateAirCargoTotals() {
     });
 
     const chargeable = Math.max(totalWeightKgs, totalVolWeightKgs);
-    const displayUnit = weightUnit === 'Lbs' ? 'Lbs' : 'Kgs';
-    const toDisplay = (kg) => weightUnit === 'Lbs' ? kg / 0.45359237 : kg;
-    const fmt = (n) => {
-        const v = toDisplay(n);
-        return Number.isInteger(v) ? String(v) : v.toFixed(2);
+    const fmt = (kg) => {
+        const v = kgsToWeightUnit(kg, weightUnit);
+        if (!Number.isFinite(v)) return '0';
+        return Number.isInteger(v) ? String(v) : v.toFixed(weightUnit === 'Tonn' ? 3 : 2);
     };
 
     const qtyEl = document.getElementById('airTotalQty');
     const weightEl = document.getElementById('airTotalWeight');
     const chargeEl = document.getElementById('airChargeableWeight');
     if (qtyEl) qtyEl.textContent = String(totalQty || 0);
-    if (weightEl) weightEl.textContent = `${fmt(totalWeightKgs)} ${displayUnit}`;
-    if (chargeEl) chargeEl.textContent = `${fmt(chargeable)} ${displayUnit}`;
+    if (weightEl) weightEl.textContent = `${fmt(totalWeightKgs)} ${weightUnit}`;
+    if (chargeEl) chargeEl.textContent = `${fmt(chargeable)} ${weightUnit}`;
 }
 
 function collectAirCargoDetails() {
@@ -692,9 +717,9 @@ async function saveEnquiry() {
         // Keep legacy container columns populated for downstream screens.
         enquiryData.container_type = air.rows[0].package_type || 'Air Cargo';
         enquiryData.container_count = air.total_quantity || 0;
-        enquiryData.weight_measurement = air.weight_unit === 'Lbs' ? 'LBS' : 'KG';
+        enquiryData.weight_measurement = air.weight_unit === 'Lbs' ? 'LBS' : (air.weight_unit === 'Tonn' ? 'Tons' : 'KG');
         enquiryData.weight_per_container = air.rows.reduce(
-            (sum, r) => sum + ((r.quantity || 0) * (r.weight_per_piece || 0)), 0
+            (sum, r) => sum + ((r.quantity || 0) * weightToKgs(r.weight_per_piece || 0, air.weight_unit)), 0
         );
     } else if (containerGroup) {
         enquiryData.air_cargo_details = null;
