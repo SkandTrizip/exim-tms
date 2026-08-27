@@ -914,7 +914,7 @@ function getQuoteSummary(quote) {
 }
 
 function isFirstTimeQuoteConfirmation() {
-    return !pricingQuotes.some(isQuoteAcceptedStatus) && (currentEnquiry?.stage || 1) < 3;
+    return !pricingQuotes.some(isQuoteAcceptedStatus);
 }
 
 function promptFinalizeQuoteConfirmation(quote, remarks = null) {

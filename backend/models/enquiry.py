@@ -26,6 +26,8 @@ class Enquiry(Base):
     container_count = Column(Integer)
     weight_measurement = Column(String)
     weight_per_container = Column(Float)
+    # JSON snapshot of air freight cargo details (flags + piece/dimension rows).
+    air_cargo_details = Column(Text)
     commodity = Column(String)
     hs_code = Column(String)
     cargo_risk = Column(String)

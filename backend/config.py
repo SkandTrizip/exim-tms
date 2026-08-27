@@ -68,6 +68,11 @@ CONTAINER_TYPES = [
     "20'Reefer", "40'Reefer"
 ]
 
+AIR_PACKAGE_TYPES = [
+    "Carton", "Pallet", "Crate", "Box", "Bag",
+    "Bundle", "Drum", "Case", "Wooden Box", "Skid", "Loose"
+]
+
 SHIPMENT_TYPES = ["FCL (Full Container Load)", "LCL (Less Container Load)", "Air Freight"]
 CLIENTS = [] # Now fetched from CLIENT MASTER (Database)
 SCOPES = ["Port to Port", "Port to Door", "Door to Port", "Door to Door"]
@@ -91,6 +96,7 @@ CHARGE_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "INR"]
 def get_frontend_config() -> dict:
     return {
         "containerTypes": CONTAINER_TYPES,
+        "airPackageTypes": AIR_PACKAGE_TYPES,
         "shipmentTypes": SHIPMENT_TYPES,
         "clients": CLIENTS,
         "scopes": SCOPES,

@@ -134,6 +134,16 @@ async function populateInitialDropdowns() {
         clientScopeSelect.addEventListener('change', updateModeVisibility);
         updateModeVisibility(); // Initial check
     }
+
+    const shipmentTypeSelect = document.getElementById('shipmentType');
+    if (shipmentTypeSelect) {
+        shipmentTypeSelect.addEventListener('change', updateShipmentTypeUI);
+        updateShipmentTypeUI();
+    }
+
+    if (!document.querySelector('.air-cargo-row')) {
+        addAirCargoRow();
+    }
 }
 
 /**
@@ -234,17 +244,20 @@ function populateEnquiryForm(data) {
     document.getElementById('notifyPartyAddress').value = data.notify_party_address || '';
     document.getElementById('notifyParty2Address').value = data.notify_party_2_address || '';
 
-    // Handle Containers
+    // Handle Containers / Air cargo
     const containerList = document.getElementById('containerList');
     containerList.innerHTML = ''; // Clear defaults
 
     // For simplicity, we currently store singular container columns in DB
     // but the UI supports multiple. We'll show the primary one for now.
-    if (data.container_type) {
+    if (data.container_type && !isAirFreightShipment(data.shipment_type)) {
         createContainerGroup(data.container_type, data.container_count, data.weight_measurement, data.weight_per_container);
-    } else {
+    } else if (!isAirFreightShipment(data.shipment_type)) {
         createContainerGroup();
     }
+
+    populateAirCargoFromData(data.air_cargo_details);
+    updateShipmentTypeUI();
 
     // Check if stage is confirmed (Stage 3+)
     if (data.stage >= 3) {
@@ -351,6 +364,284 @@ function removeContainer(btn) {
     btn.closest('.container-group').remove();
 }
 
+function isAirFreightShipment(shipmentType) {
+    const value = shipmentType || document.getElementById('shipmentType')?.value || '';
+    return /air\s*freight/i.test(value) || value === 'AIR';
+}
+
+function updateShipmentTypeUI() {
+    const isAir = isAirFreightShipment();
+    const oceanSection = document.getElementById('oceanContainerSection');
+    const airSection = document.getElementById('airCargoSection');
+
+    if (oceanSection) oceanSection.style.display = isAir ? 'none' : 'block';
+    if (airSection) airSection.style.display = isAir ? 'block' : 'none';
+
+    if (!isAir) {
+        const containerList = document.getElementById('containerList');
+        if (containerList && !containerList.querySelector('.container-group')) {
+            createContainerGroup();
+        }
+    }
+
+    document.querySelectorAll('#oceanContainerSection .containerType, #oceanContainerSection .containerCount')
+        .forEach(el => {
+            if (isAir) el.removeAttribute('required');
+            else el.setAttribute('required', 'required');
+        });
+
+    document.querySelectorAll('#airCargoRows .air-package-type, #airCargoRows .air-quantity, #airCargoRows .air-weight-piece, #airCargoRows .air-dim-l, #airCargoRows .air-dim-w, #airCargoRows .air-dim-h')
+        .forEach(el => {
+            if (isAir) el.setAttribute('required', 'required');
+            else el.removeAttribute('required');
+        });
+
+    if (isAir) {
+        const rows = document.getElementById('airCargoRows');
+        if (rows && !rows.querySelector('.air-cargo-row')) addAirCargoRow();
+        updateAirCargoTotals();
+    }
+}
+
+function syncAirCargoToggle(checkbox) {
+    const track = checkbox.closest('.air-flag-toggle')?.querySelector('.toggle-track');
+    const thumb = track?.querySelector('.toggle-thumb');
+    if (!track || !thumb) return;
+    if (checkbox.checked) {
+        track.style.background = 'var(--primary, #2563eb)';
+        thumb.style.transform = 'translateX(20px)';
+    } else {
+        track.style.background = '#cbd5e1';
+        thumb.style.transform = 'translateX(0)';
+    }
+}
+
+function createAirCargoRow(data = {}) {
+    const rows = document.getElementById('airCargoRows');
+    if (!rows) return;
+
+    const div = document.createElement('div');
+    div.className = 'air-cargo-row';
+    const packageTypes = CONFIG.airPackageTypes || [
+        'Carton', 'Pallet', 'Crate', 'Box', 'Bag', 'Bundle', 'Drum', 'Case', 'Wooden Box', 'Skid', 'Loose'
+    ];
+    const packageOptions = packageTypes.map(t =>
+        `<option value="${t}" ${data.package_type === t ? 'selected' : ''}>${t}</option>`
+    ).join('');
+
+    div.innerHTML = `
+        <div class="form-group air-field">
+            <select class="air-package-type" required>
+                <option value="" disabled ${data.package_type ? '' : 'selected'} hidden>Select</option>
+                ${packageOptions}
+            </select>
+        </div>
+        <div class="form-group air-field">
+            <div class="air-qty-control">
+                <button type="button" class="air-qty-btn" onclick="adjustAirQuantity(this, -1)" aria-label="Decrease quantity">−</button>
+                <input type="number" class="air-quantity" min="1" step="1" value="${data.quantity ?? 1}" required>
+                <button type="button" class="air-qty-btn" onclick="adjustAirQuantity(this, 1)" aria-label="Increase quantity">+</button>
+            </div>
+        </div>
+        <div class="form-group air-field">
+            <div class="air-weight-input">
+                <input type="number" class="air-weight-piece" min="0" step="0.01" value="${data.weight_per_piece ?? 0}" required>
+                <span class="air-unit-addon air-weight-unit-label">Kgs</span>
+            </div>
+        </div>
+        <div class="form-group air-field air-dims">
+            <div class="air-dim-group">
+                <label>L</label>
+                <input type="number" class="air-dim-l" min="0" step="0.01" value="${data.length ?? 0}">
+            </div>
+            <span class="air-dim-x">x</span>
+            <div class="air-dim-group">
+                <label>W</label>
+                <input type="number" class="air-dim-w" min="0" step="0.01" value="${data.width ?? 0}">
+            </div>
+            <span class="air-dim-x">x</span>
+            <div class="air-dim-group">
+                <label>H</label>
+                <input type="number" class="air-dim-h" min="0" step="0.01" value="${data.height ?? 0}">
+            </div>
+        </div>
+        <div class="air-row-actions">
+            <button type="button" class="btn-icon-remove" onclick="removeAirCargoRow(this)" title="Remove row" aria-label="Remove row">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+        </div>
+    `;
+
+    div.querySelectorAll('input, select').forEach(el => {
+        el.addEventListener('input', updateAirCargoTotals);
+        el.addEventListener('change', updateAirCargoTotals);
+    });
+
+    rows.appendChild(div);
+    syncAirWeightUnitLabels();
+    updateAirCargoTotals();
+    updateAirRowRemoveButtons();
+}
+
+function addAirCargoRow() {
+    createAirCargoRow();
+}
+
+function removeAirCargoRow(btn) {
+    const rows = document.getElementById('airCargoRows');
+    if (!rows) return;
+    const row = btn.closest('.air-cargo-row');
+    if (!row) return;
+    if (rows.querySelectorAll('.air-cargo-row').length <= 1) {
+        row.querySelector('.air-package-type').value = '';
+        row.querySelector('.air-quantity').value = 1;
+        row.querySelector('.air-weight-piece').value = 0;
+        row.querySelector('.air-dim-l').value = 0;
+        row.querySelector('.air-dim-w').value = 0;
+        row.querySelector('.air-dim-h').value = 0;
+        updateAirCargoTotals();
+        return;
+    }
+    row.remove();
+    updateAirCargoTotals();
+    updateAirRowRemoveButtons();
+}
+
+function updateAirRowRemoveButtons() {
+    const rows = document.querySelectorAll('#airCargoRows .air-cargo-row');
+    rows.forEach(row => {
+        const btn = row.querySelector('.btn-icon-remove');
+        if (btn) btn.style.visibility = rows.length > 1 ? 'visible' : 'hidden';
+    });
+}
+
+function adjustAirQuantity(btn, delta) {
+    const input = btn.closest('.air-qty-control')?.querySelector('.air-quantity');
+    if (!input) return;
+    const next = Math.max(1, (parseInt(input.value, 10) || 1) + delta);
+    input.value = next;
+    updateAirCargoTotals();
+}
+
+function syncAirWeightUnitLabels() {
+    const unit = document.getElementById('airWeightUnit')?.value || 'Kgs';
+    document.querySelectorAll('.air-weight-unit-label').forEach(el => {
+        el.textContent = unit;
+    });
+}
+
+function lbsToKgs(lbs) {
+    return lbs * 0.45359237;
+}
+
+function toCms(value, unit) {
+    return unit === 'Inches' ? value * 2.54 : value;
+}
+
+function updateAirCargoTotals() {
+    syncAirWeightUnitLabels();
+    const weightUnit = document.getElementById('airWeightUnit')?.value || 'Kgs';
+    const dimUnit = document.getElementById('airDimUnit')?.value || 'Cms';
+    const rows = document.querySelectorAll('#airCargoRows .air-cargo-row');
+
+    let totalQty = 0;
+    let totalWeightKgs = 0;
+    let totalVolWeightKgs = 0;
+
+    rows.forEach(row => {
+        const qty = parseFloat(row.querySelector('.air-quantity')?.value) || 0;
+        const wpp = parseFloat(row.querySelector('.air-weight-piece')?.value) || 0;
+        const l = parseFloat(row.querySelector('.air-dim-l')?.value) || 0;
+        const w = parseFloat(row.querySelector('.air-dim-w')?.value) || 0;
+        const h = parseFloat(row.querySelector('.air-dim-h')?.value) || 0;
+
+        totalQty += qty;
+        const pieceKg = weightUnit === 'Lbs' ? lbsToKgs(wpp) : wpp;
+        totalWeightKgs += qty * pieceKg;
+
+        const lCm = toCms(l, dimUnit);
+        const wCm = toCms(w, dimUnit);
+        const hCm = toCms(h, dimUnit);
+        // IATA volumetric: L×W×H (cm) / 6000
+        totalVolWeightKgs += qty * ((lCm * wCm * hCm) / 6000);
+    });
+
+    const chargeable = Math.max(totalWeightKgs, totalVolWeightKgs);
+    const displayUnit = weightUnit === 'Lbs' ? 'Lbs' : 'Kgs';
+    const toDisplay = (kg) => weightUnit === 'Lbs' ? kg / 0.45359237 : kg;
+    const fmt = (n) => {
+        const v = toDisplay(n);
+        return Number.isInteger(v) ? String(v) : v.toFixed(2);
+    };
+
+    const qtyEl = document.getElementById('airTotalQty');
+    const weightEl = document.getElementById('airTotalWeight');
+    const chargeEl = document.getElementById('airChargeableWeight');
+    if (qtyEl) qtyEl.textContent = String(totalQty || 0);
+    if (weightEl) weightEl.textContent = `${fmt(totalWeightKgs)} ${displayUnit}`;
+    if (chargeEl) chargeEl.textContent = `${fmt(chargeable)} ${displayUnit}`;
+}
+
+function collectAirCargoDetails() {
+    const rows = [];
+    document.querySelectorAll('#airCargoRows .air-cargo-row').forEach(row => {
+        rows.push({
+            package_type: row.querySelector('.air-package-type')?.value || '',
+            quantity: parseInt(row.querySelector('.air-quantity')?.value, 10) || 0,
+            weight_per_piece: parseFloat(row.querySelector('.air-weight-piece')?.value) || 0,
+            length: parseFloat(row.querySelector('.air-dim-l')?.value) || 0,
+            width: parseFloat(row.querySelector('.air-dim-w')?.value) || 0,
+            height: parseFloat(row.querySelector('.air-dim-h')?.value) || 0,
+        });
+    });
+
+    const totalQty = rows.reduce((sum, r) => sum + (r.quantity || 0), 0);
+    const weightUnit = document.getElementById('airWeightUnit')?.value || 'Kgs';
+    const dimUnit = document.getElementById('airDimUnit')?.value || 'Cms';
+
+    return {
+        hazardous: !!document.getElementById('airHazardous')?.checked,
+        non_stackable: !!document.getElementById('airNonStackable')?.checked,
+        temperature_controlled: !!document.getElementById('airTempControlled')?.checked,
+        weight_unit: weightUnit,
+        dim_unit: dimUnit,
+        rows,
+        total_quantity: totalQty,
+        total_weight: document.getElementById('airTotalWeight')?.textContent || '',
+        chargeable_weight: document.getElementById('airChargeableWeight')?.textContent || '',
+    };
+}
+
+function populateAirCargoFromData(raw) {
+    const rowsEl = document.getElementById('airCargoRows');
+    if (!rowsEl) return;
+    rowsEl.innerHTML = '';
+
+    let data = null;
+    if (typeof raw === 'string' && raw.trim()) {
+        try { data = JSON.parse(raw); } catch (e) { data = null; }
+    } else if (raw && typeof raw === 'object') {
+        data = raw;
+    }
+
+    const haz = document.getElementById('airHazardous');
+    const nonStack = document.getElementById('airNonStackable');
+    const temp = document.getElementById('airTempControlled');
+    const weightUnit = document.getElementById('airWeightUnit');
+    const dimUnit = document.getElementById('airDimUnit');
+
+    if (haz) haz.checked = !!data?.hazardous;
+    if (nonStack) nonStack.checked = !!data?.non_stackable;
+    if (temp) temp.checked = !!data?.temperature_controlled;
+    [haz, nonStack, temp].forEach(cb => { if (cb) syncAirCargoToggle(cb); });
+
+    if (weightUnit) weightUnit.value = data?.weight_unit || 'Kgs';
+    if (dimUnit) dimUnit.value = data?.dim_unit || 'Cms';
+
+    const rows = Array.isArray(data?.rows) && data.rows.length ? data.rows : [{}];
+    rows.forEach(row => createAirCargoRow(row));
+}
+
 /**
  * Save logic
  */
@@ -391,7 +682,22 @@ async function saveEnquiry() {
     };
 
     const containerGroup = document.querySelector('.container-group');
-    if (containerGroup) {
+    if (isAirFreightShipment(enquiryData.shipment_type)) {
+        const air = collectAirCargoDetails();
+        if (!air.rows.length || air.rows.some(r => !r.package_type || !r.quantity)) {
+            showModal('Validation Error', 'Please fill in all required air cargo fields', 'warning');
+            return;
+        }
+        enquiryData.air_cargo_details = JSON.stringify(air);
+        // Keep legacy container columns populated for downstream screens.
+        enquiryData.container_type = air.rows[0].package_type || 'Air Cargo';
+        enquiryData.container_count = air.total_quantity || 0;
+        enquiryData.weight_measurement = air.weight_unit === 'Lbs' ? 'LBS' : 'KG';
+        enquiryData.weight_per_container = air.rows.reduce(
+            (sum, r) => sum + ((r.quantity || 0) * (r.weight_per_piece || 0)), 0
+        );
+    } else if (containerGroup) {
+        enquiryData.air_cargo_details = null;
         enquiryData.container_type = containerGroup.querySelector('.containerType').value;
         enquiryData.container_count = parseInt(containerGroup.querySelector('.containerCount').value) || 0;
         enquiryData.weight_measurement = containerGroup.querySelector('.weightMeasurement').value;
@@ -431,6 +737,11 @@ async function saveEnquiry() {
     }
 }
 window.saveEnquiry = saveEnquiry;
+window.addAirCargoRow = addAirCargoRow;
+window.removeAirCargoRow = removeAirCargoRow;
+window.adjustAirQuantity = adjustAirQuantity;
+window.updateAirCargoTotals = updateAirCargoTotals;
+window.syncAirCargoToggle = syncAirCargoToggle;
 
 // Helper Functions (Visibility, Risk, Autocomplete) - copied and adapted from app.js
 function updateModeVisibility() {

@@ -620,6 +620,298 @@ textarea {
 }
 
 /* ==========================================
+   AIR CARGO DETAILS
+   ========================================== */
+
+.air-cargo-flags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-6);
+    margin-bottom: var(--space-5);
+    padding-bottom: var(--space-4);
+    border-bottom: 1px solid var(--border-light);
+}
+
+.air-flag-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.air-flag-toggle input {
+    display: none;
+}
+
+.air-flag-toggle .toggle-track {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    background: #cbd5e1;
+    border-radius: 12px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.air-flag-toggle .toggle-thumb {
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.air-flag-label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+}
+
+.air-cargo-table {
+    background: var(--gray-50);
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.air-cargo-header,
+.air-cargo-row {
+    display: grid;
+    grid-template-columns: 1.2fr 1fr 1.2fr 2fr 40px;
+    gap: var(--space-3);
+    align-items: center;
+    padding: var(--space-3) var(--space-4);
+}
+
+.air-cargo-header {
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-light);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.air-header-with-unit {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.air-unit-select {
+    padding: 2px 6px;
+    border: 1px solid var(--border-medium);
+    border-radius: var(--radius-sm);
+    background: var(--bg-secondary);
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--navy-700);
+    cursor: pointer;
+}
+
+.air-cargo-row {
+    border-bottom: 1px solid var(--border-light);
+    background: var(--bg-secondary);
+}
+
+.air-cargo-row:last-child {
+    border-bottom: none;
+}
+
+.air-cargo-row .air-field {
+    margin: 0;
+}
+
+.air-cargo-row select,
+.air-cargo-row input[type="number"] {
+    width: 100%;
+    min-height: 40px;
+    padding: 8px 10px;
+    border: 1.5px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    background: var(--bg-secondary);
+}
+
+.air-qty-control {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    border: 1.5px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--bg-secondary);
+}
+
+.air-qty-control .air-quantity {
+    border: none !important;
+    border-radius: 0 !important;
+    text-align: center;
+    min-width: 0;
+    flex: 1;
+}
+
+.air-qty-btn {
+    width: 36px;
+    height: 40px;
+    border: none;
+    background: var(--gray-100);
+    color: var(--navy-700);
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.air-qty-btn:hover {
+    background: var(--gray-200);
+}
+
+.air-weight-input {
+    display: flex;
+    align-items: stretch;
+    border: 1.5px solid var(--border-medium);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    background: var(--bg-secondary);
+}
+
+.air-weight-input input {
+    border: none !important;
+    border-radius: 0 !important;
+    flex: 1;
+    min-width: 0;
+}
+
+.air-unit-addon {
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    background: var(--gray-100);
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    font-weight: 700;
+    border-left: 1px solid var(--border-light);
+    white-space: nowrap;
+}
+
+.air-dims {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.air-dim-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+    min-width: 0;
+}
+
+.air-dim-group label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: var(--text-tertiary);
+    text-transform: uppercase;
+    margin: 0;
+}
+
+.air-dim-group input {
+    text-align: center;
+}
+
+.air-dim-x {
+    color: var(--text-tertiary);
+    font-weight: 600;
+    margin-top: 14px;
+}
+
+.air-row-actions {
+    display: flex;
+    justify-content: center;
+}
+
+.btn-icon-remove {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--gray-400);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.btn-icon-remove:hover {
+    background: #fef2f2;
+    color: var(--error);
+}
+
+.air-cargo-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    margin-top: var(--space-4);
+}
+
+.air-cargo-totals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--info);
+}
+
+.air-cargo-totals strong {
+    color: var(--warning);
+    font-weight: 700;
+}
+
+@media (max-width: 900px) {
+    .air-cargo-header {
+        display: none;
+    }
+
+    .air-cargo-row {
+        grid-template-columns: 1fr;
+        gap: var(--space-3);
+        padding: var(--space-4);
+        border-bottom: 1px solid var(--border-light);
+    }
+
+    .air-cargo-row .air-field::before {
+        content: attr(data-label);
+        display: block;
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: var(--text-tertiary);
+        text-transform: uppercase;
+        margin-bottom: 4px;
+    }
+
+    .air-dims {
+        flex-wrap: wrap;
+    }
+
+    .air-row-actions {
+        justify-content: flex-end;
+    }
+}
+
+/* ==========================================
    FORM ACTIONS
    ========================================== */
 
