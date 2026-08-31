@@ -90,6 +90,18 @@ DEFAULT_CHARGES = [
     { "desc": "Seal Charge", "account": "On Your Account", "curr": "INR", "on": "Per Container" },
 ]
 
+# Prefilled pricing lines when shipment type is Air Freight (HSN/SAC for invoicing reference).
+AIR_DEFAULT_CHARGES = [
+    { "desc": "AIR FREIGHT", "account": "On Your Account", "curr": "USD", "on": "Per Container", "hsn_sac": "996531" },
+    { "desc": "AMS FEE", "account": "On Your Account", "curr": "USD", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "AWB FEES+TEDI+PCA", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "ASI", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "CGC", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "LABELLING FEE", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "CUSTOM CLEARANCE FEE - ORIGIN", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "TERMINAL HANDLING CHARGES - ORIGIN", "account": "On Your Account", "curr": "INR", "on": "Per Container", "hsn_sac": "996719" },
+]
+
 # Currencies offered on charge line items; INR is always settlement currency (rate 1).
 CHARGE_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "INR"]
 
@@ -104,6 +116,7 @@ def get_frontend_config() -> dict:
         "incoterms": INCOTERMS,
         "shippingLines": SHIPPING_LINES,
         "defaultCharges": DEFAULT_CHARGES,
+        "airDefaultCharges": AIR_DEFAULT_CHARGES,
         "CHARGE_CURRENCIES": CHARGE_CURRENCIES,
     }
 

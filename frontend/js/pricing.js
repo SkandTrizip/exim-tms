@@ -15,6 +15,24 @@ function getChargeCurrencies() {
         ? CONFIG.CHARGE_CURRENCIES
         : ['USD', 'EUR', 'GBP', 'JPY', 'INR'];
 }
+
+function isAirFreightEnquiry(enquiry) {
+    const e = enquiry || currentEnquiry;
+    const value = e?.shipment_type || '';
+    return /air\s*freight/i.test(value) || value === 'AIR';
+}
+
+/** Default charge lines for new quotes / container sections (ocean vs air freight). */
+function getDefaultChargesForEnquiry() {
+    if (isAirFreightEnquiry()) {
+        return CONFIG.airDefaultCharges || CONFIG.defaultCharges || [];
+    }
+    return CONFIG.defaultCharges || [];
+}
+
+function cloneDefaultChargesForEnquiry() {
+    return JSON.parse(JSON.stringify(getDefaultChargesForEnquiry()));
+}
 let isConfirmMode = false;  // true when confirm-flow UI locks non-rate fields
 /** URL `mode=` so we can keep the calculator open for Confirm Quote flows even after a quote is already accepted */
 let pricingPageMode = '';
@@ -483,7 +501,7 @@ function addNewQuote() {
         free_days: '',
         container_prices: [{
             container_type: currentEnquiry ? currentEnquiry.container_type : '',
-            charges: JSON.parse(JSON.stringify(CONFIG.defaultCharges))
+            charges: cloneDefaultChargesForEnquiry()
         }]
     };
     pricingQuotes.push(newQuote);
@@ -642,7 +660,7 @@ function renderContainerSection(data, index) {
 }
 
 function addContainerSection() {
-    const cp = { container_type: '', charges: JSON.parse(JSON.stringify(CONFIG.defaultCharges)) };
+    const cp = { container_type: '', charges: cloneDefaultChargesForEnquiry() };
     renderContainerSection(cp, document.querySelectorAll('.container-pricing-section').length);
 }
 
