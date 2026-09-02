@@ -569,7 +569,10 @@ def generate_invoice_pdf(
 
                 # Determine SAC and GST pct
                 sac_code = "996511"  # Default
-                if "ocean freight" in desc_lower or "freight" in desc_lower:
+                if "air freight" in desc_lower:
+                    sac_code = "996531"
+                    gst_pct = 18.0
+                elif "ocean freight" in desc_lower or "freight" in desc_lower:
                     sac_code = "996521"
                     gst_pct = 5.0
                 elif "bl fee" in desc_lower or "bl charge" in desc_lower:
@@ -641,7 +644,9 @@ def generate_invoice_pdf(
             
             # Determine SAC and GST
             sac_code = metadata.get("hsn_sac", "996511")
-            if "ocean freight" in desc_lower or "freight" in desc_lower:
+            if "air freight" in desc_lower:
+                gst_pct = 18.0
+            elif "ocean freight" in desc_lower or "freight" in desc_lower:
                 gst_pct = 5.0
             elif "bl fee" in desc_lower or "bl charge" in desc_lower:
                 gst_pct = 18.0
