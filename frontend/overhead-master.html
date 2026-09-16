@@ -78,6 +78,45 @@
             color: var(--text-tertiary);
             margin-top: 4px;
         }
+        .ov-booking-card {
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-lg);
+            padding: 14px 16px;
+            margin-bottom: 10px;
+            background: var(--bg-primary, #fafafa);
+        }
+        .ov-booking-card:last-child { margin-bottom: 0; }
+        .ov-booking-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 12px 20px;
+            font-size: 13px;
+        }
+        .ov-booking-grid dt {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--text-tertiary);
+            margin: 0 0 4px;
+        }
+        .ov-booking-grid dd {
+            margin: 0;
+            font-weight: 600;
+            color: var(--navy-800, #1e293b);
+        }
+        .ov-booking-job-link {
+            color: var(--coral-500, #e85d4c);
+            text-decoration: none;
+            font-weight: 700;
+        }
+        .ov-booking-job-link:hover { text-decoration: underline; }
+        .ov-booking-empty {
+            font-size: 13px;
+            color: var(--text-tertiary);
+            font-weight: 500;
+            padding: 8px 0;
+        }
 
         /* Inside the drawer the global CSS zeroes container padding, which pushes
            the "Overhead Details" title flush to the edge. Restore side spacing. */
@@ -118,6 +157,17 @@
                     border-radius:var(--radius-lg); padding:14px 20px; margin-bottom:20px; font-weight:600;"></div>
 
                 <!-- Admin Verify / Reject bar -->
+                <!-- Job bookings (read-only when viewing/editing an existing overhead) -->
+                <div id="ov_bookings_panel" style="display:none; margin-bottom:20px;">
+                    <div class="card" style="padding:20px 24px;">
+                        <div class="section-label" style="margin-top:0;"><i class="fas fa-link"></i> Booked Against Jobs</div>
+                        <p class="field-hint" style="margin:-8px 0 16px;">
+                            Payments booked from this overhead master in Finance — job, who it is paid to, and cost treatment.
+                        </p>
+                        <div id="ov_bookings_list"></div>
+                    </div>
+                </div>
+
                 <div id="adminActionBar" style="display:none; align-items:center; gap:12px;
                     background:var(--navy-700); border-radius:var(--radius-lg); padding:14px 20px;
                     margin-bottom:20px; color:white;">

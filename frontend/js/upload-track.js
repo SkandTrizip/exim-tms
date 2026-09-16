@@ -763,6 +763,17 @@ async function loadChecklistState() {
     }
 }
 
+function formatChecklistDateDisplay(dateValue) {
+    if (!dateValue || dateValue === '-') return '-';
+    if (typeof dateValue === 'string' && dateValue.includes('T')) {
+        const d = new Date(dateValue);
+        if (Number.isNaN(d.getTime())) return '-';
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}, ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    }
+    return String(dateValue);
+}
+
 /**
  * Apply status data to the DOM
  */
@@ -783,10 +794,24 @@ function applyChecklistState(state, isBackend = false) {
         const checkbox = document.getElementById(`status_${item}`);
         const dateEl = document.getElementById(`date_${item}`);
 
-        if (!checkbox || item === 'booking_confirmed') return;
+        if (!checkbox) return;
 
         let isChecked = isBackend ? !!state[item] : !!state[item]?.checked;
         let dateValue = isBackend ? state[item] : state[item]?.date;
+
+        if (item === 'booking_confirmed') {
+            if (!dateEl) return;
+            if (!dateValue && isBackend && currentEnquiryData?.created_at) {
+                dateValue = currentEnquiryData.created_at;
+            }
+            const formatted = formatChecklistDateDisplay(dateValue);
+            dateEl.textContent = formatted;
+            if (formatted !== '-') {
+                dateEl.style.color = 'var(--primary)';
+                dateEl.style.fontWeight = '600';
+            }
+            return;
+        }
 
         if (item === 'sob') {
             // SOB uses a date input picker — restore accordingly
@@ -818,14 +843,7 @@ function applyChecklistState(state, isBackend = false) {
             // Default restoration
             checkbox.checked = isChecked;
             if (dateEl) {
-                // Formatting for display
-                if (isBackend && dateValue && typeof dateValue === 'string' && dateValue.includes('T')) {
-                    const d = new Date(dateValue);
-                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                    dateEl.textContent = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}, ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-                } else {
-                    dateEl.textContent = dateValue || '-';
-                }
+                dateEl.textContent = formatChecklistDateDisplay(dateValue);
 
                 if (isChecked && dateEl.textContent !== '-') {
                     dateEl.style.color = 'var(--primary)';
@@ -874,19 +892,16 @@ function applyChecklistState(state, isBackend = false) {
     updateGenerateHblRowVisibility();
 }
 
-// Update populateShipmentInfo to handle initial status date
+// Interim display until loadChecklistState applies booking_confirmed from the API.
 function updateInitialStatus() {
     if (!currentEnquiryData) return;
-    const dateBookingConfirmed = document.getElementById('date_booking_confirmed');
-    if (dateBookingConfirmed) {
-        // Use created_at if available, otherwise use current date
-        const date = currentEnquiryData.created_at ? new Date(currentEnquiryData.created_at) : new Date();
-        dateBookingConfirmed.textContent = date.toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-        });
-    }
+    const dateEl = document.getElementById('date_booking_confirmed');
+    if (!dateEl) return;
+    const formatted = formatChecklistDateDisplay(currentEnquiryData.created_at);
+    if (formatted === '-') return;
+    dateEl.textContent = formatted;
+    dateEl.style.color = 'var(--primary)';
+    dateEl.style.fontWeight = '600';
 }
 
 // ==========================================
