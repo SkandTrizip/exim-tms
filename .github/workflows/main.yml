@@ -98,9 +98,18 @@ jobs:
 
             export UPLOAD_DIR="${UPLOAD_DIR:-/home/azureuser/uploads}"
 
+            if [ -z "${APP_PORT:-}" ]; then
+              APP_PORT="$(grep -hR --include='*' 'proxy_pass' /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null \
+                | grep -oE '127\.0\.0\.1:[0-9]+' \
+                | head -1 \
+                | cut -d: -f2 || true)"
+            fi
+            APP_PORT="${APP_PORT:-8000}"
+            echo "Binding Uvicorn to port $APP_PORT"
+
             setsid "$PYTHON" -m uvicorn backend.main:app \
               --host 0.0.0.0 \
-              --port 5050 \
+              --port "$APP_PORT" \
               --no-access-log \
               >> "$APP_DIR/logs/app.out" 2>&1 < /dev/null &
 
@@ -118,10 +127,10 @@ jobs:
 
             if ! curl --fail --silent --show-error \
               --max-time 10 \
-              http://127.0.0.1:5050/api >/dev/null; then
+              "http://127.0.0.1:${APP_PORT}/api" >/dev/null; then
               echo "ERROR: application health check failed" >&2
               tail -n 80 "$APP_DIR/logs/app.out" || true
               exit 1
             fi
 
-            echo "Started backend pid=$APP_PID"
+            echo "Started backend pid=$APP_PID port=$APP_PORT"
