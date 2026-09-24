@@ -11,103 +11,61 @@ concurrency:
 
 permissions:
   contents: read
-  packages: write
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
-  build:
-    name: Build and push image
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=latest
-            type=raw,value=main
-            type=sha,prefix=,format=long
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          platforms: linux/amd64
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
   deploy:
-    name: Deploy with Docker Compose
-    needs: build
+    name: Deploy to Azure
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Resolve image name
-        id: image
-        run: echo "name=$(echo 'ghcr.io/${{ github.repository }}:${{ github.sha }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
-
-      - name: Copy compose file to production host
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.PROD_HOST }}
-          username: ${{ secrets.PROD_USER }}
-          key: ${{ secrets.PROD_SSH_KEY }}
-          source: docker-compose.yml
-          target: ${{ vars.PROD_APP_DIR || '/home/azureuser/exim_logipod/exim-tms' }}
-
-      - name: Deploy with Docker Compose
+      - name: Pull and restart main.py
         uses: appleboy/ssh-action@v1.2.2
         env:
-          IMAGE: ${{ steps.image.outputs.name }}
-          GHCR_USER: ${{ github.actor }}
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PROD_APP_DIR: ${{ vars.PROD_APP_DIR || '/home/azureuser/exim_logipod/exim-tms' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         with:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
-          envs: IMAGE,GHCR_USER,GHCR_TOKEN,PROD_APP_DIR
+          command_timeout: 15m
+          envs: PROD_APP_DIR,GITHUB_TOKEN,GITHUB_REPOSITORY
           script: |
             set -euo pipefail
-            cd "$PROD_APP_DIR"
-            echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
 
-            if command -v docker-compose >/dev/null 2>&1; then
-              docker-compose pull
-              docker-compose up -d --remove-orphans
-            elif docker compose version >/dev/null 2>&1; then
-              docker compose pull
-              docker compose up -d --remove-orphans
+            APP_DIR="$PROD_APP_DIR"
+            cd "$APP_DIR"
+
+            git fetch "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" main
+            git checkout main
+            git reset --hard FETCH_HEAD
+
+            if [ -x "$APP_DIR/venv/bin/python" ]; then
+              PYTHON="$APP_DIR/venv/bin/python"
+            elif [ -x "$APP_DIR/backend/venv/bin/python" ]; then
+              PYTHON="$APP_DIR/backend/venv/bin/python"
             else
-              echo "ERROR: Docker Compose is not installed on this host." >&2
-              echo "Install the v2 plugin: sudo apt-get install -y docker-compose-plugin" >&2
-              echo "Or the standalone binary: sudo apt-get install -y docker-compose" >&2
-              docker version || true
+              echo "ERROR: venv not found at $APP_DIR/venv or $APP_DIR/backend/venv" >&2
               exit 1
             fi
 
-            docker image prune -f
+            "$PYTHON" -m pip install -r "$APP_DIR/requirements.txt"
+
+            mkdir -p "$APP_DIR/logs"
+            pkill -f "$APP_DIR/backend/main.py" || true
+            pkill -f "uvicorn .*backend.main:app" || true
+            sleep 2
+
+            cd "$APP_DIR/backend"
+            export UPLOAD_DIR="${UPLOAD_DIR:-/home/azureuser/uploads}"
+            nohup "$PYTHON" main.py >> "$APP_DIR/logs/app.out" 2>&1 &
+            echo $! > "$APP_DIR/logs/app.pid"
+            sleep 3
+
+            if ! kill -0 "$(cat "$APP_DIR/logs/app.pid")" 2>/dev/null; then
+              echo "ERROR: main.py failed to start" >&2
+              tail -n 80 "$APP_DIR/logs/app.out" || true
+              exit 1
+            fi
+
+            echo "Started main.py pid=$(cat "$APP_DIR/logs/app.pid") from $APP_DIR/backend"
