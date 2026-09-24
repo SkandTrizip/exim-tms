@@ -1,0 +1,41 @@
+# Production deployment for ShipFlow / Exim TMS.
+# Host: azureuser@whatsappagent:~/exim_logipod/exim-tms
+# Uses an external PostgreSQL (Azure today). Copy .env.example to .env before starting.
+
+services:
+  app:
+    image: ${IMAGE:-exim-tms:latest}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      UPLOAD_DIR: /app/uploads
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ${UPLOAD_HOST_DIR:-/home/azureuser/uploads}:/app/uploads
+      - logs:/app/logs
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api', timeout=5)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  logs:
