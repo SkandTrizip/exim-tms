@@ -341,5 +341,10 @@ app.mount("/", StaticFiles(directory=frontend_path, html=True), name="frontend")
 
 if __name__ == "__main__":
     import uvicorn
-    # Use uvicorn.run for the app and enable reload for development
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=5050, reload=True)
+
+    uvicorn.run(
+        "backend.main:app",
+        host="0.0.0.0",
+        port=5050,
+        reload=False,
+    )
