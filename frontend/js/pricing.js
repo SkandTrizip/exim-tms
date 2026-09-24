@@ -15,6 +15,24 @@ function getChargeCurrencies() {
         ? CONFIG.CHARGE_CURRENCIES
         : ['USD', 'EUR', 'GBP', 'JPY', 'INR'];
 }
+
+function isAirFreightEnquiry(enquiry) {
+    const e = enquiry || currentEnquiry;
+    const value = e?.shipment_type || '';
+    return /air\s*freight/i.test(value) || value === 'AIR';
+}
+
+/** Default charge lines for new quotes / container sections (ocean vs air freight). */
+function getDefaultChargesForEnquiry() {
+    if (isAirFreightEnquiry()) {
+        return CONFIG.airDefaultCharges || CONFIG.defaultCharges || [];
+    }
+    return CONFIG.defaultCharges || [];
+}
+
+function cloneDefaultChargesForEnquiry() {
+    return JSON.parse(JSON.stringify(getDefaultChargesForEnquiry()));
+}
 let isConfirmMode = false;  // true when confirm-flow UI locks non-rate fields
 /** URL `mode=` so we can keep the calculator open for Confirm Quote flows even after a quote is already accepted */
 let pricingPageMode = '';
@@ -99,8 +117,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         const hasAcceptedQuote = pricingQuotes.some(isQuoteAcceptedStatus);
 
         // Once confirmed, pricing is permanently read-only in Quotes & Pricing.
+        // View mode without an accepted quote is a stale lock — keep Confirm available.
         if (hasAcceptedQuote && pricingPageMode !== 'view') {
             pricingPageMode = 'view';
+        } else if (!hasAcceptedQuote && pricingPageMode === 'view') {
+            pricingPageMode = 'edit';
         }
 
         if (pricingPageMode === 'confirm') {
@@ -480,7 +501,7 @@ function addNewQuote() {
         free_days: '',
         container_prices: [{
             container_type: currentEnquiry ? currentEnquiry.container_type : '',
-            charges: JSON.parse(JSON.stringify(CONFIG.defaultCharges))
+            charges: cloneDefaultChargesForEnquiry()
         }]
     };
     pricingQuotes.push(newQuote);
@@ -639,7 +660,7 @@ function renderContainerSection(data, index) {
 }
 
 function addContainerSection() {
-    const cp = { container_type: '', charges: JSON.parse(JSON.stringify(CONFIG.defaultCharges)) };
+    const cp = { container_type: '', charges: cloneDefaultChargesForEnquiry() };
     renderContainerSection(cp, document.querySelectorAll('.container-pricing-section').length);
 }
 
@@ -765,6 +786,9 @@ async function savePricingData(silent = false) {
     }
 
     for (const quote of pricingQuotes) {
+        if (quote.id && isQuoteAcceptedStatus(quote)) {
+            continue;
+        }
         const summary = getQuoteSummary(quote);
         const body = {
             enquiry_id: currentEnquiry.id,
@@ -908,7 +932,7 @@ function getQuoteSummary(quote) {
 }
 
 function isFirstTimeQuoteConfirmation() {
-    return !pricingQuotes.some(isQuoteAcceptedStatus) && (currentEnquiry?.stage || 1) < 3;
+    return !pricingQuotes.some(isQuoteAcceptedStatus);
 }
 
 function promptFinalizeQuoteConfirmation(quote, remarks = null) {
@@ -956,29 +980,32 @@ async function executeFinalizeQuote(quote, remarks) {
         await savePricingData(true);
         console.log('Post-save quote ID:', quote.id);
 
-        if (quote.id) {
-            const statusRes = await fetch(
-                `${CONFIG.API_URL}/api/quotes/${quote.id}/status?status=accepted`,
-                {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        remarks_reason: remarks?.remarks_reason || null,
-                        remarks_other: remarks?.remarks_other || null,
-                    }),
-                }
-            );
-            if (!statusRes.ok) {
-                const err = await statusRes.json().catch(() => ({}));
-                throw new Error(err.detail || 'Failed to update quote status');
-            }
-            quote.status = 'accepted';
-            if (remarks) {
-                quote.accepted_remarks_reason = remarks.remarks_reason;
-                quote.accepted_remarks_other = remarks.remarks_other;
-            }
-            console.log('✅ Quote status updated to accepted');
+        if (!quote.id) {
+            throw new Error('Quote was saved without an ID, so it could not be marked accepted.');
         }
+
+        const statusRes = await fetch(
+            `${CONFIG.API_URL}/api/quotes/${quote.id}/status?status=accepted`,
+            {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    status: 'accepted',
+                    remarks_reason: remarks?.remarks_reason || null,
+                    remarks_other: remarks?.remarks_other || null,
+                }),
+            }
+        );
+        if (!statusRes.ok) {
+            const err = await statusRes.json().catch(() => ({}));
+            throw new Error(err.detail || 'Failed to update quote status');
+        }
+        quote.status = 'accepted';
+        if (remarks) {
+            quote.accepted_remarks_reason = remarks.remarks_reason;
+            quote.accepted_remarks_other = remarks.remarks_other;
+        }
+        console.log('✅ Quote status updated to accepted');
 
         const stageRes = await fetch(`${CONFIG.API_URL}/api/enquiry/${currentEnquiry.id}/stage?stage=3`, {
             method: 'PATCH',

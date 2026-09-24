@@ -6,6 +6,7 @@ let currentEnquiryData = null;
 let currentPricingData = null;
 let currentFinalQuoteData = null;
 let uploadedFiles = {};
+let trackingQuoteConfirmed = false;
 
 function syncPricingDataToWindow(quote) {
     currentPricingData = quote;
@@ -13,6 +14,33 @@ function syncPricingDataToWindow(quote) {
 }
 
 window.currentPricingData = null;
+
+function isAcceptedQuoteRecord(q) {
+    return String(q?.status || '').toLowerCase() === 'accepted';
+}
+
+function setTrackingBlockedUntilConfirm(blocked) {
+    trackingQuoteConfirmed = !blocked;
+    let banner = document.getElementById('trackingConfirmRequired');
+    if (blocked) {
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'trackingConfirmRequired';
+            banner.setAttribute('role', 'status');
+            banner.style.cssText = 'margin-bottom:16px;padding:14px 16px;border-radius:8px;background:#fef3c7;color:#92400e;font-weight:600;';
+            const host = document.querySelector('.upload-track-container') || document.getElementById('mainContent');
+            if (host) host.prepend(banner);
+        }
+        banner.textContent = 'Confirm the quote first. Tracking is available only after the quote is locked.';
+        const saveBtn = document.querySelector('#saveTrackingBtn, button[onclick="saveTracking()"]');
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.setAttribute('aria-disabled', 'true');
+        }
+    } else if (banner) {
+        banner.remove();
+    }
+}
 
 // ==========================================
 // Initialization
@@ -144,17 +172,25 @@ async function fetchPricingData(enquiryId) {
         if (response.ok) {
             const pricingList = await response.json();
             if (pricingList && pricingList.length > 0) {
-                // Find the quote that was actually accepted
-                const acceptedQuote = pricingList.find(q => q.status === 'accepted') || pricingList[0];
+                const acceptedQuote = pricingList.find(isAcceptedQuoteRecord);
+                if (!acceptedQuote) {
+                    setTrackingBlockedUntilConfirm(true);
+                    return;
+                }
+                setTrackingBlockedUntilConfirm(false);
                 syncPricingDataToWindow(acceptedQuote);
                 populateInvoiceInfo();
                 updateUpdateQuoteRowVisibility();
+            } else {
+                setTrackingBlockedUntilConfirm(true);
             }
         } else {
             console.warn('No pricing data found for this enquiry');
+            setTrackingBlockedUntilConfirm(true);
         }
     } catch (error) {
         console.error('Error fetching pricing data:', error);
+        setTrackingBlockedUntilConfirm(true);
     }
 }
 
@@ -667,7 +703,7 @@ function getChecklistState() {
  * Save the current state of all checkboxes and dates to localStorage and Backend
  */
 async function saveChecklistState() {
-    if (!currentEnquiryData?.id) return;
+    if (!currentEnquiryData?.id || !trackingQuoteConfirmed) return;
 
     const state = getChecklistState();
     localStorage.setItem(`checklist_${currentEnquiryData.id}`, JSON.stringify(state));
@@ -727,6 +763,17 @@ async function loadChecklistState() {
     }
 }
 
+function formatChecklistDateDisplay(dateValue) {
+    if (!dateValue || dateValue === '-') return '-';
+    if (typeof dateValue === 'string' && dateValue.includes('T')) {
+        const d = new Date(dateValue);
+        if (Number.isNaN(d.getTime())) return '-';
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}, ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+    }
+    return String(dateValue);
+}
+
 /**
  * Apply status data to the DOM
  */
@@ -747,10 +794,24 @@ function applyChecklistState(state, isBackend = false) {
         const checkbox = document.getElementById(`status_${item}`);
         const dateEl = document.getElementById(`date_${item}`);
 
-        if (!checkbox || item === 'booking_confirmed') return;
+        if (!checkbox) return;
 
         let isChecked = isBackend ? !!state[item] : !!state[item]?.checked;
         let dateValue = isBackend ? state[item] : state[item]?.date;
+
+        if (item === 'booking_confirmed') {
+            if (!dateEl) return;
+            if (!dateValue && isBackend && currentEnquiryData?.created_at) {
+                dateValue = currentEnquiryData.created_at;
+            }
+            const formatted = formatChecklistDateDisplay(dateValue);
+            dateEl.textContent = formatted;
+            if (formatted !== '-') {
+                dateEl.style.color = 'var(--primary)';
+                dateEl.style.fontWeight = '600';
+            }
+            return;
+        }
 
         if (item === 'sob') {
             // SOB uses a date input picker — restore accordingly
@@ -782,14 +843,7 @@ function applyChecklistState(state, isBackend = false) {
             // Default restoration
             checkbox.checked = isChecked;
             if (dateEl) {
-                // Formatting for display
-                if (isBackend && dateValue && typeof dateValue === 'string' && dateValue.includes('T')) {
-                    const d = new Date(dateValue);
-                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                    dateEl.textContent = `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear().toString().slice(-2)}, ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-                } else {
-                    dateEl.textContent = dateValue || '-';
-                }
+                dateEl.textContent = formatChecklistDateDisplay(dateValue);
 
                 if (isChecked && dateEl.textContent !== '-') {
                     dateEl.style.color = 'var(--primary)';
@@ -838,19 +892,16 @@ function applyChecklistState(state, isBackend = false) {
     updateGenerateHblRowVisibility();
 }
 
-// Update populateShipmentInfo to handle initial status date
+// Interim display until loadChecklistState applies booking_confirmed from the API.
 function updateInitialStatus() {
     if (!currentEnquiryData) return;
-    const dateBookingConfirmed = document.getElementById('date_booking_confirmed');
-    if (dateBookingConfirmed) {
-        // Use created_at if available, otherwise use current date
-        const date = currentEnquiryData.created_at ? new Date(currentEnquiryData.created_at) : new Date();
-        dateBookingConfirmed.textContent = date.toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-        });
-    }
+    const dateEl = document.getElementById('date_booking_confirmed');
+    if (!dateEl) return;
+    const formatted = formatChecklistDateDisplay(currentEnquiryData.created_at);
+    if (formatted === '-') return;
+    dateEl.textContent = formatted;
+    dateEl.style.color = 'var(--primary)';
+    dateEl.style.fontWeight = '600';
 }
 
 // ==========================================
@@ -1030,6 +1081,10 @@ function removeFile(inputId, displayId) {
 async function saveTracking() {
     if (!currentEnquiryData?.id) {
         showModal('Error', 'Enquiry not loaded. Please refresh the page.', 'error');
+        return;
+    }
+    if (!trackingQuoteConfirmed) {
+        showModal('Quote not confirmed', 'Confirm the quote first. Tracking is available only after the quote is locked.', 'warning');
         return;
     }
 

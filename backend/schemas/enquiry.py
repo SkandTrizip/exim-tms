@@ -22,6 +22,7 @@ class EnquiryBase(BaseModel):
     container_count: Optional[int] = 0
     weight_measurement: Optional[str] = None
     weight_per_container: Optional[float] = 0.0
+    air_cargo_details: Optional[str] = None
     commodity: Optional[str] = None
     hs_code: Optional[str] = None
     cargo_risk: Optional[str] = None

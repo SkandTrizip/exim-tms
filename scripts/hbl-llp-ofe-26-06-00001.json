@@ -1,0 +1,47 @@
+{
+  "enquiry_number": "LLP/OFE/26/06/00001",
+  "blType": "seaway",
+  "draftMark": true,
+  "watermarkEnabled": true,
+  "applySign": false,
+  "freight": "prepaid",
+  "fields": {
+    "mtdBlNo": "LLP/OFE/26/06/00001",
+    "shipmentRefNo": "LLP/OFE/26/06/00001",
+    "endOfBlNo": "LLP/OFE/26/06/00001",
+
+    "consignor": "CAMBAY TECHNOPACK PRIVATE LIMITED\nBLOCK NO. 1000, SURVEY NO 667 & 691, VILLAGE TADKESHWAR,\nKIM-MANDVI HIGHWAY, SURAT-394170, GUJARAT, INDIA\nTel: +91 9313925094",
+
+    "consignee": "T&C PACKAGING LTD\nRIVER HOUSE, 1 MAIDSTONE ROAD, SIDCUP,\nLONDON, DA14 5RH, UNITED KINGDOM",
+
+    "deliveryAgent": "BLACKSTONE SHIPPING UK LIMITED\nOffice 101, Citibase Business centre, 42 - 44 Clarendon Road,\nWatford WD17 1JJ.\nPh: 7324792686",
+
+    "notifyParty1": "T&C PACKAGING LTD\nRIVER HOUSE, 1 MAIDSTONE ROAD, SIDCUP,\nLONDON, DA14 5RH, UNITED KINGDOM\nEmail: martin.beney@4acesltd.com, Linda@4acesltd.com",
+
+    "notifyParty2": "",
+
+    "placeAcceptance": "HAZIRA, INDIA",
+    "portLoading": "HAZIRA, INDIA",
+    "portDischarge": "FELIXSTOWE, UK",
+    "placeDelivery": "FELIXSTOWE, UK",
+    "dateAcceptance": "",
+    "routeTranshipment": "",
+
+    "vesselName": "MSC PARIS",
+    "voyageNo": "IP623A",
+    "modesTransport": "",
+    "dateDelivery": "",
+
+    "containerNos": "TCNU7579327\nSEAL:SCI024727",
+    "marksNumber": "NO MARKS",
+
+    "cargoDescription": "2x 40 HC\n1840 CFC BOXES, PRINTED PAPER BOARD CUPS\nHS CODE:48236900\nINV NO:CE/26-27/0225 DATE:04/06/2026\nCOUNTRY OF ORIGIN: INDIA\nPO REF NO: PO 203\nGROSS WEIGHT: 9080.00 KGS\nNET WEIGHT: 8160.00 KGS\nSHIPPING BILL NO: 3875764 DT:05/06/2026\n\nTOTAL GROSS WEIGHT: 23889.300 KGS",
+
+    "cargoWeight": "23889.300 KGS",
+
+    "cargoMeasurement": "",
+
+    "sobDate": "",
+    "placeAndDateOfIssue": "Gurugram, 05 Jun 2026"
+  }
+}

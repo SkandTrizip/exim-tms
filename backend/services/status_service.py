@@ -8,6 +8,11 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
     """
     Update or create shipment status checklist for an enquiry.
     """
+    from backend.services.quote_service import enquiry_has_accepted_quote
+
+    if not enquiry_has_accepted_quote(db, enquiry_id):
+        raise ValueError("Tracking is available only after the quote is confirmed.")
+
     # Check if a status record already exists
     status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == enquiry_id).first()
     
@@ -94,7 +99,7 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
             except (ValueError, TypeError):
                 pass
 
-    # Tracking activity implies the sale is in operations.
+    # Confirmed quotes belong in operations; never promote an unconfirmed sale.
     from backend.models.enquiry import Enquiry
     enquiry = db.query(Enquiry).filter(Enquiry.id == enquiry_id).first()
     if enquiry and (enquiry.stage or 1) < 3:

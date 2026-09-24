@@ -37,6 +37,7 @@ _column_migrations = [
     ("enquiries", "notify_party_2_address", "TEXT"),
     ("enquiries", "hbl_document_snapshot", "TEXT"),
     ("enquiries", "hbl_document_saved_at", "TIMESTAMP"),
+    ("enquiries", "air_cargo_details", "TEXT"),
     ("shipment_statuses", "container_number", "VARCHAR"),
     ("invoices", "customer_invoice_no", "VARCHAR"),
     ("invoices", "item_type", "VARCHAR DEFAULT 'all'"),

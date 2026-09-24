@@ -63,6 +63,108 @@ function jobLabel(j) {
     return `${j.enquiry_number || ('Job #' + j.id)}${j.client_name ? ' — ' + j.client_name : ''}`;
 }
 
+function escapeOvHtml(str) {
+    return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function formatCostImpactLabel(impact) {
+    if (impact === 'deduct_from_client') return 'Deduct from Client';
+    if (impact === 'add_to_shipping_line') return 'Add to Shipping Line cost';
+    return impact || '—';
+}
+
+function formatPayToLabel(payToType, payeeName) {
+    if (payToType === 'shipping_line') {
+        return payeeName ? `Shipping Line · ${payeeName}` : 'Shipping Line';
+    }
+    if (payToType === 'payee') {
+        return payeeName ? `Payee · ${payeeName}` : 'Payee';
+    }
+    return payeeName || '—';
+}
+
+function formatBookingStatus(status) {
+    const s = (status || '').toLowerCase();
+    if (s === 'paid') return 'Paid';
+    if (s === 'booked') return 'Booked';
+    if (s === 'to_be_booked') return 'To be booked';
+    return status || '—';
+}
+
+function renderOverheadBookings(bookings) {
+    const panel = document.getElementById('ov_bookings_panel');
+    const list = document.getElementById('ov_bookings_list');
+    if (!panel || !list) return;
+
+    panel.style.display = '';
+    if (!bookings || !bookings.length) {
+        list.innerHTML = '<p class="ov-booking-empty">This overhead is not booked against any job yet. Book it from Add Overhead by selecting a job, or from the job\'s Finance page.</p>';
+        return;
+    }
+
+    list.innerHTML = bookings.map((b) => {
+        const jobNo = b.enquiry_number || (b.enquiry_id ? `Job #${b.enquiry_id}` : '—');
+        const client = b.client_name ? escapeOvHtml(b.client_name) : '—';
+        const financeUrl = b.enquiry_id
+            ? `/finance-details?enquiry_id=${encodeURIComponent(b.enquiry_id)}`
+            : null;
+        const jobCell = financeUrl && !isEmbeddedMaster()
+            ? `<a class="ov-booking-job-link" href="${financeUrl}" target="_blank" rel="noopener">${escapeOvHtml(jobNo)}</a>`
+            : escapeOvHtml(jobNo);
+        const amt = b.amount != null
+            ? `${escapeOvHtml(b.currency || 'INR')} ${Number(b.amount).toLocaleString()}`
+            : '—';
+        return `
+            <div class="ov-booking-card">
+                <dl class="ov-booking-grid">
+                    <div>
+                        <dt>Job</dt>
+                        <dd>${jobCell}</dd>
+                    </div>
+                    <div>
+                        <dt>Client</dt>
+                        <dd>${client}</dd>
+                    </div>
+                    <div>
+                        <dt>Cost treatment</dt>
+                        <dd>${escapeOvHtml(formatCostImpactLabel(b.cost_impact))}</dd>
+                    </div>
+                    <div>
+                        <dt>Pay / bill to</dt>
+                        <dd>${escapeOvHtml(formatPayToLabel(b.pay_to_type, b.payee_name))}</dd>
+                    </div>
+                    <div>
+                        <dt>Amount</dt>
+                        <dd>${amt}</dd>
+                    </div>
+                    <div>
+                        <dt>Payment status</dt>
+                        <dd>${escapeOvHtml(formatBookingStatus(b.status))}</dd>
+                    </div>
+                </dl>
+            </div>`;
+    }).join('');
+}
+
+async function loadOverheadBookings(overheadId) {
+    try {
+        const res = await fetch(`${API}/api/finance/overhead-payment/by-overhead/${overheadId}`, {
+            headers: authHeaders()
+        });
+        if (!res.ok) {
+            renderOverheadBookings([]);
+            return;
+        }
+        const rows = await res.json();
+        renderOverheadBookings(Array.isArray(rows) ? rows : []);
+    } catch (e) {
+        console.error('Failed to load overhead job bookings', e);
+        renderOverheadBookings([]);
+    }
+}
+
 async function loadJobOptions() {
     const dl = document.getElementById('ov_job_list');
     try {
@@ -312,14 +414,17 @@ async function editOverhead(id) {
             if (el) el.value = ov[objKey] != null ? ov[objKey] : '';
         }
 
-        // Job link only applies when creating a new overhead.
-        const jobSel = document.getElementById('ov_enquiry');
-        if (jobSel) {
-            const jobGroup = jobSel.closest('.form-group');
-            if (jobGroup) jobGroup.style.display = 'none';
-            const jobLabel = jobSel.closest('.card')?.querySelector('.section-label');
-            if (jobLabel && jobLabel.textContent.includes('Attach to Job')) jobLabel.style.display = 'none';
-        }
+        // Job link only applies when creating a new overhead; show existing bookings instead.
+        const attachLabels = document.querySelectorAll('#overheadForm .section-label');
+        attachLabels.forEach((el) => {
+            if (el.textContent.includes('Attach to Job')) {
+                el.style.display = 'none';
+                const grid = el.nextElementSibling;
+                if (grid && grid.classList.contains('form-grid-3')) grid.style.display = 'none';
+            }
+        });
+
+        await loadOverheadBookings(id);
 
         showStatusBanner(ov);
         checkAdminAndShowActions(id, ov.status);

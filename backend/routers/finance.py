@@ -6,6 +6,7 @@ from backend.models.shipment_status import ShipmentStatus
 from backend.models.overhead import Overhead
 from backend.models.payee import Payee
 from backend.models.enquiry_economics import EnquiryEconomics
+from backend.models.enquiry import Enquiry
 from backend.services.enquiry_economics_service import (
     sync_enquiry_economics,
     serialize_overhead_payment,
@@ -237,6 +238,31 @@ def create_overhead_payment(payment: OverheadPaymentCreate, db: Session = Depend
     )
     _resync_economics(db, record.enquiry_id)
     return serialize_overhead_payment(db, record)
+
+
+@router.get("/overhead-payment/by-overhead/{overhead_id}")
+def get_overhead_payments_by_overhead(overhead_id: int, db: Session = Depends(get_db)):
+    """Finance bookings linked to an overhead master (job, payee, cost treatment)."""
+    rows = (
+        db.query(OverheadPayment)
+        .filter(OverheadPayment.overhead_id == overhead_id)
+        .order_by(OverheadPayment.created_at.desc())
+        .all()
+    )
+    enquiry_ids = {r.enquiry_id for r in rows}
+    enquiries = {}
+    if enquiry_ids:
+        for enq in db.query(Enquiry).filter(Enquiry.id.in_(enquiry_ids)).all():
+            enquiries[enq.id] = enq
+    result = []
+    for row in rows:
+        payload = serialize_overhead_payment(db, row)
+        enq = enquiries.get(row.enquiry_id)
+        if enq:
+            payload["enquiry_number"] = enq.enquiry_number
+            payload["client_name"] = enq.client_name
+        result.append(payload)
+    return result
 
 
 @router.get("/overhead-payment/{enquiry_id}")

@@ -305,6 +305,13 @@ def update_hbl_fields(enquiry_id: int, payload: dict, db: Session = Depends(get_
 
 @router.patch("/{enquiry_id}/stage", response_model=Enquiry)
 def update_enquiry_stage(enquiry_id: int, stage: int, db: Session = Depends(get_db)):
+    if stage >= 3:
+        from backend.services.quote_service import enquiry_has_accepted_quote
+        if not enquiry_has_accepted_quote(db, enquiry_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot move to tracking until a quote is confirmed.",
+            )
     updated = update_enquiry_logic(db, enquiry_id, {"stage": stage})
     if not updated:
         raise HTTPException(status_code=404, detail="Enquiry not found")

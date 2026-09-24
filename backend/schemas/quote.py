@@ -85,6 +85,7 @@ class QuoteCreate(QuoteBase):
     containers: List[QuoteContainerCreate] = []
 
 class QuoteStatusUpdate(BaseModel):
+    status: Optional[str] = None
     remarks_reason: Optional[str] = None
     remarks_other: Optional[str] = None
 

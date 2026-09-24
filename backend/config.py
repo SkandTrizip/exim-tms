@@ -1,15 +1,12 @@
 # Configuration constants for both Backend and Frontend
 
 import os
-from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # Upload directory path (absolute path on the server)
-UPLOAD_DIR = "/home/azureuser/uploads/"
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent
-# UPLOAD_DIR = os.getenv("UPLOAD_DIR", str(_PROJECT_ROOT / "uploads"))
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/home/azureuser/uploads/")
 
 # Injected into /js/config.js as CONFIG.API_URL. Use '' so the browser calls /api on the same host
 # you opened (localhost, 127.0.0.1, or a public IP). A fixed remote URL breaks local dev (Failed to fetch).
@@ -68,6 +65,11 @@ CONTAINER_TYPES = [
     "20'Reefer", "40'Reefer"
 ]
 
+AIR_PACKAGE_TYPES = [
+    "Carton", "Pallet", "Crate", "Box", "Bag",
+    "Bundle", "Drum", "Case", "Wooden Box", "Skid", "Loose"
+]
+
 SHIPMENT_TYPES = ["FCL (Full Container Load)", "LCL (Less Container Load)", "Air Freight"]
 CLIENTS = [] # Now fetched from CLIENT MASTER (Database)
 SCOPES = ["Port to Port", "Port to Door", "Door to Port", "Door to Door"]
@@ -85,12 +87,25 @@ DEFAULT_CHARGES = [
     { "desc": "Seal Charge", "account": "On Your Account", "curr": "INR", "on": "Per Container" },
 ]
 
+# Prefilled pricing lines when shipment type is Air Freight (HSN/SAC for invoicing reference).
+AIR_DEFAULT_CHARGES = [
+    { "desc": "AIR FREIGHT", "account": "On Your Account", "curr": "USD", "on": "Per Container", "hsn_sac": "996531" },
+    { "desc": "AMS FEE", "account": "On Your Account", "curr": "USD", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "AWB FEES+TEDI+PCA", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "ASI", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "CGC", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "LABELLING FEE", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "CUSTOM CLEARANCE FEE - ORIGIN", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996713" },
+    { "desc": "TERMINAL HANDLING CHARGES - ORIGIN", "account": "On Your Account", "curr": "INR", "on": "Per Container", "hsn_sac": "996719" },
+]
+
 # Currencies offered on charge line items; INR is always settlement currency (rate 1).
 CHARGE_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "INR"]
 
 def get_frontend_config() -> dict:
     return {
         "containerTypes": CONTAINER_TYPES,
+        "airPackageTypes": AIR_PACKAGE_TYPES,
         "shipmentTypes": SHIPMENT_TYPES,
         "clients": CLIENTS,
         "scopes": SCOPES,
@@ -98,6 +113,7 @@ def get_frontend_config() -> dict:
         "incoterms": INCOTERMS,
         "shippingLines": SHIPPING_LINES,
         "defaultCharges": DEFAULT_CHARGES,
+        "airDefaultCharges": AIR_DEFAULT_CHARGES,
         "CHARGE_CURRENCIES": CHARGE_CURRENCIES,
     }
 

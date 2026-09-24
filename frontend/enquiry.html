@@ -145,7 +145,7 @@
                             </div>
                         </div>
 
-                        <div class="form-section">
+                        <div class="form-section" id="oceanContainerSection">
                             <h2 class="section-title">📦 Container Details</h2>
                             <div id="containerList">
                                 <div class="container-group">
@@ -182,6 +182,72 @@
                             <button type="button" class="btn btn-add" onclick="addContainer()">
                                 <i class="fas fa-plus"></i> Add Another Container
                             </button>
+                        </div>
+
+                        <div class="form-section" id="airCargoSection" style="display: none;">
+                            <h2 class="section-title">📦 Cargo Details</h2>
+                            <div class="air-cargo-flags">
+                                <label class="air-flag-toggle">
+                                    <input type="checkbox" id="airHazardous" onchange="syncAirCargoToggle(this)">
+                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    <span class="air-flag-label">Hazardous</span>
+                                </label>
+                                <label class="air-flag-toggle">
+                                    <input type="checkbox" id="airNonStackable" onchange="syncAirCargoToggle(this)">
+                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    <span class="air-flag-label">Non-Stackable</span>
+                                </label>
+                                <label class="air-flag-toggle">
+                                    <input type="checkbox" id="airTempControlled" onchange="syncAirCargoToggle(this)">
+                                    <span class="toggle-track"><span class="toggle-thumb"></span></span>
+                                    <span class="air-flag-label">Temperature Controlled</span>
+                                </label>
+                            </div>
+                            <div class="air-cargo-table">
+                                <div class="air-cargo-header">
+                                    <div>Package Type <span class="required">*</span></div>
+                                    <div>Quantity <span class="required">*</span></div>
+                                    <div class="air-header-with-unit">
+                                        <span>Weight Per Piece <span class="required">*</span></span>
+                                        <select id="airWeightUnit" class="air-unit-select" onchange="updateAirCargoTotals()" aria-label="Weight unit">
+                                            <option value="Kgs">Kgs</option>
+                                            <option value="Lbs">Lbs</option>
+                                            <option value="Tonn">Tonn</option>
+                                        </select>
+                                    </div>
+                                    <div class="air-header-with-unit">
+                                        <span>Dimensions L×W×H <span class="required">*</span></span>
+                                        <select id="airDimUnit" class="air-unit-select" onchange="updateAirCargoTotals()" aria-label="Dimension unit">
+                                            <option value="Cms">Cms</option>
+                                            <option value="MM">MM</option>
+                                            <option value="Inches">Inches</option>
+                                            <option value="Meters">Meters</option>
+                                            <option value="Feet">Feet</option>
+                                        </select>
+                                    </div>
+                                    <div class="air-col-actions" aria-hidden="true"></div>
+                                </div>
+                                <div id="airCargoRows"></div>
+                            </div>
+                            <div class="air-cargo-footer">
+                                <div class="air-cargo-totals">
+                                    <div class="air-total-chip">
+                                        <span class="air-total-label">Total Quantity</span>
+                                        <strong id="airTotalQty">0</strong>
+                                    </div>
+                                    <div class="air-total-chip">
+                                        <span class="air-total-label">Total Weight</span>
+                                        <strong id="airTotalWeight">0 Kgs</strong>
+                                    </div>
+                                    <div class="air-total-chip air-total-chip--charge">
+                                        <span class="air-total-label">Chargeable Weight</span>
+                                        <strong id="airChargeableWeight">0 Kgs</strong>
+                                    </div>
+                                </div>
+                                <button type="button" class="btn btn-add air-add-row-btn" onclick="addAirCargoRow()">
+                                    <i class="fas fa-plus"></i> Add Row
+                                </button>
+                            </div>
                         </div>
 
                         <div class="form-section">

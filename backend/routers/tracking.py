@@ -45,6 +45,13 @@ def upload_documents(
         if not enquiry_id:
             raise HTTPException(status_code=400, detail="enquiry_id is required")
 
+        from backend.services.quote_service import enquiry_has_accepted_quote
+        if not enquiry_has_accepted_quote(db, enquiry_id):
+            raise HTTPException(
+                status_code=400,
+                detail="Tracking is available only after the quote is confirmed.",
+            )
+
         # Update checklist status if provided
         if checklist_state:
             status_service.update_shipment_status(db, enquiry_id, checklist_state)
@@ -88,6 +95,10 @@ def upload_documents(
         
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid tracking_data format")
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -143,6 +154,8 @@ def update_status(enquiry_id: int, status_data: dict, db: Session = Depends(get_
     """Update shipment status checklist and metadata for an enquiry"""
     try:
         return status_service.update_shipment_status(db, enquiry_id, status_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Failed to update status for enquiry ID {enquiry_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
