@@ -4,16 +4,33 @@ from __future__ import annotations
 
 from typing import Optional
 
-from weasyprint import CSS, HTML, default_url_fetcher
+from weasyprint import CSS, HTML
 
 from backend.utils.logger import logger
 
+try:
+    from weasyprint.urls import URLFetcher as _WeasyURLFetcher
+except ImportError:
+    _WeasyURLFetcher = None
+
+try:
+    from weasyprint import default_url_fetcher as _legacy_url_fetcher
+except ImportError:
+    _legacy_url_fetcher = None
+
 
 def _restricted_url_fetcher(url: str, timeout: int = 10, ssl_context=None):
-    """Block network/file fetches to avoid SSRF; allow data: URLs only."""
-    if url.startswith("data:"):
-        return default_url_fetcher(url, timeout=timeout, ssl_context=ssl_context)
+    """Legacy WeasyPrint callable fetcher: data: URLs only."""
+    if url.startswith("data:") and _legacy_url_fetcher is not None:
+        return _legacy_url_fetcher(url, timeout=timeout, ssl_context=ssl_context)
     raise ValueError(f"Remote or local URL fetches are not allowed: {url}")
+
+
+def _html_url_fetcher():
+    """WeasyPrint 66+ wants a URLFetcher instance; older versions want a callable."""
+    if _WeasyURLFetcher is not None:
+        return _WeasyURLFetcher(allowed_protocols={"data"})
+    return _restricted_url_fetcher
 
 
 def _build_page_css(
@@ -73,7 +90,7 @@ def html_to_pdf(
 
         document = HTML(
             string=html,
-            url_fetcher=_restricted_url_fetcher,
+            url_fetcher=_html_url_fetcher(),
         )
         return document.write_pdf(stylesheets=stylesheets or None)
     except Exception as exc:
