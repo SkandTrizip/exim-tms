@@ -18,19 +18,18 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     steps:
-      - name: Pull and restart API
+      - name: Pull and restart with Docker Compose
         uses: appleboy/ssh-action@v1.2.2
         env:
           PROD_APP_DIR: ${{ vars.PROD_APP_DIR || '/home/azureuser/exim_logipod/exim-tms' }}
-          PROD_VENV: ${{ vars.PROD_VENV || '/home/azureuser/venv' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         with:
           host: ${{ secrets.PROD_HOST }}
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
-          command_timeout: 15m
-          envs: PROD_APP_DIR,PROD_VENV,GITHUB_TOKEN,GITHUB_REPOSITORY
+          command_timeout: 20m
+          envs: PROD_APP_DIR,GITHUB_TOKEN,GITHUB_REPOSITORY
           script: |
             set -euo pipefail
 
@@ -41,96 +40,5 @@ jobs:
             git checkout main
             git reset --hard FETCH_HEAD
 
-            if [ -x "$PROD_VENV/bin/python" ]; then
-              PYTHON="$PROD_VENV/bin/python"
-            elif [ -x "$HOME/venv/bin/python" ]; then
-              PYTHON="$HOME/venv/bin/python"
-            elif [ -x "$APP_DIR/venv/bin/python" ]; then
-              PYTHON="$APP_DIR/venv/bin/python"
-            elif [ -x "$APP_DIR/backend/venv/bin/python" ]; then
-              PYTHON="$APP_DIR/backend/venv/bin/python"
-            else
-              echo "ERROR: venv not found at $PROD_VENV, $HOME/venv, $APP_DIR/venv, or $APP_DIR/backend/venv" >&2
-              exit 1
-            fi
-
-            echo "Using Python $PYTHON"
-
-            "$PYTHON" -m pip install -r "$APP_DIR/requirements.txt"
-
-            mkdir -p "$APP_DIR/logs"
-
-            PID_FILE="$APP_DIR/logs/app.pid"
-
-            if [ -f "$PID_FILE" ]; then
-              OLD_PID="$(cat "$PID_FILE" 2>/dev/null || true)"
-
-              if [[ "$OLD_PID" =~ ^[0-9]+$ ]] && kill -0 "$OLD_PID" 2>/dev/null; then
-                CMDLINE=""
-                if [ -r "/proc/$OLD_PID/cmdline" ]; then
-                  CMDLINE="$(tr '\0' ' ' < "/proc/$OLD_PID/cmdline")"
-                fi
-
-                if [ -z "$CMDLINE" ] || echo "$CMDLINE" | grep -q "$APP_DIR"; then
-                  echo "Stopping previous backend process: $OLD_PID"
-                  kill "$OLD_PID" 2>/dev/null || true
-
-                  for _ in {1..20}; do
-                    if ! kill -0 "$OLD_PID" 2>/dev/null; then
-                      break
-                    fi
-                    sleep 0.25
-                  done
-
-                  if kill -0 "$OLD_PID" 2>/dev/null; then
-                    echo "Previous process did not stop; forcing termination"
-                    kill -KILL "$OLD_PID" 2>/dev/null || true
-                  fi
-                else
-                  echo "PID $OLD_PID is not the backend app; leaving it running"
-                fi
-              fi
-
-              rm -f "$PID_FILE"
-            fi
-
-            cd "$APP_DIR"
-
-            export UPLOAD_DIR="${UPLOAD_DIR:-/home/azureuser/uploads}"
-
-            if [ -z "${APP_PORT:-}" ]; then
-              APP_PORT="$(grep -hR --include='*' 'proxy_pass' /etc/nginx/sites-enabled /etc/nginx/conf.d 2>/dev/null \
-                | grep -oE '127\.0\.0\.1:[0-9]+' \
-                | head -1 \
-                | cut -d: -f2 || true)"
-            fi
-            APP_PORT="${APP_PORT:-8000}"
-            echo "Binding Uvicorn to port $APP_PORT"
-
-            setsid "$PYTHON" -m uvicorn backend.main:app \
-              --host 0.0.0.0 \
-              --port "$APP_PORT" \
-              --no-access-log \
-              >> "$APP_DIR/logs/app.out" 2>&1 < /dev/null &
-
-            APP_PID=$!
-            echo "$APP_PID" > "$APP_DIR/logs/app.pid"
-            disown "$APP_PID" 2>/dev/null || true
-
-            sleep 3
-
-            if ! kill -0 "$APP_PID" 2>/dev/null; then
-              echo "ERROR: application failed to start" >&2
-              tail -n 80 "$APP_DIR/logs/app.out" || true
-              exit 1
-            fi
-
-            if ! curl --fail --silent --show-error \
-              --max-time 10 \
-              "http://127.0.0.1:${APP_PORT}/api" >/dev/null; then
-              echo "ERROR: application health check failed" >&2
-              tail -n 80 "$APP_DIR/logs/app.out" || true
-              exit 1
-            fi
-
-            echo "Started backend pid=$APP_PID port=$APP_PORT"
+            chmod +x "$APP_DIR/scripts/start_production.sh"
+            "$APP_DIR/scripts/start_production.sh"

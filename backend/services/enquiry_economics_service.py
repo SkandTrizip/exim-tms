@@ -24,8 +24,13 @@ class AdditionalLineItem:
     doc_id: int
     enquiry_id: int
     description: str
-    amount_inr: float
+    cost_inr: float
+    revenue_inr: float
     created_at: Optional[datetime.datetime]
+
+    @property
+    def amount_inr(self) -> float:
+        return self.cost_inr
 
 
 def _charge_inr_amount(
@@ -145,10 +150,67 @@ def _sum_final_quote_economics(final_quote: FinalQuote) -> Tuple[float, float]:
     return _sum_container_charges_economics(final_quote.containers)
 
 
-def additional_line_item_from_doc(doc, containers) -> Optional[AdditionalLineItem]:
-    """Convert one additional-invoice document to INR, or None if it has no amount."""
+def vendor_exchange_rate_from_quote_charges(containers, currency: str) -> Optional[float]:
+    """
+    Client/vendor ROE from final-quote (or accepted-quote) On-Your-Account lines.
+    Prefers Ocean Freight in the same currency, then any matching currency line.
+    """
+    curr = (currency or "INR").upper()
+    if curr == "INR":
+        return 1.0
+
+    ocean = None
+    fallback = None
+    for container in containers or []:
+        for charge in container.charges or []:
+            if getattr(charge, "account_type", None) != "On Your Account":
+                continue
+            if (getattr(charge, "currency", None) or "INR").upper() != curr:
+                continue
+            roe = _client_exchange_rate(
+                charge.currency,
+                getattr(charge, "exchange_rate", None),
+                getattr(charge, "vendor_exchange_rate", None),
+            )
+            if not roe or roe <= 0:
+                continue
+            desc = (getattr(charge, "charge_description", None) or "").strip().lower()
+            if desc == "ocean freight" and ocean is None:
+                ocean = roe
+            elif fallback is None:
+                fallback = roe
+    return ocean or fallback
+
+
+def _positive_roe(raw) -> Optional[float]:
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _additional_amount_to_inr(amount: float, currency: str, containers, exchange_rate) -> Optional[float]:
     from backend.services import invoice_quote_service
 
+    curr = (currency or "INR").upper()
+    try:
+        _, _, taxable_inr = invoice_quote_service.taxable_inr_for_additional_amount(
+            amount, curr, containers, exchange_rate=exchange_rate
+        )
+        return float(taxable_inr)
+    except ValueError:
+        if curr == "INR":
+            return float(amount)
+        return None
+
+
+def additional_line_item_from_doc(doc, containers) -> Optional[AdditionalLineItem]:
+    """Convert one additional-invoice document to INR, or None if it has no amount.
+
+    Cost uses final-quote vendor_exchange_rate; revenue uses the ROE saved
+    on the additional invoice. Each falls back to the other if missing.
+    """
     metadata = getattr(doc, "metadata_info", None) or {}
     try:
         amount = float(metadata.get("amount", 0) or 0)
@@ -158,34 +220,33 @@ def additional_line_item_from_doc(doc, containers) -> Optional[AdditionalLineIte
         return None
 
     curr = (metadata.get("currency") or "INR").upper()
-    meta_roe = metadata.get("roe", metadata.get("exchange_rate"))
+    quote_roe = vendor_exchange_rate_from_quote_charges(containers, curr)
+    invoice_roe = _positive_roe(metadata.get("roe", metadata.get("exchange_rate")))
+    cost_roe = quote_roe if quote_roe is not None else invoice_roe
+    revenue_roe = invoice_roe if invoice_roe is not None else quote_roe
     description = (metadata.get("charge_details") or "").strip() or "Additional Charge"
-    try:
-        _, _, taxable_inr = invoice_quote_service.taxable_inr_for_additional_amount(
-            amount, curr, containers, exchange_rate=meta_roe
-        )
-    except ValueError:
-        # No ROE yet — keep foreign amount out of INR totals
-        # rather than treating USD as INR. INR lines still count (roe=1).
-        if curr == "INR":
-            taxable_inr = amount
-        else:
-            logger.warning(
-                "Skipping additional invoice INR conversion enquiry_id=%s doc_id=%s "
-                "currency=%s — missing ROE",
-                getattr(doc, "enquiry_id", None),
-                getattr(doc, "id", None),
-                curr,
-            )
-            return None
 
-    if taxable_inr <= 0:
+    cost_inr = _additional_amount_to_inr(amount, curr, containers, cost_roe)
+    revenue_inr = _additional_amount_to_inr(amount, curr, containers, revenue_roe)
+    if cost_inr is None and revenue_inr is None:
+        logger.warning(
+            "Skipping additional invoice INR conversion enquiry_id=%s doc_id=%s "
+            "currency=%s — missing ROE",
+            getattr(doc, "enquiry_id", None),
+            getattr(doc, "id", None),
+            curr,
+        )
+        return None
+    cost_inr = round(float(cost_inr or 0), 2)
+    revenue_inr = round(float(revenue_inr or 0), 2)
+    if cost_inr <= 0 and revenue_inr <= 0:
         return None
     return AdditionalLineItem(
         doc_id=int(getattr(doc, "id", 0) or 0),
         enquiry_id=int(getattr(doc, "enquiry_id", 0) or 0),
         description=description,
-        amount_inr=round(float(taxable_inr), 2),
+        cost_inr=cost_inr,
+        revenue_inr=revenue_inr,
         created_at=getattr(doc, "created_at", None),
     )
 
@@ -293,14 +354,16 @@ def list_additional_line_items_for_enquiry(
     return list_additional_line_items_by_enquiry(db, [enquiry_id]).get(enquiry_id, [])
 
 
-def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> float:
+def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> Tuple[float, float]:
     """
-    Additional invoice documents: amount converted to INR (currency × invoice ROE)
-    and added equally to both cost and revenue.
+    Additional invoices in INR:
+      cost    = amount × final-quote vendor_exchange_rate
+      revenue = amount × ROE saved on the additional invoice
     """
-    return round(
-        sum(item.amount_inr for item in list_additional_line_items_for_enquiry(db, enquiry_id)),
-        2,
+    items = list_additional_line_items_for_enquiry(db, enquiry_id)
+    return (
+        round(sum(item.cost_inr for item in items), 2),
+        round(sum(item.revenue_inr for item in items), 2),
     )
 
 
@@ -565,9 +628,9 @@ def compute_enquiry_economics(db: Session, enquiry_id: int) -> Tuple[float, floa
     cost += quote_cost
     revenue += quote_revenue
 
-    additional = _sum_additional_line_items_inr(db, enquiry_id)
-    cost += additional
-    revenue += additional
+    additional_cost, additional_revenue = _sum_additional_line_items_inr(db, enquiry_id)
+    cost += additional_cost
+    revenue += additional_revenue
 
     # Intermittent overheads: add to shipping-line cost, or deduct from client revenue.
     overhead_cost, overhead_deduct = _sum_overhead_economics(db, enquiry_id)
@@ -588,8 +651,12 @@ def sync_enquiry_economics(
     Also syncs sob_date from shipment_statuses.
     Skips when there is no quote source and no additional invoices.
     """
-    additional = _sum_additional_line_items_inr(db, enquiry_id)
-    if not has_quote_economics_source(db, enquiry_id) and additional <= 0:
+    additional_cost, additional_revenue = _sum_additional_line_items_inr(db, enquiry_id)
+    if (
+        not has_quote_economics_source(db, enquiry_id)
+        and additional_cost <= 0
+        and additional_revenue <= 0
+    ):
         return None
 
     cost_inr, revenue_inr = compute_enquiry_economics(db, enquiry_id)

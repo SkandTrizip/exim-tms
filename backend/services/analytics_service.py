@@ -223,23 +223,26 @@ def _resolve_attribution(
 def split_later_month_extras(
     extras: List[AdditionalLineItem],
     attr_month: Optional[str],
-) -> Tuple[float, List[AdditionalLineItem]]:
+) -> Tuple[float, float, List[AdditionalLineItem]]:
     """
     Extras uploaded after the job attribution month become separate month-wise rows.
     Same-month or earlier extras stay on the job. Missing dates stay on the job.
+    Returns (later_cost_inr, later_revenue_inr, later_items).
     """
     later: List[AdditionalLineItem] = []
-    later_total = 0.0
+    later_cost = 0.0
+    later_revenue = 0.0
     if not attr_month:
-        return 0.0, later
+        return 0.0, 0.0, later
 
     for item in extras or []:
         extra_month = _month_key(_as_date(getattr(item, "created_at", None)))
         if not extra_month or extra_month <= attr_month:
             continue
         later.append(item)
-        later_total += float(item.amount_inr or 0)
-    return round(later_total, 2), later
+        later_cost += float(getattr(item, "cost_inr", None) or item.amount_inr or 0)
+        later_revenue += float(getattr(item, "revenue_inr", None) or item.amount_inr or 0)
+    return round(later_cost, 2), round(later_revenue, 2), later
 
 
 def _is_additional_row(row: Dict[str, Any]) -> bool:
@@ -330,12 +333,12 @@ def get_dashboard_analytics(
         if attr_date:
             fy_years_seen.add(_fy_start_for_date(attr_date))
 
-        later_total, later_items = split_later_month_extras(
+        later_cost, later_revenue, later_items = split_later_month_extras(
             extras_by_enquiry.get(enquiry.id, []),
             attr_month,
         )
-        job_cost = round(cost - later_total, 2)
-        job_revenue = round(revenue - later_total, 2)
+        job_cost = round(cost - later_cost, 2)
+        job_revenue = round(revenue - later_revenue, 2)
         job_capture = round(job_revenue - job_cost, 2)
 
         has_final = enquiry.id in final_ids
@@ -383,7 +386,11 @@ def get_dashboard_analytics(
             extra_month = _month_key(extra_date)
             if extra_date:
                 fy_years_seen.add(_fy_start_for_date(extra_date))
-            extra_amount = round(float(item.amount_inr or 0), 2)
+            extra_cost = round(float(getattr(item, "cost_inr", None) or item.amount_inr or 0), 2)
+            extra_revenue = round(
+                float(getattr(item, "revenue_inr", None) or item.amount_inr or 0), 2
+            )
+            extra_capture = round(extra_revenue - extra_cost, 2)
             extra_iso = extra_date.isoformat() if extra_date else None
             all_rows.append({
                 **shared,
@@ -392,10 +399,10 @@ def get_dashboard_analytics(
                 "doc_id": item.doc_id,
                 "container_count": 0,
                 "teu": 0.0,
-                "cost_inr": extra_amount,
-                "revenue_inr": extra_amount,
-                "capture_inr": 0.0,
-                "margin_pct": _margin_pct(extra_amount, extra_amount),
+                "cost_inr": extra_cost,
+                "revenue_inr": extra_revenue,
+                "capture_inr": extra_capture,
+                "margin_pct": _margin_pct(extra_revenue, extra_cost),
                 "si_date": extra_iso,
                 "si_month": extra_month,
                 "sob_date": extra_iso,
