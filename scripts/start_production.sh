@@ -42,4 +42,12 @@ else
   exit 1
 fi
 
-echo "Deployed. Port 8000 should now be served by container exim-tms-app."
+echo "Waiting for container health..."
+sleep 5
+if ! docker ps --filter name=exim-tms-app --filter status=running --format '{{.Names}}' | grep -q exim-tms-app; then
+  echo "ERROR: exim-tms-app is not running. Last logs:" >&2
+  docker logs exim-tms-app --tail 80 >&2 || true
+  exit 1
+fi
+
+echo "Deployed. Host 5050 and 8000 map to the container. Check: docker logs exim-tms-app --tail 50"

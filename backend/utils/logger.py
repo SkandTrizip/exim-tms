@@ -21,17 +21,19 @@ def setup_logger():
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
-    # File Handler
-    log_dir = "logs"
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-
-    log_file = os.path.join(log_dir, "app.log")
-    file_handler = RotatingFileHandler(
-        log_file, maxBytes=10485760, backupCount=5, encoding="utf8" # 10MB per file
-    )
-    file_handler.setFormatter(formatter)
-    logger.addHandler(file_handler)
+    # File Handler — optional so a read-only /app/logs volume cannot crash boot
+    log_dir = os.getenv("LOG_DIR", "logs")
+    try:
+        os.makedirs(log_dir, exist_ok=True)
+        log_file = os.path.join(log_dir, "app.log")
+        file_handler = RotatingFileHandler(
+            log_file, maxBytes=10485760, backupCount=5, encoding="utf8"
+        )
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+    except OSError:
+        console_handler.setLevel(logging.INFO)
+        logger.warning("File logging disabled; could not write to %s", log_dir)
 
     return logger
 

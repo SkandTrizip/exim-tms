@@ -26,18 +26,17 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY backend ./backend
 COPY frontend ./frontend
+COPY docker/entrypoint.sh /entrypoint.sh
 
 RUN useradd --create-home --uid 1000 appuser \
     && mkdir -p /app/uploads /app/logs \
+    && chmod +x /entrypoint.sh \
     && chown -R appuser:appuser /app
-
-USER appuser
 
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api', timeout=5)"
 
-# Host port 8000 must be free before compose up. scripts/start_production.sh
-# stops the previous container / gunicorn, then recreates this image.
-CMD ["sh", "-c", "gunicorn -w ${WEB_CONCURRENCY:-4} -k uvicorn.workers.UvicornWorker backend.main:app --bind 0.0.0.0:8000 --timeout 120 --access-logfile - --error-logfile -"]
+# Entrypoint runs as root to fix volume permissions, then gunicorn as appuser.
+ENTRYPOINT ["/entrypoint.sh"]
