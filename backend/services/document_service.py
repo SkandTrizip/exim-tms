@@ -13,7 +13,7 @@ def save_document(db: Session, file: UploadFile, enquiry_id: int, quote_id: int,
     logger.info(f"Saving document '{document_type}' for enquiry_id={enquiry_id}")
     # Create upload directory if it doesn't exist
     if not os.path.exists(UPLOAD_DIR):
-        os.makedirs(UPLOAD_DIR)
+        os.makedirs(UPLOAD_DIR, exist_ok=True)
 
     # Generate a unique filename to avoid collisions
     file_extension = os.path.splitext(file.filename)[1]

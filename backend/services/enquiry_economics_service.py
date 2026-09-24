@@ -2,7 +2,9 @@
 from __future__ import annotations
 
 import datetime
-from typing import Optional, Tuple
+from collections import defaultdict
+from dataclasses import dataclass
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -13,6 +15,17 @@ from backend.models.finance import OverheadPayment
 from backend.models.quote import Quote, QuoteContainer
 from backend.models.shipment_status import ShipmentStatus
 from backend.utils.logger import logger
+
+
+@dataclass(frozen=True)
+class AdditionalLineItem:
+    """One additional-invoice document converted to INR for analytics."""
+
+    doc_id: int
+    enquiry_id: int
+    description: str
+    amount_inr: float
+    created_at: Optional[datetime.datetime]
 
 
 def _charge_inr_amount(
@@ -132,55 +145,163 @@ def _sum_final_quote_economics(final_quote: FinalQuote) -> Tuple[float, float]:
     return _sum_container_charges_economics(final_quote.containers)
 
 
-def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> float:
-    """
-    Additional invoice documents: amount converted to INR (currency × invoice ROE)
-    and added equally to both cost and revenue.
-    """
+def additional_line_item_from_doc(doc, containers) -> Optional[AdditionalLineItem]:
+    """Convert one additional-invoice document to INR, or None if it has no amount."""
     from backend.services import invoice_quote_service
+
+    metadata = getattr(doc, "metadata_info", None) or {}
+    try:
+        amount = float(metadata.get("amount", 0) or 0)
+    except (TypeError, ValueError):
+        return None
+    if amount <= 0:
+        return None
+
+    curr = (metadata.get("currency") or "INR").upper()
+    meta_roe = metadata.get("roe", metadata.get("exchange_rate"))
+    description = (metadata.get("charge_details") or "").strip() or "Additional Charge"
+    try:
+        _, _, taxable_inr = invoice_quote_service.taxable_inr_for_additional_amount(
+            amount, curr, containers, exchange_rate=meta_roe
+        )
+    except ValueError:
+        # No ROE yet — keep foreign amount out of INR totals
+        # rather than treating USD as INR. INR lines still count (roe=1).
+        if curr == "INR":
+            taxable_inr = amount
+        else:
+            logger.warning(
+                "Skipping additional invoice INR conversion enquiry_id=%s doc_id=%s "
+                "currency=%s — missing ROE",
+                getattr(doc, "enquiry_id", None),
+                getattr(doc, "id", None),
+                curr,
+            )
+            return None
+
+    if taxable_inr <= 0:
+        return None
+    return AdditionalLineItem(
+        doc_id=int(getattr(doc, "id", 0) or 0),
+        enquiry_id=int(getattr(doc, "enquiry_id", 0) or 0),
+        description=description,
+        amount_inr=round(float(taxable_inr), 2),
+        created_at=getattr(doc, "created_at", None),
+    )
+
+
+def list_additional_line_items(
+    docs: Iterable,
+    containers,
+) -> List[AdditionalLineItem]:
+    items: List[AdditionalLineItem] = []
+    for doc in docs or []:
+        item = additional_line_item_from_doc(doc, containers)
+        if item is not None:
+            items.append(item)
+    return items
+
+
+def _containers_by_enquiry_ids(db: Session, enquiry_ids: Sequence[int]) -> Dict[int, list]:
+    """Batch-load quote/final-quote containers used for additional-invoice ROE fallback."""
+    ids = list({int(eid) for eid in enquiry_ids})
+    result: Dict[int, list] = {eid: [] for eid in ids}
+    if not ids:
+        return result
+
+    finals = (
+        db.query(FinalQuote)
+        .options(joinedload(FinalQuote.containers).joinedload(FinalQuoteContainer.charges))
+        .filter(FinalQuote.enquiry_id.in_(ids))
+        .all()
+    )
+    for final_quote in finals:
+        if final_quote.containers:
+            result[final_quote.enquiry_id] = list(final_quote.containers)
+
+    remaining = [eid for eid in ids if not result[eid]]
+    if remaining:
+        accepted = (
+            db.query(Quote)
+            .options(joinedload(Quote.containers).joinedload(QuoteContainer.charges))
+            .filter(Quote.enquiry_id.in_(remaining), Quote.status == "accepted")
+            .order_by(Quote.updated_at.desc(), Quote.id.desc())
+            .all()
+        )
+        for quote in accepted:
+            if result[quote.enquiry_id]:
+                continue
+            if quote.containers:
+                result[quote.enquiry_id] = list(quote.containers)
+
+        remaining = [eid for eid in ids if not result[eid]]
+    if remaining:
+        latest = (
+            db.query(Quote)
+            .options(joinedload(Quote.containers).joinedload(QuoteContainer.charges))
+            .filter(Quote.enquiry_id.in_(remaining))
+            .order_by(Quote.created_at.desc())
+            .all()
+        )
+        for quote in latest:
+            if result[quote.enquiry_id]:
+                continue
+            if quote.containers:
+                result[quote.enquiry_id] = list(quote.containers)
+
+    return result
+
+
+def list_additional_line_items_by_enquiry(
+    db: Session,
+    enquiry_ids: Sequence[int],
+) -> Dict[int, List[AdditionalLineItem]]:
+    """Load additional invoices for many enquiries (one document query, no N+1)."""
+    ids = list({int(eid) for eid in enquiry_ids if eid is not None})
+    grouped: Dict[int, List[AdditionalLineItem]] = {eid: [] for eid in ids}
+    if not ids:
+        return grouped
 
     docs = (
         db.query(ShipmentDocument)
         .filter(
-            ShipmentDocument.enquiry_id == enquiry_id,
+            ShipmentDocument.enquiry_id.in_(ids),
             ShipmentDocument.document_type == "additionalInvoice",
         )
         .all()
     )
     if not docs:
-        return 0.0
+        return grouped
 
-    containers, _ = invoice_quote_service.get_invoice_charge_containers(db, enquiry_id)
-    total = 0.0
+    docs_by_enquiry: Dict[int, list] = defaultdict(list)
     for doc in docs:
-        metadata = doc.metadata_info or {}
-        try:
-            amount = float(metadata.get("amount", 0) or 0)
-        except (TypeError, ValueError):
-            continue
-        if amount <= 0:
-            continue
-        curr = (metadata.get("currency") or "INR").upper()
-        meta_roe = metadata.get("roe", metadata.get("exchange_rate"))
-        try:
-            _, _, taxable_inr = invoice_quote_service.taxable_inr_for_additional_amount(
-                amount, curr, containers, exchange_rate=meta_roe
-            )
-            total += taxable_inr
-        except ValueError:
-            # No ROE yet — keep foreign amount out of INR totals
-            # rather than treating USD as INR. INR lines still count (roe=1).
-            if curr == "INR":
-                total += amount
-            else:
-                logger.warning(
-                    "Skipping additional invoice INR conversion enquiry_id=%s doc_id=%s "
-                    "currency=%s — missing ROE",
-                    enquiry_id,
-                    doc.id,
-                    curr,
-                )
-    return round(total, 2)
+        docs_by_enquiry[doc.enquiry_id].append(doc)
+
+    containers_by_enquiry = _containers_by_enquiry_ids(db, list(docs_by_enquiry.keys()))
+    for enquiry_id, enquiry_docs in docs_by_enquiry.items():
+        grouped[enquiry_id] = list_additional_line_items(
+            enquiry_docs,
+            containers_by_enquiry.get(enquiry_id) or [],
+        )
+    return grouped
+
+
+def list_additional_line_items_for_enquiry(
+    db: Session,
+    enquiry_id: int,
+) -> List[AdditionalLineItem]:
+    return list_additional_line_items_by_enquiry(db, [enquiry_id]).get(enquiry_id, [])
+
+
+def _sum_additional_line_items_inr(db: Session, enquiry_id: int) -> float:
+    """
+    Additional invoice documents: amount converted to INR (currency × invoice ROE)
+    and added equally to both cost and revenue.
+    """
+    return round(
+        sum(item.amount_inr for item in list_additional_line_items_for_enquiry(db, enquiry_id)),
+        2,
+    )
 
 
 def _get_ocean_freight_charge(db: Session, enquiry_id: int):

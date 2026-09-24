@@ -1,12 +1,27 @@
 # Configuration constants for both Backend and Frontend
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Upload directory path (absolute path on the server)
-UPLOAD_DIR = os.getenv("UPLOAD_DIR", "/home/azureuser/uploads/")
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_AZURE_UPLOAD_DIR = "/home/azureuser/uploads/"
+
+
+def _default_upload_dir() -> str:
+    """Use env, then the Azure host path if it exists, else repo-local uploads/."""
+    env = (os.getenv("UPLOAD_DIR") or "").strip()
+    if env:
+        return env
+    if os.path.isdir("/home/azureuser") or os.path.isdir(_AZURE_UPLOAD_DIR):
+        return _AZURE_UPLOAD_DIR
+    return str(_PROJECT_ROOT / "uploads")
+
+
+# Azure production usually sets UPLOAD_DIR. Local Mac/Linux uses <repo>/uploads.
+UPLOAD_DIR = _default_upload_dir()
 
 # Injected into /js/config.js as CONFIG.API_URL. Use '' so the browser calls /api on the same host
 # you opened (localhost, 127.0.0.1, or a public IP). A fixed remote URL breaks local dev (Failed to fetch).

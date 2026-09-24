@@ -12,6 +12,7 @@ env/
 .cursor/settings.json
 .cursor/settings.json
 logs/app.log
+uploads/
 .agents/
 .claude/
 .env.example

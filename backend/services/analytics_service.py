@@ -11,6 +11,10 @@ from backend.models.enquiry import Enquiry
 from backend.models.enquiry_economics import EnquiryEconomics
 from backend.models.final_quote import FinalQuote
 from backend.models.shipment_status import ShipmentStatus
+from backend.services.enquiry_economics_service import (
+    AdditionalLineItem,
+    list_additional_line_items_by_enquiry,
+)
 
 _MONTH_NAMES = (
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -216,6 +220,32 @@ def _resolve_attribution(
     return si_date, False, si_date
 
 
+def split_later_month_extras(
+    extras: List[AdditionalLineItem],
+    attr_month: Optional[str],
+) -> Tuple[float, List[AdditionalLineItem]]:
+    """
+    Extras uploaded after the job attribution month become separate month-wise rows.
+    Same-month or earlier extras stay on the job. Missing dates stay on the job.
+    """
+    later: List[AdditionalLineItem] = []
+    later_total = 0.0
+    if not attr_month:
+        return 0.0, later
+
+    for item in extras or []:
+        extra_month = _month_key(_as_date(getattr(item, "created_at", None)))
+        if not extra_month or extra_month <= attr_month:
+            continue
+        later.append(item)
+        later_total += float(item.amount_inr or 0)
+    return round(later_total, 2), later
+
+
+def _is_additional_row(row: Dict[str, Any]) -> bool:
+    return row.get("row_kind") == "additional"
+
+
 def get_dashboard_analytics(
     db: Session,
     *,
@@ -272,6 +302,7 @@ def get_dashboard_analytics(
 
     all_enquiry_ids = [enquiry.id for _, enquiry, _ in rows_q]
     final_ids: set[int] = set()
+    extras_by_enquiry: Dict[int, List[AdditionalLineItem]] = {}
     if all_enquiry_ids:
         final_ids = {
             row[0]
@@ -280,6 +311,7 @@ def get_dashboard_analytics(
             .distinct()
             .all()
         }
+        extras_by_enquiry = list_additional_line_items_by_enquiry(db, all_enquiry_ids)
 
     all_rows: List[Dict[str, Any]] = []
     fy_years_seen = {fy_start}
@@ -287,7 +319,6 @@ def get_dashboard_analytics(
     for economics, enquiry, shipment in rows_q:
         cost = round(float(economics.cost_inr or 0), 2)
         revenue = round(float(economics.revenue_inr or 0), 2)
-        capture = round(revenue - cost, 2)
         master_number = (shipment.master_number or "").strip() if shipment else ""
 
         attr_date, is_legacy, si_date = _resolve_attribution(
@@ -299,6 +330,14 @@ def get_dashboard_analytics(
         if attr_date:
             fy_years_seen.add(_fy_start_for_date(attr_date))
 
+        later_total, later_items = split_later_month_extras(
+            extras_by_enquiry.get(enquiry.id, []),
+            attr_month,
+        )
+        job_cost = round(cost - later_total, 2)
+        job_revenue = round(revenue - later_total, 2)
+        job_capture = round(job_revenue - job_cost, 2)
+
         has_final = enquiry.id in final_ids
         if is_legacy:
             status = "final"
@@ -309,7 +348,7 @@ def get_dashboard_analytics(
         else:
             status = "pending"
 
-        all_rows.append({
+        shared = {
             "enquiry_id": enquiry.id,
             "enquiry_number": enquiry.enquiry_number,
             "client_name": enquiry.client_name,
@@ -317,22 +356,51 @@ def get_dashboard_analytics(
             "origin": enquiry.origin or None,
             "destination": enquiry.destination or None,
             "container_type": enquiry.container_type or None,
+            "route": f"{enquiry.origin or '—'} → {enquiry.destination or '—'}",
+            "has_final_quote": has_final,
+            "is_legacy": is_legacy,
+            "economics_status": status,
+        }
+        all_rows.append({
+            **shared,
+            "row_kind": "job",
+            "item_description": None,
+            "doc_id": None,
             "container_count": int(enquiry.container_count or 0),
             "teu": teu_for_enquiry(enquiry.container_type, enquiry.container_count),
-            "route": f"{enquiry.origin or '—'} → {enquiry.destination or '—'}",
-            "cost_inr": cost,
-            "revenue_inr": revenue,
-            "capture_inr": capture,
-            "margin_pct": _margin_pct(revenue, cost),
+            "cost_inr": job_cost,
+            "revenue_inr": job_revenue,
+            "capture_inr": job_capture,
+            "margin_pct": _margin_pct(job_revenue, job_cost),
             "si_date": attr_date.isoformat() if attr_date else None,
             "si_month": attr_month,
             # Kept for older clients; month attribution key.
             "sob_date": attr_date.isoformat() if attr_date else None,
             "sob_month": attr_month,
-            "has_final_quote": has_final,
-            "is_legacy": is_legacy,
-            "economics_status": status,
         })
+        for item in later_items:
+            extra_date = _as_date(item.created_at)
+            extra_month = _month_key(extra_date)
+            if extra_date:
+                fy_years_seen.add(_fy_start_for_date(extra_date))
+            extra_amount = round(float(item.amount_inr or 0), 2)
+            extra_iso = extra_date.isoformat() if extra_date else None
+            all_rows.append({
+                **shared,
+                "row_kind": "additional",
+                "item_description": item.description,
+                "doc_id": item.doc_id,
+                "container_count": 0,
+                "teu": 0.0,
+                "cost_inr": extra_amount,
+                "revenue_inr": extra_amount,
+                "capture_inr": 0.0,
+                "margin_pct": _margin_pct(extra_amount, extra_amount),
+                "si_date": extra_iso,
+                "si_month": extra_month,
+                "sob_date": extra_iso,
+                "sob_month": extra_month,
+            })
 
     def _in_selected_fy(row: Dict[str, Any]) -> bool:
         if not row.get("si_date"):
@@ -400,15 +468,16 @@ def get_dashboard_analytics(
         b["cost_inr"] += row["cost_inr"]
         b["revenue_inr"] += row["revenue_inr"]
         b["capture_inr"] += row["capture_inr"]
-        b["trips"] += 1
-        b["teu"] += float(row.get("teu") or 0)
-        b["containers"] += int(row.get("container_count") or 0)
+        if not _is_additional_row(row):
+            b["trips"] += 1
+            b["teu"] += float(row.get("teu") or 0)
+            b["containers"] += int(row.get("container_count") or 0)
 
     pending_no_sob = {
         "cost_inr": round(sum(r["cost_inr"] for r in pending_rows), 2),
         "revenue_inr": round(sum(r["revenue_inr"] for r in pending_rows), 2),
         "capture_inr": round(sum(r["capture_inr"] for r in pending_rows), 2),
-        "trips": len(pending_rows),
+        "trips": sum(1 for r in pending_rows if not _is_additional_row(r)),
     }
     pending_no_sob["margin_pct"] = _margin_pct(
         pending_no_sob["revenue_inr"], pending_no_sob["cost_inr"]
@@ -418,7 +487,7 @@ def get_dashboard_analytics(
         "cost_inr": round(sum(r["cost_inr"] for r in ongoing_rows), 2),
         "revenue_inr": round(sum(r["revenue_inr"] for r in ongoing_rows), 2),
         "capture_inr": round(sum(r["capture_inr"] for r in ongoing_rows), 2),
-        "trips": len(ongoing_rows),
+        "trips": sum(1 for r in ongoing_rows if not _is_additional_row(r)),
     }
     ongoing["margin_pct"] = _margin_pct(ongoing["revenue_inr"], ongoing["cost_inr"])
 
@@ -449,6 +518,8 @@ def get_dashboard_analytics(
         lambda: {m: 0 for m in series_months}
     )
     for row in fy_rows:
+        if _is_additional_row(row):
+            continue
         ctype = (row.get("container_type") or "Unknown").strip() or "Unknown"
         month_key = row.get("si_month")
         if not month_key or month_key not in series_months:
@@ -491,15 +562,16 @@ def get_dashboard_analytics(
     for row in filtered:
         row["economics_status"] = "final"
 
+    job_filtered = [r for r in filtered if not _is_additional_row(r)]
     total_cost = sum(r["cost_inr"] for r in filtered)
     total_revenue = sum(r["revenue_inr"] for r in filtered)
     capture_total = round(total_revenue - total_cost, 2)
-    total_teu = round(sum(float(r.get("teu") or 0) for r in filtered), 2)
-    total_containers = sum(int(r.get("container_count") or 0) for r in filtered)
-    valid_enquiries = sum(1 for r in filtered if r.get("master_number"))
-    adhoc_count = len(filtered) - valid_enquiries
+    total_teu = round(sum(float(r.get("teu") or 0) for r in job_filtered), 2)
+    total_containers = sum(int(r.get("container_count") or 0) for r in job_filtered)
+    valid_enquiries = sum(1 for r in job_filtered if r.get("master_number"))
+    adhoc_count = len(job_filtered) - valid_enquiries
     unrealized_revenue = round(
-        sum(r["revenue_inr"] for r in filtered if not r.get("master_number")),
+        sum(r["revenue_inr"] for r in job_filtered if not r.get("master_number")),
         2,
     )
 
@@ -512,19 +584,30 @@ def get_dashboard_analytics(
     gross_revenue = round(total_revenue + ongoing_revenue, 2)
     gross_margin = round(capture_total + ongoing_capture, 2)
 
-    sorted_rows = sorted(filtered, key=lambda r: r["enquiry_id"])
+    sorted_rows = sorted(
+        filtered,
+        key=lambda r: (
+            r["enquiry_id"],
+            0 if not _is_additional_row(r) else 1,
+            r.get("si_date") or "",
+            r.get("doc_id") or 0,
+        ),
+    )
     cum_revenue: List[float] = []
     cum_cost: List[float] = []
     cum_margin: List[float] = []
     cum_trips: List[int] = []
     running_rev = running_cost = 0.0
-    for i, row in enumerate(sorted_rows, start=1):
+    running_trips = 0
+    for row in sorted_rows:
         running_rev += row["revenue_inr"]
         running_cost += row["cost_inr"]
+        if not _is_additional_row(row):
+            running_trips += 1
         cum_revenue.append(round(running_rev, 2))
         cum_cost.append(round(running_cost, 2))
         cum_margin.append(round(running_rev - running_cost, 2))
-        cum_trips.append(i)
+        cum_trips.append(running_trips)
 
     available_months = [
         {
@@ -557,7 +640,7 @@ def get_dashboard_analytics(
     return {
         "summary": {
             "valid_enquiries": valid_enquiries,
-            "total_enquiries": len(filtered),
+            "total_enquiries": len(job_filtered),
             "contracted_count": valid_enquiries,
             "adhoc_count": adhoc_count,
             "total_cost_inr": round(total_cost, 2),

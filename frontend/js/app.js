@@ -1343,6 +1343,8 @@ function analyticsRowSearchText(row) {
         row.master_number,
         row.route,
         row.economics_status,
+        row.item_description,
+        row.row_kind,
         row.revenue_inr,
         row.cost_inr,
         row.capture_inr,
@@ -1377,7 +1379,7 @@ function setAnalyticsDetailsStatusFilter(status, { render = true } = {}) {
 }
 
 function renderAnalyticsDetailsSummary(rows) {
-    const trips = rows.length;
+    const trips = rows.filter((r) => r.row_kind !== 'additional').length;
     const revenue = rows.reduce((sum, r) => sum + (Number(r.revenue_inr) || 0), 0);
     const cost = rows.reduce((sum, r) => sum + (Number(r.cost_inr) || 0), 0);
     const margin = revenue - cost;
@@ -1387,7 +1389,7 @@ function renderAnalyticsDetailsSummary(rows) {
     setText('analyticsDetailsRevenue', formatInrAmount(revenue));
     setText('analyticsDetailsCost', formatInrAmount(cost));
     setText('analyticsDetailsMargin', formatInrAmount(margin));
-    setText('analyticsDetailsRecordsCount', String(trips));
+    setText('analyticsDetailsRecordsCount', String(rows.length));
 
     const marginEl = document.getElementById('analyticsDetailsMargin');
     if (marginEl) {
@@ -1461,15 +1463,21 @@ function renderAnalyticsDetailsPagination(totalItems, currentPage, pageSize) {
 
 function renderAnalyticsEnquiryRowHtml(row) {
     const isOngoing = row.economics_status === 'ongoing';
+    const isExtra = row.row_kind === 'additional';
     const statusLabel = isOngoing ? 'Ongoing' : 'Settled';
     const statusClass = isOngoing ? 'analytics-status-pill' : 'analytics-status-pill is-settled';
+    const headLabel = isExtra
+        ? (row.item_description || 'Additional Charge')
+        : 'Freight';
+    const rowClass = isExtra ? 'list-row analytics-extra-row' : 'list-row';
     return `
-            <tr class="list-row">
+            <tr class="${rowClass}">
                 <td data-col="enquiry"><a href="#shipment/${row.enquiry_id}" class="table-link">${escapeHtml(row.enquiry_number || '—')}</a></td>
                 <td data-col="client">${escapeHtml(row.client_name || '—')}</td>
                 <td data-col="origin">${escapeHtml(row.origin || '—')}</td>
                 <td data-col="destination">${escapeHtml(row.destination || '—')}</td>
                 <td data-col="container">${escapeHtml(row.container_type || '—')}</td>
+                <td data-col="head">${escapeHtml(headLabel)}</td>
                 <td class="num" data-col="revenue">${formatInrAmount(row.revenue_inr)}</td>
                 <td class="num" data-col="cost">${formatInrAmount(row.cost_inr)}</td>
                 <td class="num ${analyticsValueClass(row.capture_inr)}" data-col="margin">${formatInrAmount(row.capture_inr)}</td>
@@ -1496,7 +1504,7 @@ function renderAnalyticsDetailsTable() {
     const pageRows = filtered.slice(start, start + pageSize);
 
     if (!total) {
-        tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">No economics data for this filter.</td></tr>';
+        tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="10">No economics data for this filter.</td></tr>';
     } else {
         tbody.innerHTML = pageRows.map((row) => renderAnalyticsEnquiryRowHtml(row)).join('');
     }
@@ -1781,7 +1789,7 @@ async function fetchDashboardAnalytics() {
 
     const tbody = document.getElementById('analyticsEnquiryTable');
     if (tbody) {
-        tbody.innerHTML = '<tr class="analytics-loading-row"><td colspan="9">Loading analytics…</td></tr>';
+        tbody.innerHTML = '<tr class="analytics-loading-row"><td colspan="10">Loading analytics…</td></tr>';
     }
 
     try {
@@ -1797,7 +1805,7 @@ async function fetchDashboardAnalytics() {
         if (!response.ok) {
             console.error('Dashboard analytics HTTP error:', response.status, await response.text());
             if (tbody) {
-                tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">Could not load analytics.</td></tr>';
+                tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="10">Could not load analytics.</td></tr>';
             }
             return;
         }
@@ -1839,7 +1847,7 @@ async function fetchDashboardAnalytics() {
     } catch (error) {
         console.error('Error fetching dashboard analytics:', error);
         if (tbody) {
-            tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="9">Could not load analytics.</td></tr>';
+            tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="10">Could not load analytics.</td></tr>';
         }
     }
 }

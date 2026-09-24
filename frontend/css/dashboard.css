@@ -1213,9 +1213,20 @@
     text-align: right;
 }
 
+.analytics-details-table tr.analytics-extra-row td {
+    color: var(--text-secondary);
+    background: #f8fafc;
+}
+
+.analytics-details-table tr.analytics-extra-row td[data-col="head"] {
+    font-weight: 700;
+    color: var(--navy-900);
+}
+
 .list-table-card.cols-hide-enquiry [data-col="enquiry"],
 .list-table-card.cols-hide-origin [data-col="origin"],
 .list-table-card.cols-hide-destination [data-col="destination"],
+.list-table-card.cols-hide-head [data-col="head"],
 .list-table-card.cols-hide-revenue [data-col="revenue"],
 .list-table-card.cols-hide-cost [data-col="cost"],
 .list-table-card.cols-hide-margin [data-col="margin"] {
