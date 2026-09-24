@@ -95,6 +95,19 @@ jobs:
             set -euo pipefail
             cd "$PROD_APP_DIR"
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
-            docker compose -f docker-compose.yml pull
-            docker compose -f docker-compose.yml up -d --remove-orphans
+
+            if command -v docker-compose >/dev/null 2>&1; then
+              docker-compose pull
+              docker-compose up -d --remove-orphans
+            elif docker compose version >/dev/null 2>&1; then
+              docker compose pull
+              docker compose up -d --remove-orphans
+            else
+              echo "ERROR: Docker Compose is not installed on this host." >&2
+              echo "Install the v2 plugin: sudo apt-get install -y docker-compose-plugin" >&2
+              echo "Or the standalone binary: sudo apt-get install -y docker-compose" >&2
+              docker version || true
+              exit 1
+            fi
+
             docker image prune -f

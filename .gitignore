@@ -14,5 +14,5 @@ env/
 logs/app.log
 .agents/
 .claude/
-.env.example/
+.env.example
 .cursor/settings.json
