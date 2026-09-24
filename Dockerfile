@@ -38,5 +38,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api', timeout=5)"
 
-# Entrypoint runs as root to fix volume permissions, then gunicorn as appuser.
+# Run as root so bind-mounted uploads/logs cannot block boot.
 ENTRYPOINT ["/entrypoint.sh"]
