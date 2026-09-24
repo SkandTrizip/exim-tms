@@ -22,6 +22,7 @@ jobs:
         uses: appleboy/ssh-action@v1.2.2
         env:
           PROD_APP_DIR: ${{ vars.PROD_APP_DIR || '/home/azureuser/exim_logipod/exim-tms' }}
+          PROD_VENV: ${{ vars.PROD_VENV || '/home/azureuser/venv' }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
         with:
@@ -29,7 +30,7 @@ jobs:
           username: ${{ secrets.PROD_USER }}
           key: ${{ secrets.PROD_SSH_KEY }}
           command_timeout: 15m
-          envs: PROD_APP_DIR,GITHUB_TOKEN,GITHUB_REPOSITORY
+          envs: PROD_APP_DIR,PROD_VENV,GITHUB_TOKEN,GITHUB_REPOSITORY
           script: |
             set -euo pipefail
 
@@ -40,14 +41,20 @@ jobs:
             git checkout main
             git reset --hard FETCH_HEAD
 
-            if [ -x "$APP_DIR/venv/bin/python" ]; then
+            if [ -x "$PROD_VENV/bin/python" ]; then
+              PYTHON="$PROD_VENV/bin/python"
+            elif [ -x "$HOME/venv/bin/python" ]; then
+              PYTHON="$HOME/venv/bin/python"
+            elif [ -x "$APP_DIR/venv/bin/python" ]; then
               PYTHON="$APP_DIR/venv/bin/python"
             elif [ -x "$APP_DIR/backend/venv/bin/python" ]; then
               PYTHON="$APP_DIR/backend/venv/bin/python"
             else
-              echo "ERROR: venv not found at $APP_DIR/venv or $APP_DIR/backend/venv" >&2
+              echo "ERROR: venv not found at $PROD_VENV, $HOME/venv, $APP_DIR/venv, or $APP_DIR/backend/venv" >&2
               exit 1
             fi
+
+            echo "Using Python $PYTHON"
 
             "$PYTHON" -m pip install -r "$APP_DIR/requirements.txt"
 
