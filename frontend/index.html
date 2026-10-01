@@ -142,6 +142,100 @@
                         </div>
 
                         <section class="biz-analytics" aria-label="Business analytics">
+                            <div class="analytics-command-bar" id="analyticsCommandBar">
+                                <div class="analytics-command-row">
+                                    <label class="analytics-command-date">
+                                        <i class="fas fa-calendar-days" aria-hidden="true"></i>
+                                        <select id="analyticsDateRangeSelect" aria-label="Date range">
+                                            <option value="this_month">This Month</option>
+                                            <option value="last_month">Last Month</option>
+                                            <option value="last_3_months">Last 3 Months</option>
+                                            <option value="this_quarter">This Quarter</option>
+                                            <option value="last_quarter">Last Quarter</option>
+                                            <option value="this_year">This Year (FY)</option>
+                                            <option value="custom">Custom Range</option>
+                                        </select>
+                                    </label>
+                                    <div class="analytics-command-divider" aria-hidden="true"></div>
+                                    <div class="analytics-view-by">
+                                        <span class="analytics-view-by-label">View by:</span>
+                                        <div class="analytics-segment" id="analyticsViewByGroup" role="group" aria-label="Chart grouping">
+                                            <button type="button" class="analytics-segment-btn" data-view-by="day">Day</button>
+                                            <button type="button" class="analytics-segment-btn" data-view-by="week">Week</button>
+                                            <button type="button" class="analytics-segment-btn is-active" data-view-by="month">Month</button>
+                                        </div>
+                                    </div>
+                                    <div class="analytics-command-spacer"></div>
+                                    <button type="button" class="analytics-filters-toggle" id="analyticsFiltersToggle" aria-expanded="false" aria-controls="analyticsCommandPanel">
+                                        <i class="fas fa-filter" aria-hidden="true"></i>
+                                        <span>Filters</span>
+                                        <span class="analytics-filters-count" id="analyticsFiltersCount" hidden>0</span>
+                                        <i class="fas fa-chevron-down analytics-filters-chevron" id="analyticsFiltersChevron" aria-hidden="true"></i>
+                                    </button>
+                                    <button type="button" class="analytics-command-refresh" id="analyticsCommandRefresh" title="Refresh analytics" aria-label="Refresh analytics">
+                                        <i class="fas fa-rotate-right" aria-hidden="true"></i>
+                                    </button>
+                                </div>
+                                <div class="analytics-command-panel" id="analyticsCommandPanel" hidden>
+                                    <div class="analytics-filter analytics-client-filter analytics-command-client" id="analyticsClientFilterWrap">
+                                        <span class="analytics-command-field-label">Clients</span>
+                                        <div class="analytics-client-multi" id="analyticsClientFilterMulti">
+                                            <div class="analytics-client-chips" id="analyticsClientFilterChips" aria-live="polite"></div>
+                                            <div class="analytics-client-combo">
+                                                <input
+                                                    id="analyticsClientFilterInput"
+                                                    type="text"
+                                                    role="combobox"
+                                                    aria-expanded="false"
+                                                    aria-controls="analyticsClientFilterList"
+                                                    aria-autocomplete="list"
+                                                    placeholder="Search and select clients…"
+                                                    autocomplete="off"
+                                                />
+                                                <button type="button" class="analytics-client-clear" id="analyticsClientFilterClear" title="Clear all clients" aria-label="Clear all clients" hidden>
+                                                    <i class="fas fa-xmark" aria-hidden="true"></i>
+                                                </button>
+                                                <ul class="analytics-client-list" id="analyticsClientFilterList" role="listbox" aria-multiselectable="true" hidden></ul>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <label class="analytics-command-field">
+                                        <span>Container type</span>
+                                        <select id="analyticsContainerTypeFilter" aria-label="Filter by container type">
+                                            <option value="">All container types</option>
+                                        </select>
+                                    </label>
+                                    <label class="analytics-command-field">
+                                        <span>Financial year</span>
+                                        <select id="analyticsFyFilter" aria-label="Filter by financial year">
+                                            <option value="2026-27">FY 2026-27</option>
+                                        </select>
+                                    </label>
+                                    <label class="analytics-command-field">
+                                        <span>From month</span>
+                                        <select id="analyticsMonthFromFilter" aria-label="Filter from SI month">
+                                            <option value="">All</option>
+                                        </select>
+                                    </label>
+                                    <label class="analytics-command-field">
+                                        <span>To month</span>
+                                        <select id="analyticsMonthToFilter" aria-label="Filter to SI month">
+                                            <option value="">All</option>
+                                        </select>
+                                    </label>
+                                    <label class="analytics-command-field">
+                                        <span>Chart metric</span>
+                                        <select id="analyticsMetricFilter" aria-label="Filter chart metric">
+                                            <option value="gross_margin">Gross Margin</option>
+                                            <option value="net_margin">Net Margin</option>
+                                            <option value="cost">Cost</option>
+                                            <option value="revenue">Revenue</option>
+                                        </select>
+                                    </label>
+                                    <button type="button" class="analytics-reset-filters" id="analyticsResetFilters">Reset filters</button>
+                                </div>
+                            </div>
+
                             <div class="biz-kpi-row">
                                 <article class="biz-kpi-card biz-kpi-card--trips">
                                     <div class="biz-kpi-card__top">
@@ -238,6 +332,10 @@
                                         <div class="table-head-sub" id="analyticsDetailsSubtitle">Search, export, and browse trips</div>
                                     </div>
                                     <div class="table-head-right">
+                                        <div class="analytics-details-mode" role="group" aria-label="Details view mode">
+                                            <button type="button" class="analytics-details-mode-btn is-active" data-analytics-mode="trips">All trips</button>
+                                            <button type="button" class="analytics-details-mode-btn" data-analytics-mode="client_wise">Client-wise</button>
+                                        </div>
                                         <div class="status-pill" id="analyticsDetailsStatusPill">
                                             <span class="status-dot"></span>
                                             <span class="status-text" id="analyticsDetailsStatusText">All</span>
@@ -255,7 +353,7 @@
                                             <i class="fas fa-magnifying-glass"></i>
                                             <input id="analyticsDetailsSearchInput" type="text" placeholder="Search all columns..." autocomplete="off" />
                                         </div>
-                                        <div class="analytics-status-filter" role="group" aria-label="Filter by status">
+                                        <div class="analytics-status-filter" id="analyticsDetailsStatusFilter" role="group" aria-label="Filter by status">
                                             <button type="button" class="analytics-status-chip is-active" data-status="all">All</button>
                                             <button type="button" class="analytics-status-chip" data-status="final">Settled</button>
                                             <button type="button" class="analytics-status-chip" data-status="ongoing">Ongoing</button>
@@ -306,7 +404,7 @@
 
                                 <div class="list-table-scroll">
                                     <table class="data-table list-table analytics-details-table" id="analyticsDetailsDataTable">
-                                        <thead>
+                                        <thead id="analyticsDetailsTableHead">
                                             <tr>
                                                 <th data-col="enquiry">Enquiry No</th>
                                                 <th data-col="client">Client Name</th>
@@ -336,35 +434,6 @@
                                     <div>
                                         <h3 class="analytics-projection__title">Month-wise Margin &amp; Profit</h3>
                                         <p class="analytics-projection__sub" id="analyticsFySubtitle">Financial year Apr – Mar (by SI date from Jul)</p>
-                                    </div>
-                                    <div class="analytics-filters">
-                                        <label class="analytics-filter">
-                                            <span>Financial Year</span>
-                                            <select id="analyticsFyFilter" aria-label="Filter by financial year">
-                                                <option value="2026-27">FY 2026-27</option>
-                                            </select>
-                                        </label>
-                                        <label class="analytics-filter">
-                                            <span>From month</span>
-                                            <select id="analyticsMonthFromFilter" aria-label="Filter from SI month">
-                                                <option value="">All</option>
-                                            </select>
-                                        </label>
-                                        <label class="analytics-filter">
-                                            <span>To month</span>
-                                            <select id="analyticsMonthToFilter" aria-label="Filter to SI month">
-                                                <option value="">All</option>
-                                            </select>
-                                        </label>
-                                        <label class="analytics-filter">
-                                            <span>Chart metric</span>
-                                            <select id="analyticsMetricFilter" aria-label="Filter chart metric">
-                                                <option value="gross_margin">Gross Margin</option>
-                                                <option value="net_margin">Net Margin</option>
-                                                <option value="cost">Cost</option>
-                                                <option value="revenue">Revenue</option>
-                                            </select>
-                                        </label>
                                     </div>
                                 </div>
                                 <div class="analytics-chart-wrap" id="analyticsMonthlyChart" role="img" aria-label="Monthly cost, revenue and margin chart">

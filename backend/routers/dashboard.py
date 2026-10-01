@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, distinct
-from typing import Optional
+from typing import List, Optional
 from backend.database import get_db
 from backend.models.enquiry import Enquiry
 from backend.models.quote import Quote
@@ -124,6 +124,9 @@ def get_dashboard_analytics_endpoint(
     month_to: Optional[str] = None,
     metric: str = "both",
     fy: Optional[str] = None,
+    client_name: Optional[str] = None,
+    client_names: Optional[List[str]] = Query(None),
+    container_type: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -138,6 +141,9 @@ def get_dashboard_analytics_endpoint(
             month_to=month_to or None,
             metric=metric,
             fy=fy or None,
+            client_name=client_name or None,
+            client_names=client_names,
+            container_type=container_type or None,
         )
     except Exception as e:
         logger.error(f"Dashboard analytics failed: {e}")

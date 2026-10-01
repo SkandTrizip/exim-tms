@@ -11,8 +11,73 @@ from backend.schemas.client_master import ClientMaster as ClientMasterSchema, Cl
 from backend.schemas.client_origin import ClientOrigin as ClientOriginSchema, ClientOriginCreate
 from pydantic import BaseModel
 from backend.services import client_invoicing_service
+from backend.utils.logger import logger
 
 router = APIRouter()
+
+
+@router.get("/lookup")
+def lookup_clients(
+    q: Optional[str] = None,
+    limit: int = 25,
+    db: Session = Depends(get_db),
+):
+    """
+    Search clients by name for dashboard filters (masters + enquiry history).
+    """
+    from backend.models.enquiry import Enquiry
+
+    term = (q or "").strip()
+    cap = max(1, min(int(limit or 25), 50))
+    seen: set[str] = set()
+    names: List[str] = []
+
+    def add_name(raw: Optional[str]) -> None:
+        text = (raw or "").strip()
+        if not text:
+            return
+        key = text.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        names.append(text)
+
+    try:
+        master_q = db.query(ClientMaster.client_name).filter(ClientMaster.client_name.isnot(None))
+        if term:
+            master_q = master_q.filter(ClientMaster.client_name.ilike(f"%{term}%"))
+        for (client_name,) in master_q.order_by(ClientMaster.client_name).limit(cap * 4).all():
+            add_name(client_name)
+            if len(names) >= cap:
+                break
+
+        if len(names) < cap:
+            enquiry_q = db.query(Enquiry.client_name).filter(
+                Enquiry.is_void.is_(False),
+                Enquiry.client_name.isnot(None),
+            )
+            if term:
+                enquiry_q = enquiry_q.filter(Enquiry.client_name.ilike(f"%{term}%"))
+            for (client_name,) in enquiry_q.order_by(Enquiry.client_name).limit(cap * 4).all():
+                add_name(client_name)
+                if len(names) >= cap:
+                    break
+
+        names.sort(key=lambda s: s.casefold())
+        return {
+            "success": True,
+            "data": {
+                "clients": [{"client_name": n} for n in names[:cap]],
+            },
+        }
+    except Exception as exc:
+        logger.exception("Client lookup failed: %s", exc)
+        db.rollback()
+        return {
+            "success": False,
+            "data": {"clients": []},
+            "error": "Could not load clients",
+        }
 
 
 class EnquiryInvoicingTypesRequest(BaseModel):

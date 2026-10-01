@@ -249,6 +249,54 @@ def _is_additional_row(row: Dict[str, Any]) -> bool:
     return row.get("row_kind") == "additional"
 
 
+def _normalize_client_filters(
+    client_name: Optional[str] = None,
+    client_names: Optional[List[str]] = None,
+) -> List[str]:
+    """Deduped client names (case-insensitive), preserving first-seen order."""
+    ordered: List[str] = []
+    seen: set[str] = set()
+
+    def add(raw: Optional[str]) -> None:
+        text = (raw or "").strip()
+        if not text:
+            return
+        key = text.casefold()
+        if key in seen:
+            return
+        seen.add(key)
+        ordered.append(text)
+
+    if client_name:
+        add(client_name)
+    if client_names:
+        for entry in client_names:
+            for part in str(entry).split(","):
+                add(part)
+
+    return ordered
+
+
+def _row_matches_clients(row: Dict[str, Any], client_names: List[str]) -> bool:
+    if not client_names:
+        return True
+    row_client = (row.get("client_name") or "").strip().casefold()
+    allowed = {n.casefold() for n in client_names}
+    return row_client in allowed
+
+
+def _normalize_container_filter(container_type: Optional[str]) -> Optional[str]:
+    text = (container_type or "").strip()
+    return text or None
+
+
+def _row_matches_container(row: Dict[str, Any], container_type: Optional[str]) -> bool:
+    if not container_type:
+        return True
+    row_type = (row.get("container_type") or "").strip()
+    return row_type.casefold() == container_type.casefold()
+
+
 def get_dashboard_analytics(
     db: Session,
     *,
@@ -257,6 +305,9 @@ def get_dashboard_analytics(
     month_to: Optional[str] = None,
     metric: str = "both",
     fy: Optional[str] = None,
+    client_name: Optional[str] = None,
+    client_names: Optional[List[str]] = None,
+    container_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Build analytics summary, per-enquiry rows, and FY month-wise series.
@@ -275,7 +326,11 @@ def get_dashboard_analytics(
       - month: 'YYYY-MM' — single month (legacy; overrides month_from/month_to)
       - month_from / month_to: inclusive month range within FY
       - metric: 'cost' | 'revenue' | 'both' | 'net_margin' | 'gross_margin'
+      - client_name / client_names: exact match on enquiry client_name (case-insensitive)
+      - container_type: exact match on enquiry container_type (case-insensitive)
     """
+    client_filter = _normalize_client_filters(client_name, client_names)
+    container_filter = _normalize_container_filter(container_type)
     metric_key = (metric or "both").lower()
     if metric_key == "both":
         metric_key = "net_margin"
@@ -408,6 +463,11 @@ def get_dashboard_analytics(
                 "sob_date": extra_iso,
                 "sob_month": extra_month,
             })
+
+    if client_filter:
+        all_rows = [r for r in all_rows if _row_matches_clients(r, client_filter)]
+    if container_filter:
+        all_rows = [r for r in all_rows if _row_matches_container(r, container_filter)]
 
     def _in_selected_fy(row: Dict[str, Any]) -> bool:
         if not row.get("si_date"):
@@ -666,6 +726,9 @@ def get_dashboard_analytics(
             "filter_month_to": range_to,
             "filter_metric": metric_key,
             "filter_fy": selected_label,
+            "filter_client_names": client_filter,
+            "filter_client_name": client_filter[0] if len(client_filter) == 1 else None,
+            "filter_container_type": container_filter,
             "fy_label": f"FY {selected_label}",
             "fy_range": f"Apr {fy_start} – Mar {fy_start + 1}",
             "pending_no_sob": pending_no_sob,

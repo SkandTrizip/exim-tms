@@ -44,6 +44,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
+    applyAnalyticsDateRangePreset('this_month', { fetch: false });
+
     // Run stats and enquiry fetch in parallel — stats show immediately, tables fill in alongside
     await Promise.all([
         fetchDashboardStats(),
@@ -1027,7 +1029,15 @@ const analyticsFilterState = {
     monthFrom: '',
     monthTo: '',
     metric: 'gross_margin',
+    clientNames: [],
+    containerType: '',
+    dateRange: 'this_month',
+    viewBy: 'month',
 };
+
+let analyticsClientLookupTimer = null;
+let analyticsClientLookupResults = [];
+let lastAnalyticsPayload = null;
 
 let analyticsAvailableMonths = [];
 let analyticsAvailableYears = [];
@@ -1036,12 +1046,382 @@ const analyticsDetailsState = {
     search: '',
     statusFilter: 'all',
     pageSize: 20,
+    viewMode: 'trips',
 };
 
 function currentAnalyticsFyValue() {
     const now = new Date();
     const y = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
     return `${y}-${String(y + 1).slice(-2)}`;
+}
+
+function analyticsMonthKeyFromDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function analyticsStartOfMonth(date) {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function analyticsAddMonths(date, delta) {
+    return new Date(date.getFullYear(), date.getMonth() + delta, 1);
+}
+
+function analyticsCalendarQuarterStart(date) {
+    const q = Math.floor(date.getMonth() / 3);
+    return new Date(date.getFullYear(), q * 3, 1);
+}
+
+function analyticsEnsureFyForMonthKey(monthKey) {
+    if (!monthKey) return;
+    const [y, m] = monthKey.split('-').map(Number);
+    if (!y || !m) return;
+    const fyStart = m >= 4 ? y : y - 1;
+    analyticsFilterState.fy = `${fyStart}-${String(fyStart + 1).slice(-2)}`;
+}
+
+function applyAnalyticsDateRangePreset(preset, { fetch = true } = {}) {
+    const now = new Date();
+    analyticsFilterState.dateRange = preset || 'this_month';
+
+    if (preset === 'this_year') {
+        analyticsFilterState.fy = currentAnalyticsFyValue();
+        analyticsFilterState.monthFrom = '';
+        analyticsFilterState.monthTo = '';
+    } else if (preset === 'custom') {
+        // Keep month_from / month_to; user adjusts in the panel.
+    } else {
+        let fromDate = analyticsStartOfMonth(now);
+        let toDate = analyticsStartOfMonth(now);
+
+        if (preset === 'last_month') {
+            fromDate = analyticsAddMonths(fromDate, -1);
+            toDate = fromDate;
+        } else if (preset === 'last_3_months') {
+            fromDate = analyticsAddMonths(toDate, -2);
+        } else if (preset === 'this_quarter') {
+            fromDate = analyticsCalendarQuarterStart(now);
+        } else if (preset === 'last_quarter') {
+            const thisQuarterStart = analyticsCalendarQuarterStart(now);
+            const lastQuarterEnd = analyticsAddMonths(thisQuarterStart, -1);
+            fromDate = analyticsCalendarQuarterStart(lastQuarterEnd);
+            toDate = lastQuarterEnd;
+        }
+
+        analyticsFilterState.monthFrom = analyticsMonthKeyFromDate(fromDate);
+        analyticsFilterState.monthTo = analyticsMonthKeyFromDate(toDate);
+        analyticsEnsureFyForMonthKey(analyticsFilterState.monthTo || analyticsFilterState.monthFrom);
+    }
+
+    updateAnalyticsViewByOptions();
+    updateAnalyticsFiltersUi();
+
+    const fromSelect = document.getElementById('analyticsMonthFromFilter');
+    const toSelect = document.getElementById('analyticsMonthToFilter');
+    if (fromSelect) fromSelect.value = analyticsFilterState.monthFrom || '';
+    if (toSelect) toSelect.value = analyticsFilterState.monthTo || '';
+
+    if (fetch) {
+        fetchDashboardAnalytics();
+    }
+}
+
+function updateAnalyticsViewByOptions() {
+    const range = analyticsFilterState.dateRange || 'this_month';
+    const allowDayWeek = ['this_month', 'last_month', 'last_3_months', 'custom'].includes(range);
+    document.querySelectorAll('[data-view-by]').forEach((btn) => {
+        const mode = btn.dataset.viewBy;
+        const show = mode === 'month' || allowDayWeek;
+        btn.hidden = !show;
+        if (!show && btn.classList.contains('is-active')) {
+            btn.classList.remove('is-active');
+            const monthBtn = document.querySelector('[data-view-by="month"]');
+            if (monthBtn) monthBtn.classList.add('is-active');
+            analyticsFilterState.viewBy = 'month';
+        }
+    });
+}
+
+function countActiveAnalyticsFilters() {
+    let count = 0;
+    if ((analyticsFilterState.clientNames || []).length) count += 1;
+    if (analyticsFilterState.containerType) count += 1;
+    if (analyticsFilterState.dateRange && analyticsFilterState.dateRange !== 'this_month') count += 1;
+    return count;
+}
+
+function syncAnalyticsFiltersPanelUi() {
+    const toggle = document.getElementById('analyticsFiltersToggle');
+    const panel = document.getElementById('analyticsCommandPanel');
+    const commandBar = document.getElementById('analyticsCommandBar');
+    const section = document.querySelector('.biz-analytics');
+    const isOpen = !!(toggle && toggle.getAttribute('aria-expanded') === 'true' && panel && !panel.hidden);
+    if (commandBar) {
+        commandBar.classList.toggle('is-panel-open', isOpen);
+    }
+    if (section) {
+        section.classList.toggle('is-filters-open', isOpen);
+    }
+}
+
+function updateAnalyticsFiltersUi() {
+    const count = countActiveAnalyticsFilters();
+    const countEl = document.getElementById('analyticsFiltersCount');
+    const toggle = document.getElementById('analyticsFiltersToggle');
+    if (countEl) {
+        if (count > 0) {
+            countEl.hidden = false;
+            countEl.textContent = String(count);
+        } else {
+            countEl.hidden = true;
+        }
+    }
+    if (toggle) {
+        toggle.classList.toggle('is-active-filters', count > 0);
+    }
+
+    const dateSelect = document.getElementById('analyticsDateRangeSelect');
+    if (dateSelect && dateSelect.value !== analyticsFilterState.dateRange) {
+        dateSelect.value = analyticsFilterState.dateRange;
+    }
+
+    const containerSelect = document.getElementById('analyticsContainerTypeFilter');
+    if (containerSelect && containerSelect.value !== (analyticsFilterState.containerType || '')) {
+        containerSelect.value = analyticsFilterState.containerType || '';
+    }
+
+    document.querySelectorAll('[data-view-by]').forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.viewBy === analyticsFilterState.viewBy);
+    });
+
+    syncAnalyticsFiltersPanelUi();
+}
+
+function populateAnalyticsContainerTypeFilter() {
+    const select = document.getElementById('analyticsContainerTypeFilter');
+    if (!select || select.dataset.populated) return;
+    const types = (typeof CONFIG !== 'undefined' && Array.isArray(CONFIG.containerTypes))
+        ? CONFIG.containerTypes
+        : [];
+    types.forEach((type) => {
+        const opt = document.createElement('option');
+        opt.value = type;
+        opt.textContent = type;
+        select.appendChild(opt);
+    });
+    select.dataset.populated = '1';
+}
+
+function analyticsWeekStartKey(isoDate) {
+    if (!isoDate) return '';
+    const d = new Date(`${isoDate.slice(0, 10)}T00:00:00`);
+    if (Number.isNaN(d.getTime())) return '';
+    const day = d.getDay();
+    const diff = (day + 6) % 7;
+    d.setDate(d.getDate() - diff);
+    return analyticsMonthKeyFromDate(d);
+}
+
+function analyticsShortMonthLabel(monthKey) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    const [y, m] = (monthKey || '').split('-').map(Number);
+    if (!y || !m) return monthKey || '';
+    return months[m - 1] || monthKey;
+}
+
+function aggregateAnalyticsChartSeries(rows, viewBy) {
+    const buckets = new Map();
+    const upsert = (key, label, shortLabel, row) => {
+        if (!key) return;
+        if (!buckets.has(key)) {
+            buckets.set(key, {
+                month: key,
+                label,
+                short_label: shortLabel,
+                trips: 0,
+                cost_inr: 0,
+                revenue_inr: 0,
+                capture_inr: 0,
+                teu: 0,
+                containers: 0,
+            });
+        }
+        const bucket = buckets.get(key);
+        bucket.cost_inr += Number(row.cost_inr) || 0;
+        bucket.revenue_inr += Number(row.revenue_inr) || 0;
+        bucket.capture_inr += Number(row.capture_inr) || 0;
+        if (row.row_kind !== 'additional') {
+            bucket.trips += 1;
+            bucket.teu += Number(row.teu) || 0;
+            bucket.containers += Number(row.container_count) || 0;
+        }
+    };
+
+    (rows || []).forEach((row) => {
+        const iso = row.si_date || row.sob_date;
+        if (!iso) return;
+        if (viewBy === 'day') {
+            const key = iso.slice(0, 10);
+            upsert(key, key, key.slice(5), row);
+            return;
+        }
+        if (viewBy === 'week') {
+            const key = analyticsWeekStartKey(iso);
+            const label = key ? `Week of ${analyticsShortMonthLabel(key)} ${key.slice(8, 10)}` : '';
+            upsert(key, label, label, row);
+            return;
+        }
+        const key = row.si_month || iso.slice(0, 7);
+        const short = analyticsShortMonthLabel(key);
+        upsert(key, key, short, row);
+    });
+
+    return Array.from(buckets.values())
+        .map((b) => {
+            const cost = Math.round(b.cost_inr * 100) / 100;
+            const revenue = Math.round(b.revenue_inr * 100) / 100;
+            const capture = Math.round(b.capture_inr * 100) / 100;
+            const marginPct = revenue > 0 ? Math.round(((capture / revenue) * 100) * 100) / 100 : null;
+            return {
+                ...b,
+                cost_inr: cost,
+                revenue_inr: revenue,
+                capture_inr: capture,
+                margin_pct: marginPct,
+            };
+        })
+        .sort((a, b) => String(a.month).localeCompare(String(b.month)));
+}
+
+function getAnalyticsChartSeries() {
+    if (!lastAnalyticsPayload) return [];
+    const summary = lastAnalyticsPayload.summary || {};
+    const ongoing = summary.ongoing || {};
+    const includeOngoing = !!ongoing.included_in_gross;
+
+    if (analyticsFilterState.viewBy === 'month') {
+        const series = Array.isArray(lastAnalyticsPayload.monthly_series)
+            ? lastAnalyticsPayload.monthly_series
+            : [];
+        return filterSeriesByMonthRange(
+            series,
+            analyticsFilterState.monthFrom,
+            analyticsFilterState.monthTo,
+            analyticsAvailableMonths,
+        );
+    }
+
+    const rows = []
+        .concat(Array.isArray(lastAnalyticsPayload.enquiries) ? lastAnalyticsPayload.enquiries : [])
+        .concat(Array.isArray(lastAnalyticsPayload.ongoing_enquiries) ? lastAnalyticsPayload.ongoing_enquiries : []);
+    return aggregateAnalyticsChartSeries(rows, analyticsFilterState.viewBy);
+}
+
+function rerenderAnalyticsChartFromCache() {
+    if (!lastAnalyticsPayload) return;
+    const summary = lastAnalyticsPayload.summary || {};
+    const ongoing = summary.ongoing || {};
+    const includeOngoing = !!ongoing.included_in_gross;
+    const chartSeries = getAnalyticsChartSeries();
+    renderMonthlyAnalyticsChart(chartSeries, analyticsFilterState.metric, {
+        pipelineMargin: includeOngoing && analyticsFilterState.viewBy === 'month'
+            ? (ongoing.capture_inr || 0)
+            : 0,
+        pipelineTrips: includeOngoing && analyticsFilterState.viewBy === 'month'
+            ? (ongoing.trips || 0)
+            : 0,
+    });
+}
+
+function resetAnalyticsFilters() {
+    analyticsFilterState.clientNames = [];
+    analyticsFilterState.containerType = '';
+    analyticsFilterState.viewBy = 'month';
+    analyticsFilterState.metric = 'gross_margin';
+    updateAnalyticsClientFilterUi({ activeName: '' });
+    const metricSelect = document.getElementById('analyticsMetricFilter');
+    if (metricSelect) metricSelect.value = 'gross_margin';
+    applyAnalyticsDateRangePreset('this_month');
+}
+
+function bindAnalyticsCommandBar() {
+    populateAnalyticsContainerTypeFilter();
+
+    const dateSelect = document.getElementById('analyticsDateRangeSelect');
+    if (dateSelect && !dateSelect.dataset.bound) {
+        dateSelect.dataset.bound = '1';
+        dateSelect.addEventListener('change', () => {
+            const preset = dateSelect.value || 'this_month';
+            if (preset === 'custom') {
+                analyticsFilterState.dateRange = 'custom';
+                const panel = document.getElementById('analyticsCommandPanel');
+                const toggle = document.getElementById('analyticsFiltersToggle');
+                if (panel) panel.hidden = false;
+                if (toggle) {
+                    toggle.classList.add('is-open');
+                    toggle.setAttribute('aria-expanded', 'true');
+                }
+                updateAnalyticsViewByOptions();
+                syncAnalyticsFiltersPanelUi();
+                updateAnalyticsFiltersUi();
+                return;
+            }
+            applyAnalyticsDateRangePreset(preset);
+        });
+    }
+
+    document.querySelectorAll('[data-view-by]').forEach((btn) => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+            analyticsFilterState.viewBy = btn.dataset.viewBy || 'month';
+            updateAnalyticsFiltersUi();
+            rerenderAnalyticsChartFromCache();
+        });
+    });
+
+    const toggle = document.getElementById('analyticsFiltersToggle');
+    const panel = document.getElementById('analyticsCommandPanel');
+    if (toggle && panel && !toggle.dataset.bound) {
+        toggle.dataset.bound = '1';
+        toggle.addEventListener('click', () => {
+            const open = toggle.getAttribute('aria-expanded') === 'true';
+            toggle.setAttribute('aria-expanded', open ? 'false' : 'true');
+            toggle.classList.toggle('is-open', !open);
+            panel.hidden = open;
+            syncAnalyticsFiltersPanelUi();
+        });
+    }
+
+    const refreshBtn = document.getElementById('analyticsCommandRefresh');
+    if (refreshBtn && !refreshBtn.dataset.bound) {
+        refreshBtn.dataset.bound = '1';
+        refreshBtn.addEventListener('click', () => {
+            refreshBtn.disabled = true;
+            fetchDashboardAnalytics().finally(() => {
+                refreshBtn.disabled = false;
+            });
+        });
+    }
+
+    const containerSelect = document.getElementById('analyticsContainerTypeFilter');
+    if (containerSelect && !containerSelect.dataset.bound) {
+        containerSelect.dataset.bound = '1';
+        containerSelect.addEventListener('change', () => {
+            analyticsFilterState.containerType = containerSelect.value || '';
+            updateAnalyticsFiltersUi();
+            fetchDashboardAnalytics();
+        });
+    }
+
+    const resetBtn = document.getElementById('analyticsResetFilters');
+    if (resetBtn && !resetBtn.dataset.bound) {
+        resetBtn.dataset.bound = '1';
+        resetBtn.addEventListener('click', () => resetAnalyticsFilters());
+    }
+
+    updateAnalyticsViewByOptions();
+    updateAnalyticsFiltersUi();
 }
 
 function openAnalyticsDetailsPanel({ statusFilter = null } = {}) {
@@ -1426,15 +1806,418 @@ function analyticsRowSearchText(row) {
     ].map((v) => String(v ?? '').toLowerCase()).join(' ');
 }
 
-function getAnalyticsDetailsFilteredRows() {
-    const q = (analyticsDetailsState.search || '').trim().toLowerCase();
+function getAnalyticsDetailsStatusFilteredRows() {
     const status = analyticsDetailsState.statusFilter || 'all';
     return (analyticsDetailsState.rows || []).filter((row) => {
         if (status === 'final' && row.economics_status !== 'final') return false;
         if (status === 'ongoing' && row.economics_status !== 'ongoing') return false;
+        return true;
+    });
+}
+
+function getAnalyticsDetailsFilteredRows() {
+    const q = (analyticsDetailsState.search || '').trim().toLowerCase();
+    return getAnalyticsDetailsStatusFilteredRows().filter((row) => {
         if (!q) return true;
         return analyticsRowSearchText(row).includes(q);
     });
+}
+
+function buildAnalyticsClientWiseRows(rows) {
+    const groups = {};
+    (rows || []).forEach((row) => {
+        const client = (row.client_name || '—').trim();
+        if (!groups[client]) {
+            groups[client] = {
+                client_name: client,
+                trips: 0,
+                revenue_inr: 0,
+                cost_inr: 0,
+                capture_inr: 0,
+            };
+        }
+        if (row.row_kind !== 'additional') {
+            groups[client].trips += 1;
+        }
+        groups[client].revenue_inr += Number(row.revenue_inr || 0);
+        groups[client].cost_inr += Number(row.cost_inr || 0);
+        groups[client].capture_inr += Number(row.capture_inr || 0);
+    });
+    return Object.values(groups)
+        .map((g) => {
+            const revenue = Math.round(g.revenue_inr * 100) / 100;
+            const cost = Math.round(g.cost_inr * 100) / 100;
+            const capture = Math.round(g.capture_inr * 100) / 100;
+            return {
+                client_name: g.client_name,
+                trips: g.trips,
+                revenue_inr: revenue,
+                cost_inr: cost,
+                capture_inr: capture,
+                margin_pct: revenue > 0 ? Math.round(((capture / revenue) * 100) * 100) / 100 : null,
+            };
+        })
+        .sort((a, b) => a.client_name.localeCompare(b.client_name));
+}
+
+function clientWiseRowSearchText(row) {
+    return [
+        row.client_name,
+        row.trips,
+        row.revenue_inr,
+        row.cost_inr,
+        row.capture_inr,
+        row.margin_pct,
+    ]
+        .map((v) => String(v ?? '').toLowerCase())
+        .join(' ');
+}
+
+function getAnalyticsDetailsDisplayRows() {
+    if (analyticsDetailsState.viewMode !== 'client_wise') {
+        return getAnalyticsDetailsFilteredRows();
+    }
+    const aggregated = buildAnalyticsClientWiseRows(getAnalyticsDetailsStatusFilteredRows());
+    const q = (analyticsDetailsState.search || '').trim().toLowerCase();
+    if (!q) return aggregated;
+    return aggregated.filter((row) => clientWiseRowSearchText(row).includes(q));
+}
+
+function syncAnalyticsDetailsTableHead() {
+    const head = document.getElementById('analyticsDetailsTableHead');
+    if (!head) return;
+    if (analyticsDetailsState.viewMode === 'client_wise') {
+        head.innerHTML = `
+            <tr>
+                <th data-col="client">Client</th>
+                <th class="num" data-col="trips">Trips</th>
+                <th class="num" data-col="revenue">Revenue</th>
+                <th class="num" data-col="cost">Cost</th>
+                <th class="num" data-col="margin">Margin</th>
+                <th class="num" data-col="margin_pct">Margin %</th>
+            </tr>`;
+        return;
+    }
+    head.innerHTML = `
+        <tr>
+            <th data-col="enquiry">Enquiry No</th>
+            <th data-col="client">Client Name</th>
+            <th data-col="origin">Origin</th>
+            <th data-col="destination">Destination</th>
+            <th data-col="container">Container</th>
+            <th data-col="head">Head</th>
+            <th class="num" data-col="revenue">Revenue</th>
+            <th class="num" data-col="cost">Cost</th>
+            <th class="num" data-col="margin">Margin</th>
+            <th data-col="status">Status</th>
+        </tr>`;
+}
+
+function setAnalyticsDetailsViewMode(mode) {
+    analyticsDetailsState.viewMode = mode === 'client_wise' ? 'client_wise' : 'trips';
+    document.querySelectorAll('[data-analytics-mode]').forEach((btn) => {
+        btn.classList.toggle('is-active', btn.dataset.analyticsMode === analyticsDetailsState.viewMode);
+    });
+    const card = document.getElementById('analyticsDetailsTableCard');
+    if (card) {
+        card.classList.toggle('is-client-wise', analyticsDetailsState.viewMode === 'client_wise');
+    }
+    const searchInput = document.getElementById('analyticsDetailsSearchInput');
+    if (searchInput) {
+        searchInput.placeholder = analyticsDetailsState.viewMode === 'client_wise'
+            ? 'Search clients…'
+            : 'Search all columns…';
+    }
+    syncAnalyticsDetailsTableHead();
+    paginationState.analyticsDetails.currentPage = 1;
+    renderAnalyticsDetailsTable();
+}
+
+function analyticsClientNameKey(name) {
+    const text = (name || '').trim();
+    if (!text) return '';
+    if (typeof text.casefold === 'function') {
+        return text.casefold();
+    }
+    return text.toLowerCase();
+}
+
+function isAnalyticsClientSelected(name) {
+    const key = analyticsClientNameKey(name);
+    return (analyticsFilterState.clientNames || []).some((n) => analyticsClientNameKey(n) === key);
+}
+
+function analyticsClientFilterLabel() {
+    const names = analyticsFilterState.clientNames || [];
+    if (!names.length) return '';
+    if (names.length === 1) return names[0];
+    if (names.length <= 3) return names.join(', ');
+    return `${names.slice(0, 2).join(', ')} +${names.length - 2} more`;
+}
+
+function renderAnalyticsClientChips() {
+    const wrap = document.getElementById('analyticsClientFilterChips');
+    if (!wrap) return;
+    const names = analyticsFilterState.clientNames || [];
+    if (!names.length) {
+        wrap.innerHTML = '';
+        wrap.hidden = true;
+        return;
+    }
+    wrap.hidden = false;
+    wrap.innerHTML = names
+        .map(
+            (name) => `
+        <span class="analytics-client-chip">
+            <span class="analytics-client-chip__label">${escapeHtml(name)}</span>
+            <button type="button" class="analytics-client-chip__remove" data-client-chip="${encodeURIComponent(name)}" aria-label="Remove ${escapeHtml(name)}">
+                <i class="fas fa-xmark" aria-hidden="true"></i>
+            </button>
+        </span>`,
+        )
+        .join('');
+}
+
+function renderAnalyticsClientLookupList() {
+    const list = document.getElementById('analyticsClientFilterList');
+    if (!list || !analyticsClientLookupResults.length) return;
+    list.innerHTML = analyticsClientLookupResults
+        .map((item, idx) => {
+            const isAll = !item.client_name;
+            const selected = isAll
+                ? !(analyticsFilterState.clientNames || []).length
+                : isAnalyticsClientSelected(item.client_name);
+            const check = selected
+                ? '<i class="fas fa-check analytics-client-check" aria-hidden="true"></i>'
+                : '<span class="analytics-client-check" aria-hidden="true"></span>';
+            return `<li role="option" data-client-idx="${idx}" aria-selected="${selected ? 'true' : 'false'}" class="${selected ? 'is-selected' : ''}">${check}<span>${escapeHtml(item.label)}</span></li>`;
+        })
+        .join('');
+}
+
+function updateAnalyticsClientFilterUi() {
+    const input = document.getElementById('analyticsClientFilterInput');
+    const clearBtn = document.getElementById('analyticsClientFilterClear');
+    const hasClients = (analyticsFilterState.clientNames || []).length > 0;
+    if (clearBtn) {
+        clearBtn.hidden = !hasClients;
+    }
+    renderAnalyticsClientChips();
+    updateAnalyticsFiltersUi();
+}
+
+function clearAnalyticsClientFilters({ fetch = true } = {}) {
+    analyticsFilterState.clientNames = [];
+    const input = document.getElementById('analyticsClientFilterInput');
+    if (input) input.value = '';
+    updateAnalyticsClientFilterUi();
+    renderAnalyticsClientLookupList();
+    if (fetch) fetchDashboardAnalytics();
+}
+
+function toggleAnalyticsClientSelection(clientName) {
+    const name = (clientName || '').trim();
+    if (!name) {
+        clearAnalyticsClientFilters();
+        return;
+    }
+    const key = analyticsClientNameKey(name);
+    const current = analyticsFilterState.clientNames || [];
+    const existingIdx = current.findIndex((n) => analyticsClientNameKey(n) === key);
+    if (existingIdx >= 0) {
+        current.splice(existingIdx, 1);
+    } else {
+        current.push(name);
+    }
+    analyticsFilterState.clientNames = current;
+    updateAnalyticsClientFilterUi();
+    renderAnalyticsClientLookupList();
+    fetchDashboardAnalytics();
+}
+
+function removeAnalyticsClientChip(encodedName) {
+    const name = decodeURIComponent(encodedName || '');
+    analyticsFilterState.clientNames = (analyticsFilterState.clientNames || []).filter(
+        (n) => analyticsClientNameKey(n) !== analyticsClientNameKey(name),
+    );
+    updateAnalyticsClientFilterUi();
+    renderAnalyticsClientLookupList();
+    fetchDashboardAnalytics();
+}
+
+function closeAnalyticsClientFilterList() {
+    const list = document.getElementById('analyticsClientFilterList');
+    const input = document.getElementById('analyticsClientFilterInput');
+    if (list) list.hidden = true;
+    if (input) input.setAttribute('aria-expanded', 'false');
+}
+
+function normalizeAnalyticsClientOption(entry) {
+    const name = typeof entry === 'string'
+        ? entry
+        : (entry?.client_name || entry?.label || '');
+    const trimmed = (name || '').trim();
+    if (!trimmed) return null;
+    return { client_name: trimmed, label: trimmed };
+}
+
+function filterAnalyticsClientOptionsByTerm(options, term) {
+    const q = analyticsClientNameKey(term);
+    if (!q) return options;
+    return options.filter((opt) => analyticsClientNameKey(opt.client_name).includes(q));
+}
+
+async function fetchAnalyticsClientOptionsFallback(term) {
+    const seen = new Set();
+    const options = [];
+
+    const addName = (raw) => {
+        const opt = normalizeAnalyticsClientOption(raw);
+        if (!opt) return;
+        const key = analyticsClientNameKey(opt.client_name);
+        if (seen.has(key)) return;
+        seen.add(key);
+        options.push(opt);
+    };
+
+    if (typeof CONFIG !== 'undefined' && Array.isArray(CONFIG.clients)) {
+        CONFIG.clients.forEach(addName);
+    }
+
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/client/masters`);
+        if (res.ok) {
+            const masters = await res.json();
+            if (Array.isArray(masters)) {
+                masters.forEach((m) => addName(m?.client_name || m?.unique_client_name));
+            }
+        }
+    } catch (err) {
+        console.warn('Client masters fallback failed:', err);
+    }
+
+    return filterAnalyticsClientOptionsByTerm(options, term).slice(0, 25);
+}
+
+function applyAnalyticsClientLookupResults(clientRows) {
+    const list = document.getElementById('analyticsClientFilterList');
+    if (!list) return;
+
+    const normalized = (Array.isArray(clientRows) ? clientRows : [])
+        .map(normalizeAnalyticsClientOption)
+        .filter(Boolean);
+
+    analyticsClientLookupResults = [{ client_name: '', label: 'All clients' }].concat(normalized);
+
+    if (analyticsClientLookupResults.length <= 1) {
+        list.innerHTML = '<li class="is-empty" role="option">No clients found.</li>';
+        return;
+    }
+
+    renderAnalyticsClientLookupList();
+}
+
+async function fetchAnalyticsClientOptions(query) {
+    const list = document.getElementById('analyticsClientFilterList');
+    const input = document.getElementById('analyticsClientFilterInput');
+    if (!list) return;
+
+    const term = (query || '').trim();
+    list.innerHTML = '<li class="is-empty" role="option">Searching…</li>';
+    list.hidden = false;
+    if (input) input.setAttribute('aria-expanded', 'true');
+
+    try {
+        const params = new URLSearchParams();
+        if (term) params.set('q', term);
+        params.set('limit', '25');
+        const response = await fetch(`${CONFIG.API_URL}/api/client/lookup?${params.toString()}`);
+        if (!response.ok) throw new Error(`lookup HTTP ${response.status}`);
+        const payload = await response.json();
+        if (payload?.success === false) {
+            throw new Error(payload?.error || 'lookup failed');
+        }
+        const clients = payload?.data?.clients ?? payload?.clients ?? [];
+        if (!clients.length) {
+            const fallback = await fetchAnalyticsClientOptionsFallback(term);
+            if (fallback.length) {
+                applyAnalyticsClientLookupResults(fallback);
+                return;
+            }
+        }
+        applyAnalyticsClientLookupResults(clients);
+    } catch (err) {
+        console.error('Client lookup failed:', err);
+        try {
+            const fallback = await fetchAnalyticsClientOptionsFallback(term);
+            if (fallback.length) {
+                applyAnalyticsClientLookupResults(fallback);
+                return;
+            }
+        } catch (fallbackErr) {
+            console.error('Client lookup fallback failed:', fallbackErr);
+        }
+        list.innerHTML = '<li class="is-empty" role="option">Could not load clients. Check connection and refresh.</li>';
+    }
+}
+
+function bindAnalyticsClientFilter() {
+    const input = document.getElementById('analyticsClientFilterInput');
+    const list = document.getElementById('analyticsClientFilterList');
+    const clearBtn = document.getElementById('analyticsClientFilterClear');
+    const chips = document.getElementById('analyticsClientFilterChips');
+    const wrap = document.getElementById('analyticsClientFilterWrap');
+    if (!input || !list || input.dataset.bound) return;
+    input.dataset.bound = '1';
+
+    input.addEventListener('focus', () => {
+        fetchAnalyticsClientOptions(input.value || '');
+    });
+    input.addEventListener('input', () => {
+        window.clearTimeout(analyticsClientLookupTimer);
+        analyticsClientLookupTimer = window.setTimeout(() => {
+            fetchAnalyticsClientOptions(input.value || '');
+        }, 250);
+    });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            closeAnalyticsClientFilterList();
+            input.blur();
+        }
+    });
+
+    list.addEventListener('click', (e) => {
+        const item = e.target.closest('li[data-client-idx]');
+        if (!item || item.classList.contains('is-empty')) return;
+        const idx = parseInt(item.getAttribute('data-client-idx'), 10);
+        const picked = analyticsClientLookupResults[idx];
+        toggleAnalyticsClientSelection(picked ? picked.client_name : '');
+    });
+
+    if (chips && !chips.dataset.bound) {
+        chips.dataset.bound = '1';
+        chips.addEventListener('click', (e) => {
+            const btn = e.target.closest('[data-client-chip]');
+            if (!btn) return;
+            e.preventDefault();
+            removeAnalyticsClientChip(btn.getAttribute('data-client-chip'));
+        });
+    }
+
+    if (clearBtn) {
+        clearBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            clearAnalyticsClientFilters();
+            input.focus();
+        });
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!wrap || wrap.contains(e.target)) return;
+        closeAnalyticsClientFilterList();
+    });
+
+    renderAnalyticsClientChips();
 }
 
 function setAnalyticsDetailsStatusFilter(status, { render = true } = {}) {
@@ -1453,8 +2236,10 @@ function setAnalyticsDetailsStatusFilter(status, { render = true } = {}) {
     }
 }
 
-function renderAnalyticsDetailsSummary(rows) {
-    const trips = rows.filter((r) => r.row_kind !== 'additional').length;
+function renderAnalyticsDetailsSummary(rows, { isClientWise = false } = {}) {
+    const trips = isClientWise
+        ? rows.reduce((sum, r) => sum + (Number(r.trips) || 0), 0)
+        : rows.filter((r) => r.row_kind !== 'additional').length;
     const revenue = rows.reduce((sum, r) => sum + (Number(r.revenue_inr) || 0), 0);
     const cost = rows.reduce((sum, r) => sum + (Number(r.cost_inr) || 0), 0);
     const margin = revenue - cost;
@@ -1524,7 +2309,7 @@ function renderAnalyticsDetailsPagination(totalItems, currentPage, pageSize) {
             const action = btn.getAttribute('data-analytics-page');
             const current = paginationState.analyticsDetails.currentPage || 1;
             const size = analyticsDetailsState.pageSize || 20;
-            const total = getAnalyticsDetailsFilteredRows().length;
+            const total = getAnalyticsDetailsDisplayRows().length;
             const pages = Math.max(1, Math.ceil(total / size) || 1);
             let next = current;
             if (action === 'first') next = 1;
@@ -1534,6 +2319,19 @@ function renderAnalyticsDetailsPagination(totalItems, currentPage, pageSize) {
             window.changeAnalyticsDetailsPage(next);
         });
     }
+}
+
+function renderAnalyticsClientWiseRowHtml(row) {
+    const marginClass = analyticsValueClass(row.margin_pct);
+    return `
+            <tr class="list-row">
+                <td data-col="client">${escapeHtml(row.client_name || '—')}</td>
+                <td class="num" data-col="trips">${row.trips}</td>
+                <td class="num" data-col="revenue">${formatInrAmount(row.revenue_inr)}</td>
+                <td class="num" data-col="cost">${formatInrAmount(row.cost_inr)}</td>
+                <td class="num ${analyticsValueClass(row.capture_inr)}" data-col="margin">${formatInrAmount(row.capture_inr)}</td>
+                <td class="num ${marginClass}" data-col="margin_pct">${formatMarginPct(row.margin_pct, 2)}</td>
+            </tr>`;
 }
 
 function renderAnalyticsEnquiryRowHtml(row) {
@@ -1564,8 +2362,10 @@ function renderAnalyticsDetailsTable() {
     const tbody = document.getElementById('analyticsEnquiryTable');
     if (!tbody) return;
 
-    const filtered = getAnalyticsDetailsFilteredRows();
-    renderAnalyticsDetailsSummary(filtered);
+    const isClientWise = analyticsDetailsState.viewMode === 'client_wise';
+    const colSpan = isClientWise ? 6 : 10;
+    const filtered = getAnalyticsDetailsDisplayRows();
+    renderAnalyticsDetailsSummary(filtered, { isClientWise });
 
     const pageSize = analyticsDetailsState.pageSize || 20;
     const total = filtered.length;
@@ -1579,7 +2379,9 @@ function renderAnalyticsDetailsTable() {
     const pageRows = filtered.slice(start, start + pageSize);
 
     if (!total) {
-        tbody.innerHTML = '<tr class="analytics-empty-row"><td colspan="10">No economics data for this filter.</td></tr>';
+        tbody.innerHTML = `<tr class="analytics-empty-row"><td colspan="${colSpan}">No economics data for this filter.</td></tr>`;
+    } else if (isClientWise) {
+        tbody.innerHTML = pageRows.map((row) => renderAnalyticsClientWiseRowHtml(row)).join('');
     } else {
         tbody.innerHTML = pageRows.map((row) => renderAnalyticsEnquiryRowHtml(row)).join('');
     }
@@ -1588,10 +2390,17 @@ function renderAnalyticsDetailsTable() {
 
     const subtitle = document.getElementById('analyticsDetailsSubtitle');
     if (subtitle) {
-        const ongoingCount = (analyticsDetailsState.rows || []).filter((r) => r.economics_status === 'ongoing').length;
-        subtitle.textContent = ongoingCount
-            ? `Settled + ongoing · ${ongoingCount} ongoing in pipeline`
-            : 'SOB-settled trips for the selected period';
+        if (isClientWise) {
+            const clientLabel = analyticsClientFilterLabel();
+            subtitle.textContent = clientLabel
+                ? `Client-wise totals for ${clientLabel}`
+                : 'Client-wise cost, revenue, and trips for the selected period';
+        } else {
+            const ongoingCount = (analyticsDetailsState.rows || []).filter((r) => r.economics_status === 'ongoing').length;
+            subtitle.textContent = ongoingCount
+                ? `Settled + ongoing · ${ongoingCount} ongoing in pipeline`
+                : 'SOB-settled trips for the selected period';
+        }
     }
 }
 
@@ -1630,6 +2439,18 @@ function bindAnalyticsDetailsUI() {
             setAnalyticsDetailsStatusFilter(btn.dataset.status || 'all');
         });
     });
+
+    document.querySelectorAll('[data-analytics-mode]').forEach((btn) => {
+        if (btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+            setAnalyticsDetailsViewMode(btn.dataset.analyticsMode || 'trips');
+        });
+    });
+
+    syncAnalyticsDetailsTableHead();
+    bindAnalyticsClientFilter();
+    updateAnalyticsClientFilterUi();
 }
 
 window.changeAnalyticsDetailsPage = (page) => {
@@ -1810,6 +2631,9 @@ function bindAnalyticsFilters() {
             analyticsFilterState.fy = fySelect.value || currentAnalyticsFyValue();
             analyticsFilterState.monthFrom = '';
             analyticsFilterState.monthTo = '';
+            analyticsFilterState.dateRange = 'this_year';
+            updateAnalyticsViewByOptions();
+            updateAnalyticsFiltersUi();
             fetchDashboardAnalytics();
         });
     }
@@ -1825,6 +2649,10 @@ function bindAnalyticsFilters() {
             ));
             analyticsFilterState.monthFrom = monthFrom;
             analyticsFilterState.monthTo = monthTo;
+            analyticsFilterState.dateRange = 'custom';
+            analyticsEnsureFyForMonthKey(monthTo || monthFrom);
+            updateAnalyticsViewByOptions();
+            updateAnalyticsFiltersUi();
             if (monthToSelect) monthToSelect.value = monthTo;
             fetchDashboardAnalytics();
         });
@@ -1841,6 +2669,10 @@ function bindAnalyticsFilters() {
             ));
             analyticsFilterState.monthFrom = monthFrom;
             analyticsFilterState.monthTo = monthTo;
+            analyticsFilterState.dateRange = 'custom';
+            analyticsEnsureFyForMonthKey(monthTo || monthFrom);
+            updateAnalyticsViewByOptions();
+            updateAnalyticsFiltersUi();
             monthToSelect.value = monthTo;
             fetchDashboardAnalytics();
         });
@@ -1850,12 +2682,13 @@ function bindAnalyticsFilters() {
         metricSelect.value = analyticsFilterState.metric;
         metricSelect.addEventListener('change', () => {
             analyticsFilterState.metric = metricSelect.value || 'gross_margin';
-            fetchDashboardAnalytics();
+            rerenderAnalyticsChartFromCache();
         });
     }
 }
 
 async function fetchDashboardAnalytics() {
+    bindAnalyticsCommandBar();
     bindAnalyticsFilters();
     bindAnalyticsDetailsUI();
     if (!analyticsFilterState.fy) {
@@ -1875,6 +2708,12 @@ async function fetchDashboardAnalytics() {
         if (analyticsFilterState.metric) {
             params.set('metric', analyticsFilterState.metric);
         }
+        (analyticsFilterState.clientNames || []).forEach((name) => {
+            if (name) params.append('client_names', name);
+        });
+        if (analyticsFilterState.containerType) {
+            params.set('container_type', analyticsFilterState.containerType);
+        }
         const url = `${CONFIG.API_URL}/api/dashboard/analytics?${params.toString()}`;
         const response = await fetch(url);
         if (!response.ok) {
@@ -1889,29 +2728,28 @@ async function fetchDashboardAnalytics() {
         const summary = data.summary || {};
         analyticsFilterState.monthFrom = summary.filter_month_from || '';
         analyticsFilterState.monthTo = summary.filter_month_to || '';
+        if (Array.isArray(summary.filter_client_names)) {
+            analyticsFilterState.clientNames = summary.filter_client_names.filter(Boolean);
+        } else if (summary.filter_client_name) {
+            analyticsFilterState.clientNames = [summary.filter_client_name];
+        } else {
+            analyticsFilterState.clientNames = [];
+        }
+        if (summary.filter_container_type !== undefined) {
+            analyticsFilterState.containerType = summary.filter_container_type || '';
+        }
+        lastAnalyticsPayload = data;
+        updateAnalyticsClientFilterUi();
         renderAnalyticsSummary(summary);
 
         analyticsAvailableYears = Array.isArray(data.available_financial_years)
             ? data.available_financial_years
             : [];
-        const series = Array.isArray(data.monthly_series) ? data.monthly_series : [];
         analyticsAvailableMonths = Array.isArray(data.available_months) ? data.available_months : [];
         populateAnalyticsFyFilter(analyticsAvailableYears);
         populateAnalyticsMonthRangeFilters(analyticsAvailableMonths);
 
-        // Series is already month-filtered by the API; keep a client pass as safety
-        const chartSeries = filterSeriesByMonthRange(
-            series,
-            analyticsFilterState.monthFrom,
-            analyticsFilterState.monthTo,
-            analyticsAvailableMonths,
-        );
-        const ongoing = summary.ongoing || {};
-        const includeOngoing = !!ongoing.included_in_gross;
-        renderMonthlyAnalyticsChart(chartSeries, analyticsFilterState.metric, {
-            pipelineMargin: includeOngoing ? (ongoing.capture_inr || 0) : 0,
-            pipelineTrips: includeOngoing ? (ongoing.trips || 0) : 0,
-        });
+        rerenderAnalyticsChartFromCache();
 
         renderAnalyticsTeuSection(data);
 
