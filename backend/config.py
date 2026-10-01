@@ -117,6 +117,14 @@ AIR_DEFAULT_CHARGES = [
 # Currencies offered on charge line items; INR is always settlement currency (rate 1).
 CHARGE_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "INR"]
 
+# Customer invoicing: how many / which currency client invoices are raised in.
+CUSTOMER_INVOICING_STANDARD = "standard"
+CUSTOMER_INVOICING_DUAL_USD_INR = "dual_usd_inr"
+CUSTOMER_INVOICING_TYPES = {
+    CUSTOMER_INVOICING_STANDARD: "Standard (single invoice, INR presentation)",
+    CUSTOMER_INVOICING_DUAL_USD_INR: "Dual — USD invoice + INR invoice (all line items each)",
+}
+
 def get_frontend_config() -> dict:
     return {
         "containerTypes": CONTAINER_TYPES,
@@ -130,6 +138,7 @@ def get_frontend_config() -> dict:
         "defaultCharges": DEFAULT_CHARGES,
         "airDefaultCharges": AIR_DEFAULT_CHARGES,
         "CHARGE_CURRENCIES": CHARGE_CURRENCIES,
+        "customerInvoicingTypes": CUSTOMER_INVOICING_TYPES,
     }
 
 

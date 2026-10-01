@@ -7,6 +7,7 @@ from backend.models.client_master import ClientMaster
 from backend.models.invoice import Invoice
 from backend.services.invoice_service import allocate_invoice_number, get_next_invoice_number
 from backend.services import invoice_quote_service
+from backend.services import client_invoicing_service
 from pydantic import BaseModel
 
 from reportlab.pdfgen import canvas
@@ -37,6 +38,7 @@ class InvoiceCreate(BaseModel):
     customer_invoice_no: Optional[str] = None
     irn: Optional[str] = None
     item_type: str = "all"
+    currency_mode: Optional[str] = None
     additional_doc_id: Optional[int] = None
     remark: Optional[str] = None
 
@@ -86,18 +88,32 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
                     detail=f"Additional invoice already recorded for this job ({existing[1]})",
                 )
         else:
-            existing = (
-                db.query(Invoice.id, Invoice.invoice_number)
-                .filter(
-                    Invoice.enquiry_id == invoice.enquiry_id,
-                    Invoice.item_type.in_(["all", "main"]),
-                )
-                .first()
+            invoicing_type = client_invoicing_service.get_customer_invoicing_type_for_enquiry(
+                db, invoice.enquiry_id
             )
+            dual = client_invoicing_service.is_dual_usd_inr_invoicing(invoicing_type)
+            currency_mode = (invoice.currency_mode or "inr").strip().lower()
+            if dual:
+                if currency_mode not in ("usd", "inr"):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="currency_mode must be 'usd' or 'inr' for dual-invoice clients",
+                    )
+            else:
+                currency_mode = None
+
+            q = db.query(Invoice.id, Invoice.invoice_number).filter(
+                Invoice.enquiry_id == invoice.enquiry_id,
+                Invoice.item_type.in_(["all", "main"]),
+            )
+            if dual:
+                q = q.filter(Invoice.currency_mode == currency_mode)
+            existing = q.first()
             if existing:
+                label = f" ({currency_mode.upper()})" if dual else ""
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Main invoice already recorded for this job ({existing[1]})",
+                    detail=f"Main invoice{label} already recorded for this job ({existing[1]})",
                 )
 
         allocated_number = allocate_invoice_number(db, invoice.invoice_date)
@@ -109,6 +125,21 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
         payload = {k: v for k, v in invoice.dict().items() if k in allowed_fields}
         payload["invoice_number"] = allocated_number
         payload["item_type"] = item_type
+        if not is_additional:
+            invoicing_type = client_invoicing_service.get_customer_invoicing_type_for_enquiry(
+                db, invoice.enquiry_id
+            )
+            if client_invoicing_service.is_dual_usd_inr_invoicing(invoicing_type):
+                cm = (invoice.currency_mode or "inr").strip().lower()
+                payload["currency_mode"] = cm if cm in ("usd", "inr") else "inr"
+                if not payload.get("remark"):
+                    payload["remark"] = (
+                        "USD invoice (all line items in USD)"
+                        if payload["currency_mode"] == "usd"
+                        else "INR invoice (all line items in INR)"
+                    )
+            else:
+                payload["currency_mode"] = None
         if not payload.get("remark"):
             payload["remark"] = "Additional invoice" if is_additional else "Main invoice"
 
@@ -144,6 +175,7 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
 def get_invoice_details(
     enquiry_id: int,
     item_type: str = Query("all"),
+    currency_mode: Optional[str] = Query(None),
     additional_doc_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
 ):
@@ -164,12 +196,14 @@ def get_invoice_details(
             .first()
         )
     else:
-        invoice = (
-            db.query(Invoice)
-            .filter(Invoice.enquiry_id == enquiry_id, Invoice.item_type.in_(["all", "main"]))
-            .order_by(Invoice.id.desc())
-            .first()
+        q = db.query(Invoice).filter(
+            Invoice.enquiry_id == enquiry_id,
+            Invoice.item_type.in_(["all", "main"]),
         )
+        cm = (currency_mode or "").strip().lower()
+        if cm in ("usd", "inr"):
+            q = q.filter(Invoice.currency_mode == cm)
+        invoice = q.order_by(Invoice.id.desc()).first()
     if not invoice:
         # Return empty or 404? 
         # Better to return null so frontend knows to show empty form
@@ -249,6 +283,7 @@ def list_all_invoices(db: Session = Depends(get_db)):
             "item_type": getattr(inv, "item_type", "all"),
             "remark": getattr(inv, "remark", None),
             "additional_doc_id": getattr(inv, "additional_doc_id", None),
+            "currency_mode": getattr(inv, "currency_mode", None),
         }
         result.append(inv_dict)
     return result
@@ -288,6 +323,7 @@ def generate_invoice_pdf(
     irn: str = None,
     customer_invoice_no: Optional[str] = None,
     item_type: str = "all",      # 'all', 'main', or 'additional'
+    currency_mode: Optional[str] = None,
     additional_doc_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
@@ -319,9 +355,15 @@ def generate_invoice_pdf(
         if saved_inv and saved_inv.irn:
             irn = saved_inv.irn
 
-    # Fetch Client Data
-    # Assuming ClientMaster is linked via enquiry.client_name or similar? 
-    # For now, use enquiry details.
+    presentation_mode = (currency_mode or "inr").strip().lower()
+    if presentation_mode not in ("usd", "inr"):
+        presentation_mode = "inr"
+    invoicing_type = client_invoicing_service.get_customer_invoicing_type_for_enquiry(
+        db, enquiry_id
+    )
+    if not client_invoicing_service.is_dual_usd_inr_invoicing(invoicing_type):
+        presentation_mode = "inr"
+    amount_total_header = "Amt in USD" if presentation_mode == "usd" else "Amt in INR"
 
     # 3. PDF Setup
     buffer = io.BytesIO()
@@ -537,7 +579,7 @@ def generate_invoice_pdf(
     
     # Charge Details Table
     col_widths = [0.4*inch, 1.3*inch, 0.6*inch, 0.4*inch, 0.7*inch, 0.4*inch, 0.7*inch, 0.45*inch, 0.75*inch, 0.4*inch, 0.65*inch, 0.85*inch]
-    headers = ["SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt", "ROE", "Taxable Amt", "Rate", "IGST", "Amt in INR"]
+    headers = ["SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt", "ROE", "Taxable Amt", "Rate", "IGST", amount_total_header]
     
     table_data = [headers]
     grand_total_taxable = 0.0
@@ -591,28 +633,31 @@ def generate_invoice_pdf(
                     gst_pct = 18.0
 
                 qty = charge.quantity
-                curr = charge.currency or "INR"
-
                 unit_val = f"{qty:.2f}"
-                rate_val = f"{vendor_rate_per_unit:.2f}"
 
                 try:
-                    curr_amt, roe_display, taxable_amt = invoice_quote_service.taxable_inr_for_invoice_charge(
-                        charge, vendor_rate_per_unit
+                    rate_disp, curr_amt, roe_display, disp_curr, taxable_amt = (
+                        invoice_quote_service.invoice_line_amounts(
+                            charge,
+                            vendor_rate_per_unit,
+                            containers,
+                            currency_mode=presentation_mode,
+                        )
                     )
                 except ValueError as exc:
                     raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+                rate_val = f"{rate_disp:.2f}"
                 igst_amt = taxable_amt * (gst_pct / 100.0)
-                total_inr = taxable_amt + igst_amt
+                line_total = taxable_amt + igst_amt
                 grand_total_taxable += taxable_amt
-                grand_total_inr += total_inr
+                grand_total_inr += line_total
 
                 row = [
                     Paragraph(str(sn), t_style_row),
                     Paragraph(charge.charge_description, t_style_row_left),
                     Paragraph(sac_code, t_style_row),
-                    Paragraph(curr, t_style_row),
+                    Paragraph(disp_curr, t_style_row),
                     Paragraph(rate_val, t_style_row),
                     Paragraph(unit_val, t_style_row),
                     Paragraph(f"{curr_amt:.2f}", t_style_row),
@@ -620,7 +665,7 @@ def generate_invoice_pdf(
                     Paragraph(f"{taxable_amt:.2f}", t_style_row),
                     Paragraph(f"{gst_pct:.0f}%", t_style_row),
                     Paragraph(f"{igst_amt:.2f}", t_style_row),
-                    Paragraph(f"{total_inr:.2f}", t_style_row),
+                    Paragraph(f"{line_total:.2f}", t_style_row),
                 ]
                 table_data.append(row)
                 sn += 1
@@ -667,32 +712,36 @@ def generate_invoice_pdf(
             curr = (metadata.get("currency") or "INR").upper()
             meta_roe = metadata.get("roe", metadata.get("exchange_rate"))
             try:
-                curr_amt, roe_display, taxable_amt = (
-                    invoice_quote_service.taxable_inr_for_additional_amount(
-                        curr_amt, curr, containers, exchange_rate=meta_roe
+                rate_disp, curr_amt_disp, roe_display, disp_curr, taxable_amt = (
+                    invoice_quote_service.additional_line_amounts(
+                        curr_amt,
+                        curr,
+                        containers,
+                        exchange_rate=meta_roe,
+                        currency_mode=presentation_mode,
                     )
                 )
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
 
             igst_amt = taxable_amt * (gst_pct / 100.0)
-            total_inr = taxable_amt + igst_amt
+            line_total = taxable_amt + igst_amt
             grand_total_taxable += taxable_amt
-            grand_total_inr += total_inr
+            grand_total_inr += line_total
 
             table_data.append([
                 Paragraph(str(sn), t_style_row),
                 Paragraph(desc_val, t_style_row_left),
                 Paragraph(sac_code, t_style_row),
-                Paragraph(curr, t_style_row),
-                Paragraph(f"{curr_amt:.2f}", t_style_row), # Rate
-                Paragraph("1.00", t_style_row),           # Qty
-                Paragraph(f"{curr_amt:.2f}", t_style_row), # Curr Amt
+                Paragraph(disp_curr, t_style_row),
+                Paragraph(f"{rate_disp:.2f}", t_style_row),
+                Paragraph("1.00", t_style_row),
+                Paragraph(f"{curr_amt_disp:.2f}", t_style_row),
                 Paragraph(f"{roe_display:.2f}", t_style_row),
                 Paragraph(f"{taxable_amt:.2f}", t_style_row),
                 Paragraph(f"{gst_pct:.0f}%", t_style_row),
                 Paragraph(f"{igst_amt:.2f}", t_style_row),
-                Paragraph(f"{total_inr:.2f}", t_style_row),
+                Paragraph(f"{line_total:.2f}", t_style_row),
             ])
             sn += 1
             

@@ -30,6 +30,8 @@ class ClientMaster(Base):
     billing_method = Column(String) # Fixed: FCM, RCM
     gst_percent = Column(String) # Fixed: 18%, 5%
     billing_type = Column(String) # Fixed: Neft, Cheque
+    # standard | dual_usd_inr — see config.CUSTOMER_INVOICING_TYPES
+    customer_invoicing_type = Column(String, default="standard")
     payment_terms = Column(String) # Fixed: Against BL, Credit
     credit_amount = Column(Float, nullable=True)
     credit_period = Column(Integer, nullable=True) # Days

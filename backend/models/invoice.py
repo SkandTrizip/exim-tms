@@ -16,6 +16,8 @@ class Invoice(Base):
     irn = Column(String, nullable=True)
     # 'all'/'main' -> main invoice, 'additional' -> additional invoice
     item_type = Column(String, default="all")
+    # For dual_usd_inr clients: 'usd' | 'inr' on main invoices; null on standard clients
+    currency_mode = Column(String, nullable=True)
     remark = Column(String, nullable=True)
     # Links an additional invoice row to the uploaded ShipmentDocument (document_type='additionalInvoice')
     additional_doc_id = Column(Integer, nullable=True)

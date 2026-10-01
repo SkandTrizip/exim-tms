@@ -26,6 +26,7 @@ class ClientMasterBase(BaseModel):
     billing_method: Optional[str] = None
     gst_percent: Optional[str] = None
     billing_type: Optional[str] = None
+    customer_invoicing_type: Optional[str] = None
     payment_terms: Optional[str] = None
     credit_amount: Optional[float] = None
     credit_period: Optional[int] = None

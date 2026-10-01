@@ -232,7 +232,9 @@ function renderFinanceActionCell(e, subView, completionTab = 'pending') {
         const isAdditional = e && e.__finance_invoice_kind === 'additional';
         const additionalOpts = isAdditional
             ? { item_type: 'additional', additional_doc_id: e.__finance_additional_doc_id || null }
-            : null;
+            : (e.__finance_currency_mode
+                ? { currency_mode: e.__finance_currency_mode }
+                : null);
         if (isCompleted || e.invoice_complete) {
             return renderFinanceDrawerActionBtn('finance-invoice', e.id, { primary: false, icon: 'check-circle', label: 'View', title: 'View recorded invoice' }, additionalOpts);
         }
@@ -445,14 +447,53 @@ function isInvoiceCreateCompleted(invoice) {
     return !!(invoiceNumber && irn);
 }
 
+async function fetchFinanceInvoicingTypesCache() {
+    const ops = enquiries.filter((e) => e.stage >= 3 && !e.is_void);
+    const ids = ops.map((e) => e.id);
+    if (!ids.length) {
+        window._financeInvoicingTypeByEnquiry = {};
+        return {};
+    }
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/client/invoicing-types-by-enquiry`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enquiry_ids: ids }),
+        });
+        window._financeInvoicingTypeByEnquiry = res.ok ? await res.json() : {};
+    } catch (e) {
+        console.error('fetchFinanceInvoicingTypesCache:', e);
+        window._financeInvoicingTypeByEnquiry = {};
+    }
+    return window._financeInvoicingTypeByEnquiry || {};
+}
+
+function getCustomerInvoicingType(enquiryId) {
+    const map = window._financeInvoicingTypeByEnquiry || {};
+    return map[enquiryId] || map[String(enquiryId)] || 'standard';
+}
+
+function isDualInvoicingEnquiry(enquiryId) {
+    return getCustomerInvoicingType(enquiryId) === 'dual_usd_inr';
+}
+
+function getMainInvoiceForEnquiry(enquiryId, currencyMode) {
+    const byMode = (window._financeMainInvoicesByEnquiryMode || {})[enquiryId] || {};
+    if (currencyMode === 'usd') return byMode.usd || null;
+    if (currencyMode === 'inr') return byMode.inr || null;
+    return getInvoiceForEnquiry(enquiryId);
+}
+
 async function fetchFinanceInvoicesCache() {
     try {
+        await fetchFinanceInvoicingTypesCache();
         const res = await fetch(`${CONFIG.API_URL}/api/invoice/list`);
         if (!res.ok) return window._financeInvoiceByEnquiry || {};
         const payload = await res.json();
         if (!Array.isArray(payload)) return window._financeInvoiceByEnquiry || {};
         window._financeInvoicesList = payload;
         const byEnquiry = {};
+        const mainByEnquiryMode = {};
         const additionalByEnquiryDoc = {};
         for (const inv of payload) {
             if (inv.enquiry_id == null) continue;
@@ -465,8 +506,12 @@ async function fetchFinanceInvoicesCache() {
             }
             // main invoice (all/main)
             byEnquiry[inv.enquiry_id] = inv;
+            const cm = String(inv.currency_mode || 'inr').toLowerCase() === 'usd' ? 'usd' : 'inr';
+            if (!mainByEnquiryMode[inv.enquiry_id]) mainByEnquiryMode[inv.enquiry_id] = {};
+            mainByEnquiryMode[inv.enquiry_id][cm] = inv;
         }
         window._financeInvoiceByEnquiry = byEnquiry;
+        window._financeMainInvoicesByEnquiryMode = mainByEnquiryMode;
         window._financeAdditionalInvoiceByEnquiryDoc = additionalByEnquiryDoc;
         return byEnquiry;
     } catch (e) {
@@ -485,23 +530,28 @@ function getAdditionalInvoiceForEnquiryDoc(enquiryId, docId) {
     return byDoc[String(docId)] || null;
 }
 
-function getFinanceInvoiceKindLabel(kind) {
+function getFinanceInvoiceKindLabel(kind, currencyMode) {
     if (kind === 'additional') return 'Additional invoice';
-    if (kind === 'main') return 'Main invoice';
+    if (kind === 'main') {
+        if (currencyMode === 'usd') return 'USD invoice';
+        if (currencyMode === 'inr') return 'INR invoice';
+        return 'Main invoice';
+    }
     return '';
 }
 
 function renderFinanceInvoiceTypeBadge(e) {
-    const label = getFinanceInvoiceKindLabel(e && e.__finance_invoice_kind);
+    const label = getFinanceInvoiceKindLabel(e && e.__finance_invoice_kind, e && e.__finance_currency_mode);
     if (!label) return '';
     const isAdditional = e.__finance_invoice_kind === 'additional';
-    const bg = isAdditional ? '#ede9fe' : '#e0f2fe';
-    const color = isAdditional ? '#6d28d9' : '#0369a1';
+    const isUsd = e.__finance_currency_mode === 'usd';
+    const bg = isAdditional ? '#ede9fe' : (isUsd ? '#fef3c7' : '#e0f2fe');
+    const color = isAdditional ? '#6d28d9' : (isUsd ? '#b45309' : '#0369a1');
     return `<span class="finance-invoice-type-badge" style="display:inline-block;margin-top:6px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;background:${bg};color:${color};">${escapeHtml(label)}</span>`;
 }
 
 function renderFinanceInvoiceRemark(e) {
-    const label = (e && e.__finance_remark) || getFinanceInvoiceKindLabel(e && e.__finance_invoice_kind);
+    const label = (e && e.__finance_remark) || getFinanceInvoiceKindLabel(e && e.__finance_invoice_kind, e && e.__finance_currency_mode);
     if (!label) return '';
     return `<div class="cell-muted" style="margin-top:4px;font-size:12px;">Remark: ${escapeHtml(label)}</div>`;
 }
@@ -520,15 +570,33 @@ function buildFinanceInvoiceTaskRows(operationalEnquiries, bulkStatus, additiona
             payment_done: isShippingLinePaymentDone(s),
         };
 
-        const mainInv = getInvoiceForEnquiry(e.id);
-        const mainComplete = isInvoiceCreateCompleted(mainInv);
-        if (showCompleted ? mainComplete : !mainComplete) {
-            rows.push({
-                ...base,
-                __finance_invoice_kind: 'main',
-                __finance_remark: 'Main invoice',
-                invoice_complete: mainComplete,
-            });
+        if (isDualInvoicingEnquiry(e.id)) {
+            for (const mode of ['usd', 'inr']) {
+                const mainInv = getMainInvoiceForEnquiry(e.id, mode);
+                const mainComplete = isInvoiceCreateCompleted(mainInv);
+                if (showCompleted ? mainComplete : !mainComplete) {
+                    rows.push({
+                        ...base,
+                        __finance_invoice_kind: 'main',
+                        __finance_currency_mode: mode,
+                        __finance_remark: mode === 'usd'
+                            ? 'USD invoice (all lines in USD)'
+                            : 'INR invoice (all lines in INR)',
+                        invoice_complete: mainComplete,
+                    });
+                }
+            }
+        } else {
+            const mainInv = getInvoiceForEnquiry(e.id);
+            const mainComplete = isInvoiceCreateCompleted(mainInv);
+            if (showCompleted ? mainComplete : !mainComplete) {
+                rows.push({
+                    ...base,
+                    __finance_invoice_kind: 'main',
+                    __finance_remark: 'Main invoice',
+                    invoice_complete: mainComplete,
+                });
+            }
         }
 
         if (showCompleted) {
@@ -576,8 +644,15 @@ function countFinanceInvoiceTasks(completionTab) {
         const s = cachedBulkStatus[e.id];
         if (!s || !s.shipping_invoice || !s.bl_received) continue;
 
-        const mainComplete = isInvoiceCreateCompleted(getInvoiceForEnquiry(e.id));
-        if (showCompleted ? mainComplete : !mainComplete) count += 1;
+        if (isDualInvoicingEnquiry(e.id)) {
+            for (const mode of ['usd', 'inr']) {
+                const mainComplete = isInvoiceCreateCompleted(getMainInvoiceForEnquiry(e.id, mode));
+                if (showCompleted ? mainComplete : !mainComplete) count += 1;
+            }
+        } else {
+            const mainComplete = isInvoiceCreateCompleted(getInvoiceForEnquiry(e.id));
+            if (showCompleted ? mainComplete : !mainComplete) count += 1;
+        }
 
         if (showCompleted) {
             const allInvoices = window._financeInvoicesList || [];

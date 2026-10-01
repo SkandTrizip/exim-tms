@@ -3,6 +3,8 @@ let clientData = null;
 let creditPeriod = 0;
 let hasSavedInvoice = false;
 let additionalDocs = [];
+/** @type {'standard'|'dual_usd_inr'} */
+let customerInvoicingType = 'standard';
 
 /**
  * Strip the branch suffix from a client name for invoicing.
@@ -115,6 +117,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     enquiryId = urlParams.get('enquiry_id');
     const presetItemType = (urlParams.get('item_type') || '').trim();
     const presetAdditionalDocId = (urlParams.get('additional_doc_id') || '').trim();
+    const presetCurrencyMode = (urlParams.get('currency_mode') || '').trim().toLowerCase();
 
     if (!enquiryId) {
         alert('No enquiry ID found');
@@ -134,7 +137,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (typeEl) typeEl.value = presetItemType;
     }
 
-    await fetchAllData({ presetAdditionalDocId });
+    await fetchAllData({ presetAdditionalDocId, presetCurrencyMode });
 
     // Listen for invoice date changes to update due date and preview invoice number
     document.getElementById('invoice_date').addEventListener('change', function () {
@@ -144,11 +147,37 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     // Reload saved invoice per type (additional always gets a fresh number + empty IRN until saved)
     document.getElementById('invoice_item_type').addEventListener('change', async function () {
+        syncInvoiceCurrencyModeVisibility();
         await refreshInvoiceDetailsForSelection();
     });
+
+    const currencyModeEl = document.getElementById('invoice_currency_mode');
+    if (currencyModeEl) {
+        currencyModeEl.addEventListener('change', async function () {
+            await refreshInvoiceDetailsForSelection();
+        });
+    }
 });
 
-async function fetchAllData({ presetAdditionalDocId } = {}) {
+function isDualInvoicingClient() {
+    return customerInvoicingType === 'dual_usd_inr';
+}
+
+function syncInvoiceCurrencyModeVisibility() {
+    const row = document.getElementById('invoiceCurrencyModeRow');
+    const select = document.getElementById('invoice_currency_mode');
+    if (!row || !select) return;
+    const show = isDualInvoicingClient() && getSelectedItemType() !== 'additional';
+    row.style.display = show ? '' : 'none';
+}
+
+function getSelectedCurrencyMode() {
+    if (!isDualInvoicingClient() || getSelectedItemType() === 'additional') return null;
+    const raw = (document.getElementById('invoice_currency_mode')?.value || 'inr').trim().toLowerCase();
+    return raw === 'usd' ? 'usd' : 'inr';
+}
+
+async function fetchAllData({ presetAdditionalDocId, presetCurrencyMode } = {}) {
     try {
         const [enquiryRes, statusRes, clientRes, quotesRes] = await Promise.all([
             fetch(`${CONFIG.API_URL}/api/enquiry/${enquiryId}`),
@@ -200,6 +229,14 @@ async function fetchAllData({ presetAdditionalDocId } = {}) {
                 const master = data.master;
 
                 creditPeriod = master.credit_period || 0;
+                customerInvoicingType = (master.customer_invoicing_type || 'standard').trim().toLowerCase();
+                if (customerInvoicingType !== 'dual_usd_inr') customerInvoicingType = 'standard';
+
+                const currencySelect = document.getElementById('invoice_currency_mode');
+                if (currencySelect && presetCurrencyMode && ['usd', 'inr'].includes(presetCurrencyMode)) {
+                    currencySelect.value = presetCurrencyMode;
+                }
+                syncInvoiceCurrencyModeVisibility();
 
                 // Customer Name, Adrs & GST (Origin)
                 // Use clean company name (strip branch suffix) on invoice
@@ -291,6 +328,9 @@ async function refreshInvoiceDetailsForSelection() {
     if (itemType === 'additional') {
         const docId = getSelectedAdditionalDocId();
         if (docId) params.set('additional_doc_id', String(docId));
+    } else {
+        const cm = getSelectedCurrencyMode();
+        if (cm) params.set('currency_mode', cm);
     }
 
     // New additional invoice (no doc selected yet): never reuse main invoice number/IRN.
@@ -365,17 +405,22 @@ function applyInvoiceRatesPreview(data) {
 
     const count = (data.lines || []).length;
     if (banner) {
+        const dualNote = isDualInvoicingClient()
+            ? ` Dual-invoice client: PDF uses <strong>${(getSelectedCurrencyMode() || 'inr').toUpperCase()}</strong> presentation for all line items.`
+            : '';
         if (data.source === 'final' && count > 0) {
             banner.hidden = false;
             banner.innerHTML =
                 '<i class="fas fa-info-circle" aria-hidden="true"></i> ' +
                 `Using <strong>post-SI final quote</strong> client rates (${count} billable charge${count === 1 ? '' : 's'}). ` +
-                'Exchange rates come from each line’s Client Ex. Rate on the quote.';
+                'Exchange rates come from each line’s Client Ex. Rate on the quote.' +
+                dualNote;
         } else if (count > 0) {
             banner.hidden = false;
             banner.innerHTML =
                 '<i class="fas fa-info-circle" aria-hidden="true"></i> ' +
-                `Using <strong>accepted quote</strong> client rates (${count} billable charge${count === 1 ? '' : 's'}).`;
+                `Using <strong>accepted quote</strong> client rates (${count} billable charge${count === 1 ? '' : 's'}).` +
+                dualNote;
         } else {
             banner.hidden = true;
         }
@@ -426,6 +471,8 @@ async function generateInvoice(type = 'draft') {
             invoice_type: type,           // 'draft' or 'tax'
             item_type: document.getElementById('invoice_item_type').value || 'all'
         });
+        const pdfCurrencyMode = getSelectedCurrencyMode();
+        if (pdfCurrencyMode) params.append('currency_mode', pdfCurrencyMode);
         if (customerInvNo) params.append('customer_invoice_no', customerInvNo);
         if (irnValue) params.append('irn', irnValue);
         const addDocId = getSelectedAdditionalDocId();
@@ -510,6 +557,7 @@ async function recordInvoice() {
     const customerInvNo = getCustomerInvoiceNo();
     const itemType = getSelectedItemType();
     const additionalDocId = itemType === 'additional' ? getSelectedAdditionalDocId() : null;
+    const currencyMode = getSelectedCurrencyMode();
     const invoiceData = {
         enquiry_id: parseInt(enquiryId),
         place_of_supply: document.getElementById('place_of_supply').value,
@@ -518,8 +566,15 @@ async function recordInvoice() {
         invoice_date: document.getElementById('invoice_date').value,
         payment_due_date: document.getElementById('payment_due_date').value,
         item_type: itemType || 'all',
+        currency_mode: currencyMode,
         additional_doc_id: additionalDocId,
-        remark: itemType === 'additional' ? 'Additional invoice' : 'Main invoice'
+        remark: itemType === 'additional'
+            ? 'Additional invoice'
+            : (currencyMode === 'usd'
+                ? 'USD invoice (all line items in USD)'
+                : (currencyMode === 'inr' && isDualInvoicingClient()
+                    ? 'INR invoice (all line items in INR)'
+                    : 'Main invoice'))
     };
 
     // Ensure dates are valid

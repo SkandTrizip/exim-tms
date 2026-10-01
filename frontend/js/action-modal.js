@@ -715,6 +715,7 @@ window.openActionModal = async function openActionModal(mode, enquiryId, quoteSt
         const params = new URLSearchParams({ enquiry_id: String(enquiryId), embedded: '1' });
         if (o && o.item_type) params.set('item_type', String(o.item_type));
         if (o && o.additional_doc_id) params.set('additional_doc_id', String(o.additional_doc_id));
+        if (o && o.currency_mode) params.set('currency_mode', String(o.currency_mode));
         bodyEl.innerHTML = renderIframeSection(`/create-invoice?${params.toString()}`);
         return;
     }

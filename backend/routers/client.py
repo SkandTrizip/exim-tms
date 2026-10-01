@@ -9,8 +9,14 @@ from backend.models.client_master import ClientMaster
 from backend.models.client_origin import ClientOrigin
 from backend.schemas.client_master import ClientMaster as ClientMasterSchema, ClientMasterCreate
 from backend.schemas.client_origin import ClientOrigin as ClientOriginSchema, ClientOriginCreate
+from pydantic import BaseModel
+from backend.services import client_invoicing_service
 
 router = APIRouter()
+
+
+class EnquiryInvoicingTypesRequest(BaseModel):
+    enquiry_ids: List[int]
 
 # ── List endpoints ─────────────────────────────────────────────────────────────
 
@@ -167,6 +173,17 @@ def update_client_master(id: int, data: ClientMasterCreate, db: Session = Depend
 @router.get("/masters/by-origin/{origin_id}", response_model=List[ClientMasterSchema])
 def get_masters_by_origin(origin_id: int, db: Session = Depends(get_db)):
     return db.query(ClientMaster).filter(ClientMaster.origin_id == origin_id).all()
+
+@router.post("/invoicing-types-by-enquiry")
+def invoicing_types_by_enquiry(
+    body: EnquiryInvoicingTypesRequest,
+    db: Session = Depends(get_db),
+):
+    """Map enquiry_id → customer_invoicing_type (standard | dual_usd_inr)."""
+    return client_invoicing_service.get_customer_invoicing_types_for_enquiries(
+        db, body.enquiry_ids or []
+    )
+
 
 @router.get("/master/by-enquiry/{enquiry_id}")
 def get_client_details_for_enquiry(enquiry_id: int, db: Session = Depends(get_db)):

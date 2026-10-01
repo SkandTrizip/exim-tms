@@ -111,6 +111,47 @@ def client_roe_for_currency(containers: List[Any], currency: str) -> Optional[fl
     return None
 
 
+def _usd_roe_from_containers(containers: List[Any]) -> float:
+    roe = client_roe_for_currency(containers, "USD")
+    if roe is None or roe <= 0:
+        raise ValueError(
+            "Missing client USD exchange rate. Set Client Ex. Rate on a USD line "
+            "in the final quote before generating a USD invoice."
+        )
+    return roe
+
+
+def invoice_line_amounts(
+    charge,
+    vendor_rate: float,
+    containers: List[Any],
+    currency_mode: Optional[str] = None,
+) -> Tuple[float, float, float, str, float]:
+    """
+    Returns (rate_per_unit, curr_amt, roe_display, display_currency, taxable_amt)
+    in the invoice presentation currency (INR default, or all-USD for dual clients).
+    """
+    mode = (currency_mode or "inr").strip().lower()
+    qty = float(charge.quantity or 0)
+    curr = (charge.currency or "INR").upper()
+
+    if mode != "usd":
+        curr_amt, roe_display, taxable_amt = taxable_inr_for_invoice_charge(
+            charge, vendor_rate
+        )
+        return vendor_rate, curr_amt, roe_display, curr, taxable_amt
+
+    if curr == "USD":
+        curr_amt = vendor_rate * qty
+        return vendor_rate, curr_amt, 1.0, "USD", curr_amt
+
+    curr_amt_inr = vendor_rate * qty
+    usd_roe = _usd_roe_from_containers(containers)
+    rate_usd = vendor_rate / usd_roe
+    curr_amt_usd = curr_amt_inr / usd_roe
+    return rate_usd, curr_amt_usd, 1.0, "USD", curr_amt_usd
+
+
 def taxable_inr_for_invoice_charge(
     charge,
     vendor_rate: float,
@@ -132,6 +173,32 @@ def taxable_inr_for_invoice_charge(
         roe_display = 1.0
         taxable_amt = curr_amt
     return curr_amt, roe_display, taxable_amt
+
+
+def additional_line_amounts(
+    amount: float,
+    currency: str,
+    containers: List[Any],
+    exchange_rate: Optional[float] = None,
+    currency_mode: Optional[str] = None,
+) -> Tuple[float, float, float, str, float]:
+    """Same shape as invoice_line_amounts for additional invoice metadata rows."""
+    mode = (currency_mode or "inr").strip().lower()
+    curr = (currency or "INR").upper()
+    curr_amt = float(amount or 0)
+
+    if mode != "usd":
+        curr_amt, roe_display, taxable_amt = taxable_inr_for_additional_amount(
+            amount, currency, containers, exchange_rate=exchange_rate
+        )
+        return curr_amt, curr_amt, roe_display, curr, taxable_amt
+
+    if curr == "USD":
+        return curr_amt, curr_amt, 1.0, "USD", curr_amt
+
+    usd_roe = _usd_roe_from_containers(containers)
+    curr_amt_usd = curr_amt / usd_roe
+    return curr_amt_usd, curr_amt_usd, 1.0, "USD", curr_amt_usd
 
 
 def taxable_inr_for_additional_amount(
