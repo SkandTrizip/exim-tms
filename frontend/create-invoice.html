@@ -237,9 +237,9 @@
                         </div>
                         <div class="form-row" id="invoiceCurrencyModeRow" style="display:none;">
                             <span class="field-label">Invoice Currency</span>
-                            <select id="invoice_currency_mode" class="manual-input" title="Dual-invoice clients require separate USD and INR tax invoices">
-                                <option value="inr">INR — all line items in INR</option>
-                                <option value="usd">USD — all line items in USD</option>
+                            <select id="invoice_currency_mode" class="manual-input" title="Dual-invoice clients: one tax invoice for INR quote lines, one for USD quote lines">
+                                <option value="inr">INR invoice — INR charge lines only</option>
+                                <option value="usd">USD invoice — USD charge lines only</option>
                             </select>
                         </div>
                         <div class="form-row" id="additionalInvoiceRefRow" style="display:none;">

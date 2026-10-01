@@ -155,6 +155,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (currencyModeEl) {
         currencyModeEl.addEventListener('change', async function () {
             await refreshInvoiceDetailsForSelection();
+            await fetchInvoiceRatesPreview();
         });
     }
 });
@@ -390,7 +391,13 @@ async function refreshInvoiceDetailsForSelection() {
 
 async function fetchInvoiceRatesPreview() {
     try {
-        const res = await fetch(`${CONFIG.API_URL}/api/invoice/rates-preview/${enquiryId}`);
+        const params = new URLSearchParams();
+        const cm = getSelectedCurrencyMode();
+        if (cm) params.set('currency_mode', cm);
+        const qs = params.toString();
+        const res = await fetch(
+            `${CONFIG.API_URL}/api/invoice/rates-preview/${enquiryId}${qs ? `?${qs}` : ''}`
+        );
         if (!res.ok) return;
         const data = await res.json();
         applyInvoiceRatesPreview(data);
@@ -406,7 +413,7 @@ function applyInvoiceRatesPreview(data) {
     const count = (data.lines || []).length;
     if (banner) {
         const dualNote = isDualInvoicingClient()
-            ? ` Dual-invoice client: PDF uses <strong>${(getSelectedCurrencyMode() || 'inr').toUpperCase()}</strong> presentation for all line items.`
+            ? ` Dual-invoice client: includes only <strong>${(getSelectedCurrencyMode() || 'inr').toUpperCase()}</strong> charge lines from the quote.`
             : '';
         if (data.source === 'final' && count > 0) {
             banner.hidden = false;
@@ -571,9 +578,9 @@ async function recordInvoice() {
         remark: itemType === 'additional'
             ? 'Additional invoice'
             : (currencyMode === 'usd'
-                ? 'USD invoice (all line items in USD)'
+                ? 'USD invoice (USD charge lines only)'
                 : (currencyMode === 'inr' && isDualInvoicingClient()
-                    ? 'INR invoice (all line items in INR)'
+                    ? 'INR invoice (INR charge lines only)'
                     : 'Main invoice'))
     };
 

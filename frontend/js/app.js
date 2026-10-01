@@ -580,8 +580,8 @@ function buildFinanceInvoiceTaskRows(operationalEnquiries, bulkStatus, additiona
                         __finance_invoice_kind: 'main',
                         __finance_currency_mode: mode,
                         __finance_remark: mode === 'usd'
-                            ? 'USD invoice (all lines in USD)'
-                            : 'INR invoice (all lines in INR)',
+                            ? 'USD invoice (USD charge lines)'
+                            : 'INR invoice (INR charge lines)',
                         invoice_complete: mainComplete,
                     });
                 }

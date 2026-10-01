@@ -122,7 +122,7 @@ CUSTOMER_INVOICING_STANDARD = "standard"
 CUSTOMER_INVOICING_DUAL_USD_INR = "dual_usd_inr"
 CUSTOMER_INVOICING_TYPES = {
     CUSTOMER_INVOICING_STANDARD: "Standard (single invoice, INR presentation)",
-    CUSTOMER_INVOICING_DUAL_USD_INR: "Dual — USD invoice + INR invoice (all line items each)",
+    CUSTOMER_INVOICING_DUAL_USD_INR: "Dual — USD charges invoice + INR charges invoice",
 }
 
 def get_frontend_config() -> dict:

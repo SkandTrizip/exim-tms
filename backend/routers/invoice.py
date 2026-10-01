@@ -134,9 +134,9 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
                 payload["currency_mode"] = cm if cm in ("usd", "inr") else "inr"
                 if not payload.get("remark"):
                     payload["remark"] = (
-                        "USD invoice (all line items in USD)"
+                        "USD invoice (USD charge lines only)"
                         if payload["currency_mode"] == "usd"
-                        else "INR invoice (all line items in INR)"
+                        else "INR invoice (INR charge lines only)"
                     )
             else:
                 payload["currency_mode"] = None
@@ -212,11 +212,21 @@ def get_invoice_details(
 
 
 @router.get("/rates-preview/{enquiry_id}")
-def get_invoice_rates_preview(enquiry_id: int, db: Session = Depends(get_db)):
+def get_invoice_rates_preview(
+    enquiry_id: int,
+    currency_mode: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
     """Charge lines for create-invoice (final quote preferred)."""
     containers, source = invoice_quote_service.get_invoice_charge_containers(db, enquiry_id)
     if not source:
         raise HTTPException(status_code=404, detail="No quote found for this enquiry")
+
+    invoicing_type = client_invoicing_service.get_customer_invoicing_type_for_enquiry(
+        db, enquiry_id
+    )
+    dual_split = client_invoicing_service.is_dual_usd_inr_invoicing(invoicing_type)
+    cm = (currency_mode or "").strip().lower() if dual_split else None
 
     lines = []
     for container in sorted(containers, key=lambda c: c.container_sequence or 0):
@@ -230,6 +240,9 @@ def get_invoice_rates_preview(enquiry_id: int, db: Session = Depends(get_db)):
             if vendor_rate is None:
                 continue
             curr = (charge.currency or "INR").upper()
+            if dual_split and cm in ("usd", "inr"):
+                if not invoice_quote_service.belongs_to_currency_invoice(curr, cm):
+                    continue
             vendor_ex = invoice_quote_service.client_exchange_rate_for_invoice(charge)
             lines.append(
                 {
@@ -355,15 +368,17 @@ def generate_invoice_pdf(
         if saved_inv and saved_inv.irn:
             irn = saved_inv.irn
 
-    presentation_mode = (currency_mode or "inr").strip().lower()
-    if presentation_mode not in ("usd", "inr"):
-        presentation_mode = "inr"
+    invoice_currency_bucket = (currency_mode or "inr").strip().lower()
+    if invoice_currency_bucket not in ("usd", "inr"):
+        invoice_currency_bucket = "inr"
     invoicing_type = client_invoicing_service.get_customer_invoicing_type_for_enquiry(
         db, enquiry_id
     )
-    if not client_invoicing_service.is_dual_usd_inr_invoicing(invoicing_type):
-        presentation_mode = "inr"
-    amount_total_header = "Amt in USD" if presentation_mode == "usd" else "Amt in INR"
+    dual_currency_split = client_invoicing_service.is_dual_usd_inr_invoicing(invoicing_type)
+    apply_line_currency_split = dual_currency_split and item_type in ("all", "main")
+    if not apply_line_currency_split:
+        invoice_currency_bucket = None
+    amount_total_header = "Amt in INR"
 
     # 3. PDF Setup
     buffer = io.BytesIO()
@@ -607,6 +622,12 @@ def generate_invoice_pdf(
                 if vendor_rate_per_unit is None:
                     continue
 
+                line_curr = (charge.currency or "INR").upper()
+                if apply_line_currency_split and not invoice_quote_service.belongs_to_currency_invoice(
+                    line_curr, invoice_currency_bucket
+                ):
+                    continue
+
                 desc_lower = (charge.charge_description or "").lower()
 
                 # Determine SAC and GST pct
@@ -636,18 +657,15 @@ def generate_invoice_pdf(
                 unit_val = f"{qty:.2f}"
 
                 try:
-                    rate_disp, curr_amt, roe_display, disp_curr, taxable_amt = (
-                        invoice_quote_service.invoice_line_amounts(
-                            charge,
-                            vendor_rate_per_unit,
-                            containers,
-                            currency_mode=presentation_mode,
+                    curr_amt, roe_display, taxable_amt = (
+                        invoice_quote_service.taxable_inr_for_invoice_charge(
+                            charge, vendor_rate_per_unit
                         )
                     )
                 except ValueError as exc:
                     raise HTTPException(status_code=422, detail=str(exc)) from exc
 
-                rate_val = f"{rate_disp:.2f}"
+                rate_val = f"{vendor_rate_per_unit:.2f}"
                 igst_amt = taxable_amt * (gst_pct / 100.0)
                 line_total = taxable_amt + igst_amt
                 grand_total_taxable += taxable_amt
@@ -657,7 +675,7 @@ def generate_invoice_pdf(
                     Paragraph(str(sn), t_style_row),
                     Paragraph(charge.charge_description, t_style_row_left),
                     Paragraph(sac_code, t_style_row),
-                    Paragraph(disp_curr, t_style_row),
+                    Paragraph(line_curr, t_style_row),
                     Paragraph(rate_val, t_style_row),
                     Paragraph(unit_val, t_style_row),
                     Paragraph(f"{curr_amt:.2f}", t_style_row),
@@ -710,15 +728,15 @@ def generate_invoice_pdf(
                 curr_amt = 0.0
 
             curr = (metadata.get("currency") or "INR").upper()
+            if apply_line_currency_split and not invoice_quote_service.belongs_to_currency_invoice(
+                curr, invoice_currency_bucket
+            ):
+                continue
             meta_roe = metadata.get("roe", metadata.get("exchange_rate"))
             try:
-                rate_disp, curr_amt_disp, roe_display, disp_curr, taxable_amt = (
-                    invoice_quote_service.additional_line_amounts(
-                        curr_amt,
-                        curr,
-                        containers,
-                        exchange_rate=meta_roe,
-                        currency_mode=presentation_mode,
+                curr_amt, roe_display, taxable_amt = (
+                    invoice_quote_service.taxable_inr_for_additional_amount(
+                        curr_amt, curr, containers, exchange_rate=meta_roe
                     )
                 )
             except ValueError as exc:
@@ -733,10 +751,10 @@ def generate_invoice_pdf(
                 Paragraph(str(sn), t_style_row),
                 Paragraph(desc_val, t_style_row_left),
                 Paragraph(sac_code, t_style_row),
-                Paragraph(disp_curr, t_style_row),
-                Paragraph(f"{rate_disp:.2f}", t_style_row),
+                Paragraph(curr, t_style_row),
+                Paragraph(f"{curr_amt:.2f}", t_style_row),
                 Paragraph("1.00", t_style_row),
-                Paragraph(f"{curr_amt_disp:.2f}", t_style_row),
+                Paragraph(f"{curr_amt:.2f}", t_style_row),
                 Paragraph(f"{roe_display:.2f}", t_style_row),
                 Paragraph(f"{taxable_amt:.2f}", t_style_row),
                 Paragraph(f"{gst_pct:.0f}%", t_style_row),
@@ -744,6 +762,13 @@ def generate_invoice_pdf(
                 Paragraph(f"{line_total:.2f}", t_style_row),
             ])
             sn += 1
+
+    if apply_line_currency_split and sn == 1:
+        bucket_label = (invoice_currency_bucket or "inr").upper()
+        raise HTTPException(
+            status_code=422,
+            detail=f"No billable {bucket_label} charge lines on this job for this invoice.",
+        )
             
     # Summary rows
     taxable_total_val = Paragraph(f"<b>{grand_total_taxable:.2f}</b>", t_style_row)
