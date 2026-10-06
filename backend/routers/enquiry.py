@@ -334,3 +334,24 @@ def void_enquiry(
     action = "voided" if enquiry.is_void else "un-voided"
     logger.info(f"Admin {_admin.username} {action} enquiry {enquiry_id}")
     return enquiry
+
+
+@router.patch("/{enquiry_id}/booking-cancelled")
+def toggle_booking_cancelled(enquiry_id: int, db: Session = Depends(get_db)):
+    """
+    Toggle booking cancelled for an operational trip.
+    Quote/additional freight cost and revenue are excluded from economics;
+    booked overheads (detention, cancellation fees, etc.) still count.
+    """
+    from backend.services import status_service
+
+    try:
+        status = status_service.toggle_booking_cancelled(db, enquiry_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    cancelled_at = status.booking_cancelled_at
+    return {
+        "enquiry_id": enquiry_id,
+        "booking_cancelled": cancelled_at is not None,
+        "booking_cancelled_at": cancelled_at.isoformat() if cancelled_at else None,
+    }

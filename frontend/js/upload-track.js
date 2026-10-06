@@ -7,6 +7,10 @@ let currentPricingData = null;
 let currentFinalQuoteData = null;
 let uploadedFiles = {};
 let trackingQuoteConfirmed = false;
+/** When true, freight is cancelled — additional invoice upload is still allowed. */
+let trackingBookingCancelled = false;
+let editingAdditionalDocId = null;
+let additionalInvoiceIrnByDocId = {};
 
 function syncPricingDataToWindow(quote) {
     currentPricingData = quote;
@@ -247,14 +251,69 @@ function hideBlReceivedViewLink() {
 /**
  * Fetch and display already uploaded documents
  */
+async function loadAdditionalInvoiceIrnMap(enquiryId) {
+    additionalInvoiceIrnByDocId = {};
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/invoice/list`);
+        if (!res.ok) return;
+        const list = await res.json();
+        if (!Array.isArray(list)) return;
+        for (const inv of list) {
+            if (inv.enquiry_id !== enquiryId) continue;
+            if (String(inv.item_type || '').toLowerCase() !== 'additional') continue;
+            if (inv.additional_doc_id == null) continue;
+            const irn = (inv.irn || '').trim();
+            additionalInvoiceIrnByDocId[String(inv.additional_doc_id)] = !!irn;
+        }
+    } catch (e) {
+        console.warn('Could not load invoice IRN map', e);
+    }
+}
+
+function canEditAdditionalInvoiceDoc(docId) {
+    return !additionalInvoiceIrnByDocId[String(docId)];
+}
+
+function clearAdditionalInvoiceEditMode() {
+    editingAdditionalDocId = null;
+    const saveBtn = document.querySelector('#details_additional_invoice .btn-primary');
+    if (saveBtn) saveBtn.textContent = 'Save';
+}
+
+function startEditAdditionalInvoice(doc) {
+    if (!doc || !canEditAdditionalInvoiceDoc(doc.id)) return;
+    editingAdditionalDocId = doc.id;
+    const meta = doc.metadata_info || {};
+    document.getElementById('add_inv_charge_details').value = meta.charge_details || '';
+    document.getElementById('add_inv_hsn_sac').value = meta.hsn_sac || '';
+    document.getElementById('add_inv_amount').value = meta.amount != null ? meta.amount : '';
+    const currSelect = document.getElementById('add_inv_currency');
+    if (currSelect) currSelect.value = (meta.currency || 'INR').toUpperCase();
+    onAdditionalInvoiceCurrencyChange();
+    const roeInput = document.getElementById('add_inv_roe');
+    if (roeInput && meta.currency && meta.currency.toUpperCase() !== 'INR') {
+        roeInput.value = meta.roe != null ? meta.roe : '';
+    }
+    const nameDiv = document.getElementById('additionalInvoiceFileName');
+    if (nameDiv) nameDiv.textContent = doc.file_name || 'Keep existing file or upload a new one';
+    showCancelledAdditionalInvoiceForm();
+    const saveBtn = document.querySelector('#details_additional_invoice .btn-primary');
+    if (saveBtn) saveBtn.textContent = 'Update';
+}
+
+window.startEditAdditionalInvoice = startEditAdditionalInvoice;
+
 async function fetchUploadedDocuments(enquiryId) {
     try {
+        await loadAdditionalInvoiceIrnMap(enquiryId);
         const response = await fetch(`${CONFIG.API_URL}/api/tracking/enquiry/${enquiryId}`);
         if (response.ok) {
             const documents = await response.json();
             console.log('📎 Existing documents found:', documents);
 
             hideBlReceivedViewLink();
+            const listEl = document.getElementById('additionalInvoicesList');
+            if (listEl) listEl.innerHTML = '';
 
             documents.forEach(doc => {
                 const filename = (doc.file_path || '').split(/[/\\]/).pop();
@@ -284,18 +343,26 @@ async function fetchUploadedDocuments(enquiryId) {
                             `;
                         }
 
+                        const editable = canEditAdditionalInvoiceDoc(doc.id);
                         const item = document.createElement('div');
                         item.innerHTML = `
                             <div style="display: flex; flex-direction: column; gap: 4px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; border: 1px solid var(--border-light);">
-                                <div style="display: flex; align-items: center; gap: 8px;">
+                                <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
                                     <i class="fas fa-file-invoice" style="color: var(--primary);"></i>
-                                    <span style="flex: 1; font-weight: 600; font-size: 11px;">${doc.file_name}</span>
-                                    <a href="${fileUrl}" target="_blank" style="color: var(--primary); font-size: 11px; font-weight: 600; text-decoration: none;">View</a>
+                                    <span style="flex: 1; font-weight: 600; font-size: 11px; min-width: 120px;">${doc.file_name}</span>
+                                    <a href="${fileUrl}" target="_blank" rel="noopener noreferrer" style="color: var(--primary); font-size: 11px; font-weight: 600; text-decoration: none;">View</a>
+                                    ${editable
+                                        ? `<button type="button" class="btn btn-outline" style="padding:2px 8px;font-size:11px;" data-edit-additional-id="${doc.id}">Edit</button>`
+                                        : '<span style="font-size:10px;color:var(--text-tertiary);">IRN recorded</span>'}
                                 </div>
                                 ${metaHtml}
                             </div>
                         `;
                         listEl.appendChild(item);
+                        const editBtn = item.querySelector('[data-edit-additional-id]');
+                        if (editBtn) {
+                            editBtn.addEventListener('click', () => startEditAdditionalInvoice(doc));
+                        }
                         return; // Return for forEach callback (like continue)
                     }
                 }
@@ -624,10 +691,14 @@ function checkAllDependencies() {
             document.getElementById('btn_bl_received').style.opacity = '1';
             document.getElementById('btn_bl_received').style.cursor = 'pointer';
 
-            if (rowAddInvoices) rowAddInvoices.style.display = 'table-row';
+            if (rowAddInvoices && !trackingBookingCancelled) {
+                rowAddInvoices.style.display = 'table-row';
+            }
         } else {
             rowBL.style.display = 'none';
-            if (rowAddInvoices) rowAddInvoices.style.display = 'none';
+            if (rowAddInvoices && !trackingBookingCancelled) {
+                rowAddInvoices.style.display = 'none';
+            }
         }
     }
 }
@@ -703,7 +774,7 @@ function getChecklistState() {
  * Save the current state of all checkboxes and dates to localStorage and Backend
  */
 async function saveChecklistState() {
-    if (!currentEnquiryData?.id || !trackingQuoteConfirmed) return;
+    if (!currentEnquiryData?.id || !trackingQuoteConfirmed || trackingBookingCancelled) return;
 
     const state = getChecklistState();
     localStorage.setItem(`checklist_${currentEnquiryData.id}`, JSON.stringify(state));
@@ -739,6 +810,7 @@ async function loadChecklistState() {
             const backendStatus = await response.json();
             if (backendStatus) {
                 applyChecklistState(backendStatus, true);
+                updateBookingCancelledPanel(backendStatus);
                 console.log('🔄 Checklist state restored from backend');
                 return;
             }
@@ -1287,18 +1359,6 @@ async function saveAdditionalInvoiceDetails() {
         return;
     }
 
-    if (!fileInput.files || !fileInput.files[0]) {
-        alert("Please upload a file first");
-        return;
-    }
-
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('document_type', 'additionalInvoice');
-    formData.append('enquiry_id', currentEnquiryData.id);
-
-    // Pass metadata
     const metadataObj = {
         charge_details: chargeDetails,
         hsn_sac: hsnSac,
@@ -1306,16 +1366,35 @@ async function saveAdditionalInvoiceDetails() {
         currency: currency,
         roe: roe,
     };
+
+    const isEdit = editingAdditionalDocId != null;
+    if (!isEdit && (!fileInput.files || !fileInput.files[0])) {
+        alert('Please upload a file first');
+        return;
+    }
+
+    const formData = new FormData();
     formData.append('metadata', JSON.stringify(metadataObj));
+    if (!isEdit) {
+        formData.append('document_type', 'additionalInvoice');
+        formData.append('enquiry_id', currentEnquiryData.id);
+    }
+    if (fileInput.files && fileInput.files[0]) {
+        formData.append('file', fileInput.files[0]);
+    }
 
     try {
-        const res = await fetch(`${CONFIG.API_URL}/api/tracking/upload-single`, {
-            method: 'POST',
-            body: formData
+        const url = isEdit
+            ? `${CONFIG.API_URL}/api/tracking/additional-invoice/${editingAdditionalDocId}`
+            : `${CONFIG.API_URL}/api/tracking/upload-single`;
+        const res = await fetch(url, {
+            method: isEdit ? 'PATCH' : 'POST',
+            body: formData,
         });
 
         if (res.ok) {
-            showModal('Success', 'Additional invoice uploaded and saved', 'success');
+            showModal('Success', isEdit ? 'Additional invoice updated' : 'Additional invoice uploaded and saved', 'success');
+            clearAdditionalInvoiceEditMode();
 
             // Basic UI reset/feedback
             const detailsForm = document.getElementById('details_additional_invoice');
@@ -1366,3 +1445,139 @@ window.addEventListener('message', (event) => {
         }
     }
 });
+
+function syncCancelledBookingUi(isCancelled) {
+    const checklist = document.getElementById('shipmentChecklistSection');
+    const cancelledSec = document.getElementById('cancelledAdditionalSection');
+    const formRoot = document.getElementById('additionalInvoiceFormRoot');
+    const cancelledHost = document.getElementById('cancelledAdditionalHost');
+    const checklistHost = document.getElementById('checklistAdditionalHost');
+
+    trackingBookingCancelled = !!isCancelled;
+
+    if (formRoot && cancelledHost && checklistHost) {
+        const host = isCancelled ? cancelledHost : checklistHost;
+        if (formRoot.parentElement !== host) {
+            host.appendChild(formRoot);
+        }
+    }
+
+    if (checklist) {
+        checklist.hidden = isCancelled;
+        checklist.style.pointerEvents = isCancelled ? 'none' : '';
+        checklist.style.opacity = isCancelled ? '0.45' : '';
+        checklist.setAttribute('aria-hidden', isCancelled ? 'true' : 'false');
+    }
+
+    if (cancelledSec) {
+        cancelledSec.hidden = !isCancelled;
+    }
+
+    const saveTrackingBtn = document.getElementById('saveTrackingBtn');
+    if (saveTrackingBtn) {
+        saveTrackingBtn.hidden = isCancelled;
+        saveTrackingBtn.disabled = isCancelled;
+    }
+
+    if (!isCancelled) {
+        hideCancelledAdditionalInvoiceForm();
+        clearAdditionalInvoiceEditMode();
+    }
+}
+
+function updateBookingCancelledPanel(status) {
+    const panel = document.getElementById('bookingCancelledPanel');
+    const btn = document.getElementById('toggleBookingCancelledBtn');
+    const titleEl = document.getElementById('bookingCancelledTitle');
+    const atEl = document.getElementById('bookingCancelledAt');
+    if (!panel || !btn || !currentEnquiryData?.id) return;
+
+    panel.hidden = false;
+    const cancelledAt = status?.booking_cancelled_at;
+    const isCancelled = !!cancelledAt;
+    syncCancelledBookingUi(isCancelled);
+
+    btn.textContent = isCancelled ? 'Restore booking' : 'Mark booking cancelled';
+    btn.disabled = !trackingQuoteConfirmed;
+    btn.setAttribute('aria-disabled', trackingQuoteConfirmed ? 'false' : 'true');
+
+    if (titleEl) {
+        titleEl.textContent = isCancelled ? 'Booking cancelled' : 'Active booking';
+        titleEl.style.color = isCancelled ? 'var(--text-secondary)' : 'var(--navy-800)';
+    }
+    if (atEl) {
+        if (isCancelled) {
+            const d = new Date(cancelledAt);
+            atEl.textContent = Number.isNaN(d.getTime())
+                ? ''
+                : `· ${d.toLocaleDateString()}`;
+        } else {
+            atEl.textContent = '';
+        }
+    }
+    checkAllDependencies();
+}
+
+function showCancelledAdditionalInvoiceForm() {
+    const details = document.getElementById('details_additional_invoice');
+    if (details) details.style.display = 'block';
+}
+
+function hideCancelledAdditionalInvoiceForm() {
+    const details = document.getElementById('details_additional_invoice');
+    if (details) details.style.display = 'none';
+    clearAdditionalInvoiceEditMode();
+}
+
+window.showCancelledAdditionalInvoiceForm = showCancelledAdditionalInvoiceForm;
+window.hideCancelledAdditionalInvoiceForm = hideCancelledAdditionalInvoiceForm;
+
+async function toggleBookingCancelledFromTracking() {
+    if (!currentEnquiryData?.id || !trackingQuoteConfirmed) return;
+    const btn = document.getElementById('toggleBookingCancelledBtn');
+    const prevLabel = btn?.textContent;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving…';
+    }
+    try {
+        const res = await fetch(
+            `${CONFIG.API_URL}/api/enquiry/${currentEnquiryData.id}/booking-cancelled`,
+            { method: 'PATCH' }
+        );
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showModal('Error', err.detail || 'Could not update booking status.', 'error');
+            return;
+        }
+        const data = await res.json();
+        const statusRes = await fetch(`${CONFIG.API_URL}/api/tracking/status/${currentEnquiryData.id}`);
+        if (statusRes.ok) {
+            const backendStatus = await statusRes.json();
+            updateBookingCancelledPanel(backendStatus);
+        } else {
+            updateBookingCancelledPanel({
+                booking_cancelled_at: data.booking_cancelled ? data.booking_cancelled_at : null,
+            });
+        }
+        if (typeof notifyTrackingParentRefresh === 'function') {
+            notifyTrackingParentRefresh({});
+        }
+        showModal(
+            data.booking_cancelled ? 'Booking cancelled' : 'Booking restored',
+            data.booking_cancelled
+                ? 'Use Add charge to record any cancellation or detention fees.'
+                : 'Shipment checklist is active again.',
+            data.booking_cancelled ? 'info' : 'success'
+        );
+    } catch (e) {
+        showModal('Network Error', e.message || 'Request failed', 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = !trackingQuoteConfirmed;
+            btn.textContent = prevLabel || 'Mark booking cancelled';
+        }
+    }
+}
+
+window.toggleBookingCancelledFromTracking = toggleBookingCancelledFromTracking;

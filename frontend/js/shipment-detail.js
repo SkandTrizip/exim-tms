@@ -178,6 +178,7 @@
                     <div class="shipment-detail-card-head">
                         <h2>Shipment overview</h2>
                         <span class="badge badge-${enquiry.is_void ? 'pending' : 'accepted'}">${enquiry.is_void ? 'Void' : `Stage ${enquiry.stage || 1}`}</span>
+                        ${status.booking_cancelled_at ? '<span class="badge badge-pending" style="margin-left:8px;background:#ffe4e6;color:#9f1239;">Booking cancelled</span>' : ''}
                     </div>
                     <div class="shipment-detail-card-body">
                         <div class="shipment-kv-grid">

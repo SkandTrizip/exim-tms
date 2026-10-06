@@ -230,8 +230,96 @@
                             </div>
                         </div>
 
+                        <div id="bookingCancelledPanel" class="form-section" hidden
+                            style="background: #fff; border: 1px solid var(--border-light); padding: 12px 16px; border-radius: 8px; margin-bottom: 16px;">
+                            <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px;">
+                                <div style="display:flex; align-items:baseline; gap:8px; flex-wrap:wrap;">
+                                    <span id="bookingCancelledTitle"
+                                        style="font-size:14px;font-weight:600;color:var(--navy-800);">Booking</span>
+                                    <span id="bookingCancelledAt" style="font-size:12px;color:var(--text-secondary);"></span>
+                                </div>
+                                <button type="button" class="btn btn-secondary" id="toggleBookingCancelledBtn"
+                                    onclick="toggleBookingCancelledFromTracking()" style="min-height:40px;padding:8px 14px;font-size:13px;">
+                                    Mark booking cancelled
+                                </button>
+                            </div>
+                        </div>
+
+                        <div id="cancelledAdditionalSection" class="form-section" hidden
+                            style="background: white; border: 1px solid var(--border-light); padding: 20px; border-radius: 8px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px;">
+                                <h3 style="font-size:16px; margin:0; color:var(--navy-800); font-weight:600;">
+                                    <i class="fas fa-file-invoice-dollar" style="color:var(--primary); margin-right:8px;"></i>
+                                    Additional invoice
+                                </h3>
+                                <button type="button" class="btn btn-primary" id="btn_toggle_add_invoice_cancelled"
+                                    onclick="showCancelledAdditionalInvoiceForm()"
+                                    style="min-height:40px;padding:8px 14px;font-size:13px;">
+                                    <i class="fas fa-plus"></i> Add charge
+                                </button>
+                            </div>
+                            <div id="cancelledAdditionalHost">
+                                <div id="additionalInvoiceFormRoot">
+                                    <div id="details_additional_invoice"
+                                        style="display: none; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
+                                        <div style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px; flex-wrap: wrap;">
+                                            <input type="file" id="additionalInvoiceUpload" style="display: none;"
+                                                onchange="handleAdditionalInvoiceUpload(this)">
+                                            <button type="button" class="btn btn-outline" id="btn_additional_invoice"
+                                                onclick="document.getElementById('additionalInvoiceUpload').click()"
+                                                style="padding: 6px 12px; font-size: 12px;">
+                                                <i class="fas fa-file-upload"></i> Select document
+                                            </button>
+                                            <span id="additionalInvoiceFileName" style="font-size: 12px; color: var(--text-secondary);">No file chosen</span>
+                                            <span id="date_additional_invoice" style="display:none;"></span>
+                                        </div>
+                                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px;">
+                                            <div class="form-group" style="margin-bottom: 0;">
+                                                <label style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block;">Charge details</label>
+                                                <input type="text" id="add_inv_charge_details" class="form-control"
+                                                    placeholder="e.g. Cancellation fee" style="padding: 6px 10px; font-size: 12px;">
+                                            </div>
+                                            <div class="form-group" style="margin-bottom: 0;">
+                                                <label style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block;">HSN/SAC</label>
+                                                <input type="text" id="add_inv_hsn_sac" class="form-control" placeholder="996511"
+                                                    style="padding: 6px 10px; font-size: 12px;">
+                                            </div>
+                                            <div class="form-group" style="margin-bottom: 0;">
+                                                <label style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block;">Currency</label>
+                                                <select id="add_inv_currency" class="form-control" onchange="onAdditionalInvoiceCurrencyChange()"
+                                                    style="padding: 6px 10px; font-size: 12px;">
+                                                    <option value="INR">INR</option>
+                                                    <option value="USD">USD</option>
+                                                    <option value="EUR">EUR</option>
+                                                    <option value="GBP">GBP</option>
+                                                    <option value="JPY">JPY</option>
+                                                </select>
+                                            </div>
+                                            <div class="form-group" style="margin-bottom: 0;">
+                                                <label style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block;">ROE</label>
+                                                <input type="number" id="add_inv_roe" class="form-control" placeholder="1.00" value="1"
+                                                    step="0.01" min="0" readonly style="padding: 6px 10px; font-size: 12px; background: #f1f5f9;">
+                                            </div>
+                                            <div class="form-group" style="margin-bottom: 0;">
+                                                <label style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block;">Amount</label>
+                                                <input type="number" id="add_inv_amount" class="form-control" placeholder="Amount"
+                                                    step="0.01" style="padding: 6px 10px; font-size: 12px;">
+                                            </div>
+                                        </div>
+                                        <div style="margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px;">
+                                            <button type="button" class="btn btn-secondary" onclick="hideCancelledAdditionalInvoiceForm()"
+                                                style="padding: 6px 14px; font-size: 12px;">Cancel</button>
+                                            <button type="button" class="btn btn-primary" onclick="saveAdditionalInvoiceDetails()"
+                                                style="padding: 6px 14px; font-size: 12px;">Save</button>
+                                        </div>
+                                    </div>
+                                    <div id="additionalInvoicesList" style="display: flex; flex-direction: column; gap: 8px;"></div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Shipment Status Checklist Section -->
-                        <div class="form-section"
+                        <div id="shipmentChecklistSection" class="form-section"
                             style="background: white; border: 1px solid var(--border-light); padding: 24px; border-radius: 8px; margin-bottom: 24px; box-shadow: var(--shadow-sm);">
                             <h3
                                 style="font-size: 18px; margin-bottom: 20px; color: var(--navy-800); display: flex; align-items: center; gap: 10px;">
@@ -490,117 +578,18 @@
                                         </td>
                                     </tr>
 
-                                    <tr id="row_additional_invoices" style="display: none; background: #fff;">
-                                        <td colspan="4" style="padding: 16px;">
-                                            <div
-                                                style="display: flex; justify-content: space-between; align-items: center;">
-                                                <div style="display: flex; align-items: center; gap: 8px;">
-                                                    <i class="fas fa-file-invoice-dollar"
-                                                        style="color: var(--navy-800); font-size: 15px;"></i>
-                                                    <span
-                                                        style="font-size: 14px; font-weight: 600; color: var(--navy-800);">Additional
-                                                        Shipping Line Invoices</span>
-                                                </div>
-
-                                                <div style="display: flex; align-items: center; gap: 12px;">
-                                                    <button type="button" id="btn_toggle_add_invoice"
-                                                        onclick="document.getElementById('details_additional_invoice').style.display='block'"
-                                                        style="background: transparent; border: none; color: var(--navy-700); font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 0;">
-                                                        <i class="fas fa-plus" style="font-size: 11px;"></i> Add Invoice
-                                                    </button>
-                                                </div>
+                                    <tr id="row_additional_invoices" style="display: none;">
+                                        <td colspan="4" style="padding: 12px 16px;">
+                                            <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-bottom:8px;">
+                                                <span style="font-size:14px;font-weight:600;color:var(--navy-800);">Additional invoices</span>
+                                                <button type="button" id="btn_toggle_add_invoice" class="btn btn-outline"
+                                                    onclick="showCancelledAdditionalInvoiceForm()"
+                                                    style="padding: 4px 10px; font-size: 11px;">
+                                                    <i class="fas fa-plus"></i> Add invoice
+                                                </button>
                                             </div>
-
-                                            <!-- Details Form (Hidden initially) -->
-                                            <div id="details_additional_invoice"
-                                                style="display: none; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 16px; margin-top: 16px;">
-
-                                                <div
-                                                    style="display: flex; gap: 12px; align-items: center; margin-bottom: 16px;">
-                                                    <input type="file" id="additionalInvoiceUpload"
-                                                        style="display: none;"
-                                                        onchange="handleAdditionalInvoiceUpload(this)">
-                                                    <button type="button" class="btn btn-outline"
-                                                        id="btn_additional_invoice"
-                                                        onclick="document.getElementById('additionalInvoiceUpload').click()"
-                                                        style="padding: 6px 12px; font-size: 12px; font-weight: 600; border-radius: 6px; border: 1px solid #e2e8f0; color: #334155; background: white; display: flex; align-items: center; gap: 6px;">
-                                                        <i class="fas fa-file-upload"></i> Select Document
-                                                    </button>
-                                                    <span id="additionalInvoiceFileName"
-                                                        style="font-size: 12px; color: var(--primary);">No file
-                                                        chosen</span>
-                                                    <span id="date_additional_invoice" style="display:none;"></span>
-                                                </div>
-
-                                                <div
-                                                    style="display: grid; grid-template-columns: 1.3fr 0.8fr 0.65fr 0.65fr 0.9fr; gap: 12px;">
-                                                    <div class="form-group" style="margin-bottom: 0;">
-                                                        <label
-                                                            style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block; font-weight: 500;">Charge
-                                                            Details</label>
-                                                        <input type="text" id="add_inv_charge_details"
-                                                            class="form-control"
-                                                            style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 12px; color: #334155;"
-                                                            placeholder="Main freight / shipping charges">
-                                                    </div>
-                                                    <div class="form-group" style="margin-bottom: 0;">
-                                                        <label
-                                                            style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block; font-weight: 500;">HSN/SAC
-                                                            Code</label>
-                                                        <input type="text" id="add_inv_hsn_sac" class="form-control"
-                                                            style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 12px; color: #334155;"
-                                                            placeholder="996511">
-                                                    </div>
-                                                    <div class="form-group" style="margin-bottom: 0;">
-                                                        <label
-                                                            style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block; font-weight: 500;">Currency</label>
-                                                        <select id="add_inv_currency" class="form-control"
-                                                            onchange="onAdditionalInvoiceCurrencyChange()"
-                                                            style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 12px; color: #334155;">
-                                                            <option value="INR">INR</option>
-                                                            <option value="USD">USD</option>
-                                                            <option value="EUR">EUR</option>
-                                                            <option value="GBP">GBP</option>
-                                                            <option value="JPY">JPY</option>
-                                                        </select>
-                                                    </div>
-                                                    <div class="form-group" style="margin-bottom: 0;">
-                                                        <label
-                                                            style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block; font-weight: 500;">ROE</label>
-                                                        <input type="number" id="add_inv_roe" class="form-control"
-                                                            style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 12px; color: #334155; background: #f1f5f9;"
-                                                            placeholder="1.00" value="1" step="0.01" min="0" readonly>
-                                                    </div>
-                                                    <div class="form-group" style="margin-bottom: 0;">
-                                                        <label
-                                                            style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block; font-weight: 500;">Amount</label>
-                                                        <input type="number" id="add_inv_amount" class="form-control"
-                                                            style="width: 100%; border-radius: 6px; border: 1px solid #cbd5e1; padding: 6px 10px; font-size: 12px; color: #334155;"
-                                                            placeholder="Enter invoice amount" step="0.01">
-                                                    </div>
-                                                </div>
-                                                <div
-                                                    style="margin-top: 12px; display: flex; justify-content: flex-end; gap: 8px;">
-                                                    <button type="button" class="btn"
-                                                        onclick="document.getElementById('details_additional_invoice').style.display='none'"
-                                                        style="background: transparent; color: var(--text-secondary); border: 1px solid var(--border-light); padding: 6px 16px; font-size: 12px; font-weight: 600; border-radius: 6px;">
-                                                        Cancel
-                                                    </button>
-                                                    <button type="button" class="btn btn-primary"
-                                                        onclick="saveAdditionalInvoiceDetails()"
-                                                        style="padding: 6px 16px; font-size: 12px; font-weight: 600; border-radius: 6px;">
-                                                        Save Invoice Details
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            <div id="additionalInvoicesList"
-                                                style="display: flex; flex-direction: column; gap: 8px; margin-top: 12px;">
-                                                <!-- Population via JS -->
-                                            </div>
+                                            <div id="checklistAdditionalHost"></div>
                                         </td>
-                                    </tr>
-                                    </td>
                                     </tr>
                             </table>
                         </div>
@@ -718,7 +707,7 @@
                         <button type="button" class="btn btn-secondary" onclick="goBack()">
                             <i class="fas fa-th-large"></i> Back to Dashboard
                         </button>
-                        <button type="button" class="btn btn-primary" onclick="saveTracking()">
+                        <button type="button" class="btn btn-primary" id="saveTrackingBtn" onclick="saveTracking()">
                             <i class="fas fa-save"></i> Save tracking
                         </button>
                     </div>

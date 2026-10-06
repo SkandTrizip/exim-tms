@@ -101,14 +101,22 @@ function isTrackingCompleted(status) {
 }
 
 /** Map legacy milestone filters (booking/SI/BL/SOB) to pending | completed. */
+function isBookingCancelledStatus(status) {
+    return !!(status && status.booking_cancelled_at);
+}
+
 function normalizeTrackingSection(section) {
     if (section === 'completed') return 'completed';
+    if (section === 'cancelled') return 'cancelled';
     return 'pending';
 }
 
 function matchesTrackingSection(section, status) {
-    const done = isTrackingCompleted(status);
+    const cancelled = isBookingCancelledStatus(status);
     const key = normalizeTrackingSection(section);
+    if (key === 'cancelled') return cancelled;
+    if (cancelled) return false;
+    const done = isTrackingCompleted(status);
     return key === 'completed' ? done : !done;
 }
 
@@ -121,6 +129,7 @@ const STATUS_SECTION_LABELS = {
     tracking: {
         pending: 'Not Completed',
         completed: 'Completed',
+        cancelled: 'Cancelled',
     },
     finance: {
         payments: 'Payment to Shipping Line',
@@ -160,7 +169,7 @@ function getShipmentTypeShort(e) {
     return raw.split(' ')[0].slice(0, 8);
 }
 
-function renderRowActionsMenu(e, extraItemsHtml = '', quoteStatus = null) {
+function renderRowActionsMenu(e, extraItemsHtml = '', quoteStatus = null, status = null) {
     return `
         <div class="actions-dropdown">
             <button class="row-actions-btn actions-btn" type="button" title="Actions" aria-label="Actions">
@@ -168,7 +177,7 @@ function renderRowActionsMenu(e, extraItemsHtml = '', quoteStatus = null) {
             </button>
             <div class="actions-menu">
                 ${extraItemsHtml}
-                ${renderEnquiryActions(e, quoteStatus)}
+                ${renderEnquiryActions(e, quoteStatus, status)}
             </div>
         </div>`;
 }
@@ -191,7 +200,7 @@ function renderListTableRow(e, status = null, options = {}) {
                 <td>${escapeHtml(e.client_name || '—')}</td>
                 <td>${escapeHtml(e.origin)} → ${escapeHtml(e.destination)}</td>
                 <td>${statusHtml}</td>
-                <td>${actionHtml || renderRowActionsMenu(e, extraActionsHtml, quoteStatus)}</td>
+                <td>${actionHtml || renderRowActionsMenu(e, extraActionsHtml, quoteStatus, status)}</td>
             </tr>`;
     }
 
@@ -219,7 +228,7 @@ function renderListTableRow(e, status = null, options = {}) {
             </td>
             <td data-col="required" class="cell-muted">${required}</td>
             <td data-col="status">${statusHtml}</td>
-            <td data-col="action">${actionHtml || renderRowActionsMenu(e, extraActionsHtml, quoteStatus)}</td>
+            <td data-col="action">${actionHtml || renderRowActionsMenu(e, extraActionsHtml, quoteStatus, status)}</td>
         </tr>`;
 }
 
@@ -232,6 +241,7 @@ function renderFinanceActionCell(e, subView, completionTab = 'pending') {
     }
     if (subView === 'invoices') {
         const isAdditional = e && e.__finance_invoice_kind === 'additional';
+        const bookingCancelled = !!(e && e.__finance_booking_cancelled);
         const additionalOpts = isAdditional
             ? { item_type: 'additional', additional_doc_id: e.__finance_additional_doc_id || null }
             : (e.__finance_currency_mode
@@ -239,6 +249,12 @@ function renderFinanceActionCell(e, subView, completionTab = 'pending') {
                 : null);
         if (isCompleted || e.invoice_complete) {
             return renderFinanceDrawerActionBtn('finance-invoice', e.id, { primary: false, icon: 'check-circle', label: 'View', title: 'View recorded invoice' }, additionalOpts);
+        }
+        if (bookingCancelled || isAdditional) {
+            if (!isAdditional) {
+                return `<button class="btn btn-secondary table-tool-btn finance-row-action-btn" type="button" disabled title="Upload an additional invoice in Tracking first"><i class="fas fa-clock"></i> Awaiting charge upload</button>`;
+            }
+            return renderFinanceDrawerActionBtn('finance-invoice', e.id, { icon: 'file-invoice', label: 'Invoice', title: 'Create additional client invoice' }, additionalOpts);
         }
         return e.bl_received
             ? renderFinanceDrawerActionBtn('finance-invoice', e.id, { icon: 'file-invoice', label: 'Invoice', title: 'Create client invoice' }, additionalOpts)
@@ -564,13 +580,51 @@ function buildFinanceInvoiceTaskRows(operationalEnquiries, bulkStatus, additiona
 
     for (const e of operationalEnquiries) {
         const s = bulkStatus[e.id] || null;
-        if (!s || !s.shipping_invoice || !s.bl_received) continue;
+        if (!s) continue;
+
+        const bookingCancelled = !!s.booking_cancelled_at;
+        if (!bookingCancelled && (!s.shipping_invoice || !s.bl_received)) continue;
 
         const base = {
             ...e,
             bl_received: !!s.bl_received,
             payment_done: isShippingLinePaymentDone(s),
+            __finance_booking_cancelled: bookingCancelled,
         };
+
+        if (bookingCancelled) {
+            if (showCompleted) {
+                const allInvoices = window._financeInvoicesList || [];
+                for (const inv of allInvoices) {
+                    if (inv.enquiry_id !== e.id) continue;
+                    if (String(inv.item_type || '').toLowerCase() !== 'additional') continue;
+                    if (!isInvoiceCreateCompleted(inv)) continue;
+                    rows.push({
+                        ...base,
+                        __finance_invoice_kind: 'additional',
+                        __finance_additional_doc_id: inv.additional_doc_id || null,
+                        __finance_remark: inv.remark || 'Additional invoice (booking cancelled)',
+                        invoice_complete: true,
+                    });
+                }
+            } else {
+                const docs = (additionalInvBulk && (additionalInvBulk[String(e.id)] || additionalInvBulk[e.id])) || [];
+                for (const doc of docs) {
+                    if (!doc || !doc.id) continue;
+                    const addInv = getAdditionalInvoiceForEnquiryDoc(e.id, doc.id);
+                    const addComplete = isInvoiceCreateCompleted(addInv);
+                    if (addComplete) continue;
+                    rows.push({
+                        ...base,
+                        __finance_invoice_kind: 'additional',
+                        __finance_additional_doc_id: doc.id,
+                        __finance_remark: 'Additional invoice (booking cancelled)',
+                        invoice_complete: false,
+                    });
+                }
+            }
+            continue;
+        }
 
         if (isDualInvoicingEnquiry(e.id)) {
             for (const mode of ['usd', 'inr']) {
@@ -644,7 +698,22 @@ function countFinanceInvoiceTasks(completionTab) {
 
     for (const e of ops) {
         const s = cachedBulkStatus[e.id];
-        if (!s || !s.shipping_invoice || !s.bl_received) continue;
+        if (!s) continue;
+
+        const bookingCancelled = !!s.booking_cancelled_at;
+        if (!bookingCancelled && (!s.shipping_invoice || !s.bl_received)) continue;
+
+        if (bookingCancelled) {
+            const docs = docsByEnquiry[String(e.id)] || docsByEnquiry[e.id] || [];
+            for (const doc of docs) {
+                if (!doc || !doc.id) continue;
+                const addInv = getAdditionalInvoiceForEnquiryDoc(e.id, doc.id);
+                if (showCompleted ? isInvoiceCreateCompleted(addInv) : !isInvoiceCreateCompleted(addInv)) {
+                    count += 1;
+                }
+            }
+            continue;
+        }
 
         if (isDualInvoicingEnquiry(e.id)) {
             for (const mode of ['usd', 'inr']) {
@@ -750,7 +819,7 @@ function updateStatusSectionCounts() {
 
     const trackingEl = document.getElementById('trackingStatusSections');
     if (trackingEl) {
-        ['pending', 'completed'].forEach((section) => {
+        ['pending', 'completed', 'cancelled'].forEach((section) => {
             const span = trackingEl.querySelector(`[data-count="${section}"]`);
             if (span) span.textContent = countTrackingSection(section);
         });
@@ -2341,7 +2410,9 @@ function renderAnalyticsEnquiryRowHtml(row) {
     const statusClass = isOngoing ? 'analytics-status-pill' : 'analytics-status-pill is-settled';
     const headLabel = isExtra
         ? (row.item_description || 'Additional Charge')
-        : 'Freight';
+        : (row.booking_cancelled
+            ? ((row.cost_inr || row.revenue_inr) ? 'Overheads (booking cancelled)' : 'Booking cancelled (no freight)')
+            : 'Freight');
     const rowClass = isExtra ? 'list-row analytics-extra-row' : 'list-row';
     return `
             <tr class="${rowClass}">
@@ -2912,9 +2983,9 @@ function showTrackingView(filterType = null) {
 
     const title = document.querySelector('#trackingView .view-h1');
     if (title) {
-        title.textContent = section === 'completed'
-            ? 'Tracking - Completed'
-            : 'Tracking - Not Completed';
+        if (section === 'completed') title.textContent = 'Tracking - Completed';
+        else if (section === 'cancelled') title.textContent = 'Tracking - Cancelled';
+        else title.textContent = 'Tracking - Not Completed';
     }
 
     paginationState.tracking.currentPage = 1;
@@ -3466,7 +3537,9 @@ async function updateTrackingTable(filterType = null) {
     if (total === 0) {
         const emptyMsg = currentTrackingFilter === 'completed'
             ? 'No completed shipments yet.'
-            : 'No incomplete shipments found.';
+            : currentTrackingFilter === 'cancelled'
+                ? 'No cancelled bookings.'
+                : 'No incomplete shipments found.';
         tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;">${emptyMsg}</td></tr>`;
         renderPagination('trackingPagination', 0, 1, 'changeTrackingPage');
         updateTableRecordsCount('trackingTable', 'trackingRecordsCount');
@@ -3718,6 +3791,13 @@ function getEnquiryStatusLabel(e, status = null) {
 
     // Stage 3+ — in operations; refine using shipment status flags
     if (stage >= 3) {
+        if (status && status.booking_cancelled_at) {
+            return {
+                label: 'Booking cancelled',
+                color: '#9f1239',
+                bg: '#ffe4e6',
+            };
+        }
         if (status) {
             if (!status.booking_confirmed) return { label: 'Booking to be secured', color: '#0369a1', bg: '#e0f2fe' };
             if (!status.si_submitted) return { label: 'SI to be submitted', color: '#0891b2', bg: '#cffafe' };
@@ -3740,7 +3820,8 @@ function getEnquiryStatusLabel(e, status = null) {
  * @param {object} e - Enquiry object
  * @param {string} quoteStatus - Optional status for quote-specific actions
  */
-function renderEnquiryActions(e, quoteStatus = null) {
+function renderEnquiryActions(e, quoteStatus = null, status = null) {
+    const shipmentStatus = status || cachedBulkStatus[e.id] || null;
     let isAdmin = false;
     try {
         const currentUser = (localStorage.getItem('user') || '').toLowerCase();
@@ -3790,6 +3871,17 @@ function renderEnquiryActions(e, quoteStatus = null) {
         }
     }
 
+    if ((e.stage || 1) >= 3 && !e.is_void) {
+        const bookingCancelled = !!(shipmentStatus && shipmentStatus.booking_cancelled_at);
+        const cancelLabel = bookingCancelled ? 'Restore booking' : 'Mark booking cancelled';
+        const cancelIcon = bookingCancelled ? 'fa-rotate-left' : 'fa-calendar-xmark';
+        const cancelStyle = bookingCancelled ? 'color:#10b981;' : 'color:#be123c;';
+        html += `
+        <button class="actions-item" style="${cancelStyle} font-weight:600;" onclick="toggleBookingCancelled(${e.id}, event)">
+            <i class="fas ${cancelIcon}"></i> ${cancelLabel}
+        </button>`;
+    }
+
     // Add Admin Void/Restore at the end
     html += voidBtn;
 
@@ -3800,7 +3892,7 @@ function statusBadge(e, status = null) {
     if (e.is_void) {
         return `<span style="display:inline-block; padding: 3px 10px; border-radius: 4px; font-size: 11px; font-weight: 800; background:#1f2937; color:#f9fafb; letter-spacing:0.06em; white-space: nowrap; text-transform:uppercase;">⊘ VOID</span>`;
     }
-    const s = getEnquiryStatusLabel(e, status);
+    const s = getEnquiryStatusLabel(e, status || cachedBulkStatus[e.id] || null);
     return `<span style="display:inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; background:${s.bg}; color:${s.color}; white-space: nowrap;">${s.label}</span>`;
 }
 
@@ -3832,6 +3924,59 @@ function viewEnquiry(id) {
 function startNewEnquiry() {
     openActionModal('new-sale');
 }
+
+window.toggleBookingCancelled = async function (enquiryId, event) {
+    if (event) event.stopPropagation();
+    const enq = enquiries.find(e => e.id === enquiryId);
+    if (!enq) return;
+
+    const status = cachedBulkStatus[enquiryId] || null;
+    const isCancelled = !!(status && status.booking_cancelled_at);
+    const confirmed = await new Promise(resolve => {
+        showModal(
+            isCancelled ? 'Restore booking' : 'Mark booking cancelled',
+            isCancelled
+                ? `Restore the booking for <strong>${enq.enquiry_number}</strong>? Freight cost and revenue will count in analytics again.`
+                : `Mark the booking for <strong>${enq.enquiry_number}</strong> as <strong>cancelled</strong>? Trip freight cost and revenue will be excluded from analytics. Booked overheads (detention, cancellation charges, etc.) will still count.`,
+            isCancelled ? 'info' : 'warning',
+            () => resolve(true)
+        );
+        setTimeout(() => resolve(false), 30000);
+    });
+    if (!confirmed) return;
+
+    const token = localStorage.getItem('token') || '';
+    try {
+        const res = await fetch(`${CONFIG.API_URL}/api/enquiry/${enquiryId}/booking-cancelled`, {
+            method: 'PATCH',
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            showModal('Error', err.detail || 'Could not update booking status.', 'error');
+            return;
+        }
+        const updated = await res.json();
+        if (!cachedBulkStatus[enquiryId]) cachedBulkStatus[enquiryId] = { enquiry_id: enquiryId };
+        cachedBulkStatus[enquiryId].booking_cancelled_at = updated.booking_cancelled
+            ? updated.booking_cancelled_at
+            : null;
+
+        updateAllEnquiriesTable(currentAllEnquiriesFilter);
+        updateDashboardTable();
+        if (typeof updateFinanceTable === 'function') updateFinanceTable();
+
+        showModal(
+            updated.booking_cancelled ? 'Booking cancelled' : 'Booking restored',
+            updated.booking_cancelled
+                ? `Booking for <strong>${enq.enquiry_number}</strong> is cancelled. Only overheads affect economics.`
+                : `Booking for <strong>${enq.enquiry_number}</strong> is active again for analytics.`,
+            updated.booking_cancelled ? 'warning' : 'success'
+        );
+    } catch (err) {
+        showModal('Network Error', err.message, 'error');
+    }
+};
 
 window.voidEnquiry = async function (enquiryId, event) {
     if (event) event.stopPropagation();

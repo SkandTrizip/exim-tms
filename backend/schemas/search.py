@@ -66,6 +66,7 @@ class ShipmentQuoteSummary(BaseModel):
 
 
 class ShipmentStatusDetail(BaseModel):
+    booking_cancelled_at: Optional[datetime] = None
     booking_confirmed: Optional[datetime] = None
     si_submitted: Optional[datetime] = None
     bl_received: Optional[datetime] = None

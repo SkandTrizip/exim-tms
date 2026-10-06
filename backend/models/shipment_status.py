@@ -12,6 +12,8 @@ class ShipmentStatus(Base):
     booking_confirmed = Column(DateTime)
     booking_placed = Column(DateTime)
     booking_finalized = Column(DateTime)
+    # When set, freight quote/revenue are excluded from analytics; overheads still count.
+    booking_cancelled_at = Column(DateTime)
     container_picked = Column(DateTime)
     stuffing_done = Column(DateTime)
     container_gated = Column(DateTime)

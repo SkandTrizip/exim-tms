@@ -48,6 +48,23 @@ class InvoicePayment(BaseModel):
     payment_reference: str
     received_amount: float
 
+
+def _reject_main_invoice_when_booking_cancelled(
+    db: Session, enquiry_id: int, item_type: str
+) -> None:
+    from backend.services.enquiry_economics_service import is_booking_cancelled_for_enquiry
+
+    it = (item_type or "all").strip().lower()
+    if is_booking_cancelled_for_enquiry(db, enquiry_id) and it != "additional":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Booking is cancelled for this trip. Upload the charge under Tracking "
+                "→ Additional invoices, then create an Additional Only tax invoice."
+            ),
+        )
+
+
 @router.get("/next-number")
 def next_invoice_number_endpoint(
     invoice_date: Optional[datetime.date] = None,
@@ -65,6 +82,7 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
     logger.info(f"Recording invoice for enquiry ID {invoice.enquiry_id}")
     try:
         item_type = (invoice.item_type or "all").strip().lower()
+        _reject_main_invoice_when_booking_cancelled(db, invoice.enquiry_id, item_type)
         is_additional = item_type == "additional"
         if is_additional and not invoice.additional_doc_id:
             raise HTTPException(status_code=400, detail="additional_doc_id is required for additional invoices")
@@ -218,6 +236,7 @@ def get_invoice_rates_preview(
     db: Session = Depends(get_db),
 ):
     """Charge lines for create-invoice (final quote preferred)."""
+    _reject_main_invoice_when_booking_cancelled(db, enquiry_id, "main")
     containers, source = invoice_quote_service.get_invoice_charge_containers(db, enquiry_id)
     if not source:
         raise HTTPException(status_code=404, detail="No quote found for this enquiry")
@@ -346,6 +365,8 @@ def generate_invoice_pdf(
     if not enquiry:
         logger.warning(f"Failed to generate invoice PDF: Enquiry {enquiry_id} not found")
         raise HTTPException(status_code=404, detail="Enquiry not found")
+
+    _reject_main_invoice_when_booking_cancelled(db, enquiry_id, item_type)
 
     # Fetch charge containers — post-SI final quote when present, else accepted quote
     containers, charge_source = invoice_quote_service.get_invoice_charge_containers(db, enquiry_id)

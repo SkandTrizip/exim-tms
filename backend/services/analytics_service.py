@@ -249,6 +249,13 @@ def _is_additional_row(row: Dict[str, Any]) -> bool:
     return row.get("row_kind") == "additional"
 
 
+def _counts_as_trip(row: Dict[str, Any]) -> bool:
+    """Trip KPIs exclude additional-invoice rows and booking-cancelled freight."""
+    if _is_additional_row(row):
+        return False
+    return not bool(row.get("booking_cancelled"))
+
+
 def _normalize_client_filters(
     client_name: Optional[str] = None,
     client_names: Optional[List[str]] = None,
@@ -378,6 +385,9 @@ def get_dashboard_analytics(
         cost = round(float(economics.cost_inr or 0), 2)
         revenue = round(float(economics.revenue_inr or 0), 2)
         master_number = (shipment.master_number or "").strip() if shipment else ""
+        booking_cancelled = bool(
+            shipment and getattr(shipment, "booking_cancelled_at", None)
+        )
 
         attr_date, is_legacy, si_date = _resolve_attribution(
             economics=economics,
@@ -388,16 +398,37 @@ def get_dashboard_analytics(
         if attr_date:
             fy_years_seen.add(_fy_start_for_date(attr_date))
 
-        later_cost, later_revenue, later_items = split_later_month_extras(
-            extras_by_enquiry.get(enquiry.id, []),
-            attr_month,
-        )
-        job_cost = round(cost - later_cost, 2)
-        job_revenue = round(revenue - later_revenue, 2)
+        enquiry_extras = extras_by_enquiry.get(enquiry.id, [])
+        if booking_cancelled:
+            add_cost_sum = round(
+                sum(float(getattr(i, "cost_inr", 0) or 0) for i in enquiry_extras), 2
+            )
+            add_rev_sum = round(
+                sum(float(getattr(i, "revenue_inr", 0) or 0) for i in enquiry_extras), 2
+            )
+            job_cost = round(max(0.0, cost - add_cost_sum), 2)
+            job_revenue = round(revenue - add_rev_sum, 2)
+            later_cost, later_revenue = add_cost_sum, add_rev_sum
+            later_items = list(enquiry_extras)
+            if not attr_date and shipment is not None:
+                cancel_dt = _as_date(getattr(shipment, "booking_cancelled_at", None))
+                if cancel_dt:
+                    attr_date = cancel_dt
+                    attr_month = _month_key(attr_date)
+                    fy_years_seen.add(_fy_start_for_date(attr_date))
+        else:
+            later_cost, later_revenue, later_items = split_later_month_extras(
+                enquiry_extras,
+                attr_month,
+            )
+            job_cost = round(cost - later_cost, 2)
+            job_revenue = round(revenue - later_revenue, 2)
         job_capture = round(job_revenue - job_cost, 2)
 
         has_final = enquiry.id in final_ids
-        if is_legacy:
+        if booking_cancelled and (job_cost > 0 or job_revenue != 0 or later_items):
+            status = "final"
+        elif is_legacy:
             status = "final"
         elif has_final and si_date is not None:
             status = "final"
@@ -418,14 +449,19 @@ def get_dashboard_analytics(
             "has_final_quote": has_final,
             "is_legacy": is_legacy,
             "economics_status": status,
+            "booking_cancelled": booking_cancelled,
         }
+        trip_containers = 0 if booking_cancelled else int(enquiry.container_count or 0)
+        trip_teu = 0.0 if booking_cancelled else teu_for_enquiry(
+            enquiry.container_type, enquiry.container_count
+        )
         all_rows.append({
             **shared,
             "row_kind": "job",
             "item_description": None,
             "doc_id": None,
-            "container_count": int(enquiry.container_count or 0),
-            "teu": teu_for_enquiry(enquiry.container_type, enquiry.container_count),
+            "container_count": trip_containers,
+            "teu": trip_teu,
             "cost_inr": job_cost,
             "revenue_inr": job_revenue,
             "capture_inr": job_capture,
@@ -535,7 +571,7 @@ def get_dashboard_analytics(
         b["cost_inr"] += row["cost_inr"]
         b["revenue_inr"] += row["revenue_inr"]
         b["capture_inr"] += row["capture_inr"]
-        if not _is_additional_row(row):
+        if _counts_as_trip(row):
             b["trips"] += 1
             b["teu"] += float(row.get("teu") or 0)
             b["containers"] += int(row.get("container_count") or 0)
@@ -544,7 +580,7 @@ def get_dashboard_analytics(
         "cost_inr": round(sum(r["cost_inr"] for r in pending_rows), 2),
         "revenue_inr": round(sum(r["revenue_inr"] for r in pending_rows), 2),
         "capture_inr": round(sum(r["capture_inr"] for r in pending_rows), 2),
-        "trips": sum(1 for r in pending_rows if not _is_additional_row(r)),
+        "trips": sum(1 for r in pending_rows if _counts_as_trip(r)),
     }
     pending_no_sob["margin_pct"] = _margin_pct(
         pending_no_sob["revenue_inr"], pending_no_sob["cost_inr"]
@@ -554,7 +590,7 @@ def get_dashboard_analytics(
         "cost_inr": round(sum(r["cost_inr"] for r in ongoing_rows), 2),
         "revenue_inr": round(sum(r["revenue_inr"] for r in ongoing_rows), 2),
         "capture_inr": round(sum(r["capture_inr"] for r in ongoing_rows), 2),
-        "trips": sum(1 for r in ongoing_rows if not _is_additional_row(r)),
+        "trips": sum(1 for r in ongoing_rows if _counts_as_trip(r)),
     }
     ongoing["margin_pct"] = _margin_pct(ongoing["revenue_inr"], ongoing["cost_inr"])
 
@@ -585,7 +621,7 @@ def get_dashboard_analytics(
         lambda: {m: 0 for m in series_months}
     )
     for row in fy_rows:
-        if _is_additional_row(row):
+        if not _counts_as_trip(row):
             continue
         ctype = (row.get("container_type") or "Unknown").strip() or "Unknown"
         month_key = row.get("si_month")
@@ -669,7 +705,7 @@ def get_dashboard_analytics(
     for row in sorted_rows:
         running_rev += row["revenue_inr"]
         running_cost += row["cost_inr"]
-        if not _is_additional_row(row):
+        if _counts_as_trip(row):
             running_trips += 1
         cum_revenue.append(round(running_rev, 2))
         cum_cost.append(round(running_cost, 2))

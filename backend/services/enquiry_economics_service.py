@@ -540,6 +540,41 @@ def get_sob_date_for_enquiry(db: Session, enquiry_id: int) -> Optional[datetime.
     return _status_date(status.sob)
 
 
+def is_booking_cancelled_for_enquiry(db: Session, enquiry_id: int) -> bool:
+    """True when the trip booking was marked cancelled (overheads may still apply)."""
+    status = (
+        db.query(ShipmentStatus.booking_cancelled_at)
+        .filter(ShipmentStatus.enquiry_id == enquiry_id)
+        .first()
+    )
+    if not status:
+        return False
+    return status[0] is not None
+
+
+def merge_enquiry_economics_components(
+    *,
+    booking_cancelled: bool,
+    quote_cost: float,
+    quote_revenue: float,
+    additional_cost: float,
+    additional_revenue: float,
+    overhead_cost: float,
+    overhead_deduct: float,
+) -> Tuple[float, float]:
+    """
+    Combine quote, additional-invoice, and overhead slices into stored economics.
+    Cancelled bookings exclude freight quote cost/revenue; additional invoices and overheads remain.
+    """
+    if booking_cancelled:
+        cost = additional_cost + overhead_cost
+        revenue = additional_revenue - overhead_deduct
+    else:
+        cost = quote_cost + additional_cost + overhead_cost
+        revenue = quote_revenue + additional_revenue - overhead_deduct
+    return round(cost, 2), round(revenue, 2)
+
+
 def get_si_date_for_enquiry(db: Session, enquiry_id: int) -> Optional[datetime.date]:
     """Return the SI submitted date from shipment_statuses, if set."""
     status = (
@@ -621,23 +656,19 @@ def eligible_enquiry_ids_for_economics(db: Session) -> list[int]:
 
 
 def compute_enquiry_economics(db: Session, enquiry_id: int) -> Tuple[float, float]:
-    cost = 0.0
-    revenue = 0.0
-
     quote_cost, quote_revenue = _sum_quote_economics_for_enquiry(db, enquiry_id)
-    cost += quote_cost
-    revenue += quote_revenue
-
     additional_cost, additional_revenue = _sum_additional_line_items_inr(db, enquiry_id)
-    cost += additional_cost
-    revenue += additional_revenue
-
-    # Intermittent overheads: add to shipping-line cost, or deduct from client revenue.
     overhead_cost, overhead_deduct = _sum_overhead_economics(db, enquiry_id)
-    cost += overhead_cost
-    revenue -= overhead_deduct
-
-    return round(cost, 2), round(revenue, 2)
+    booking_cancelled = is_booking_cancelled_for_enquiry(db, enquiry_id)
+    return merge_enquiry_economics_components(
+        booking_cancelled=booking_cancelled,
+        quote_cost=quote_cost,
+        quote_revenue=quote_revenue,
+        additional_cost=additional_cost,
+        additional_revenue=additional_revenue,
+        overhead_cost=overhead_cost,
+        overhead_deduct=overhead_deduct,
+    )
 
 
 def sync_enquiry_economics(
@@ -652,10 +683,15 @@ def sync_enquiry_economics(
     Skips when there is no quote source and no additional invoices.
     """
     additional_cost, additional_revenue = _sum_additional_line_items_inr(db, enquiry_id)
+    overhead_cost, overhead_deduct = _sum_overhead_economics(db, enquiry_id)
+    booking_cancelled = is_booking_cancelled_for_enquiry(db, enquiry_id)
+    has_overhead_economics = overhead_cost > 0 or overhead_deduct > 0
+    has_additional_economics = additional_cost > 0 or additional_revenue > 0
     if (
         not has_quote_economics_source(db, enquiry_id)
-        and additional_cost <= 0
-        and additional_revenue <= 0
+        and not has_additional_economics
+        and not (booking_cancelled and has_overhead_economics)
+        and not (booking_cancelled and has_additional_economics)
     ):
         return None
 

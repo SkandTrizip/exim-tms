@@ -5,6 +5,7 @@ let hasSavedInvoice = false;
 let additionalDocs = [];
 /** @type {'standard'|'dual_usd_inr'} */
 let customerInvoicingType = 'standard';
+let bookingCancelledForTrip = false;
 
 /**
  * Strip the branch suffix from a client name for invoicing.
@@ -104,6 +105,24 @@ async function fetchNextInvoiceNumber(force = false) {
     }
 }
 
+function applyBookingCancelledInvoiceMode() {
+    const banner = document.getElementById('bookingCancelledInvoiceBanner');
+    const typeEl = document.getElementById('invoice_item_type');
+    if (!typeEl) return;
+    if (bookingCancelledForTrip) {
+        if (banner) banner.hidden = false;
+        typeEl.value = 'additional';
+        Array.from(typeEl.options || []).forEach((opt) => {
+            opt.disabled = opt.value !== 'additional';
+        });
+    } else if (banner) {
+        banner.hidden = true;
+        Array.from(typeEl.options || []).forEach((opt) => {
+            opt.disabled = false;
+        });
+    }
+}
+
 function getCustomerInvoiceNo() {
     const el = document.getElementById('customer_invoice_no');
     if (!el) return '';
@@ -196,6 +215,8 @@ async function fetchAllData({ presetAdditionalDocId, presetCurrencyMode } = {}) 
         if (statusRes.ok) {
             const status = await statusRes.json();
             if (status) {
+                bookingCancelledForTrip = !!status.booking_cancelled_at;
+                applyBookingCancelledInvoiceMode();
                 document.getElementById('consignee_val').textContent = status.consignee || '---';
                 document.getElementById('origin_val').textContent = status.port_of_origin || '---';
                 document.getElementById('dest_val').textContent = status.final_destination || '---';

@@ -135,3 +135,45 @@ def update_shipment_status(db: Session, enquiry_id: int, status_data: dict):
 def get_shipment_status(db: Session, enquiry_id: int):
     """Get status record for an enquiry"""
     return db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == enquiry_id).first()
+
+
+def toggle_booking_cancelled(db: Session, enquiry_id: int) -> ShipmentStatus:
+    """
+    Toggle booking-cancelled on an operational trip.
+    Freight economics are recomputed (overheads only when cancelled).
+    """
+    from backend.models.enquiry import Enquiry
+
+    enquiry = db.query(Enquiry).filter(Enquiry.id == enquiry_id).first()
+    if not enquiry:
+        raise ValueError("Enquiry not found")
+    if enquiry.is_void:
+        raise ValueError("Cannot change booking status on a void enquiry.")
+    if (enquiry.stage or 1) < 3:
+        raise ValueError("Booking cancellation applies only after the trip is in operations.")
+
+    status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == enquiry_id).first()
+    if not status:
+        status = ShipmentStatus(enquiry_id=enquiry_id)
+        db.add(status)
+
+    if status.booking_cancelled_at:
+        status.booking_cancelled_at = None
+        logger.info(f"Booking restored for enquiry ID {enquiry_id}")
+    else:
+        status.booking_cancelled_at = datetime.utcnow()
+        logger.info(f"Booking marked cancelled for enquiry ID {enquiry_id}")
+
+    db.commit()
+    db.refresh(status)
+
+    try:
+        from backend.services.enquiry_economics_service import sync_enquiry_economics
+
+        sync_enquiry_economics(db, enquiry_id, commit=True)
+    except Exception as e:
+        logger.warning(
+            f"Could not sync enquiry economics after booking cancel toggle {enquiry_id}: {e}"
+        )
+
+    return status

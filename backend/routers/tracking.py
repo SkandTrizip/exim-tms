@@ -131,6 +131,7 @@ def get_status_bulk(ids: str, db: Session = Depends(get_db)):
         has_payment = s.enquiry_id in paid_enquiry_ids or s.pay_line is not None
         result[s.enquiry_id] = {
             "enquiry_id":       s.enquiry_id,
+            "booking_cancelled_at": s.booking_cancelled_at,
             "booking_confirmed": s.booking_confirmed,
             "si_submitted":     s.si_submitted,
             "bl_received":      s.bl_received,
@@ -239,6 +240,40 @@ def get_additional_invoice_docs(enquiry_id: int, db: Session = Depends(get_db)):
         {"id": int(doc_id), "created_at": created_at, "metadata_info": metadata_info or {}}
         for doc_id, created_at, metadata_info in rows
     ]
+
+@router.patch("/additional-invoice/{doc_id}")
+def update_additional_invoice(
+    doc_id: int,
+    metadata: str = Form(...),
+    file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+):
+    """Update additional-invoice charge metadata when no tax IRN has been recorded yet."""
+    from backend.models.invoice import Invoice
+
+    try:
+        metadata_info = json.loads(metadata)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail="Invalid metadata JSON") from exc
+
+    inv = (
+        db.query(Invoice)
+        .filter(Invoice.additional_doc_id == doc_id, Invoice.item_type == "additional")
+        .order_by(Invoice.id.desc())
+        .first()
+    )
+    if inv and (inv.irn or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot edit this charge — a tax invoice IRN is already recorded.",
+        )
+
+    doc = document_service.update_additional_invoice_document(
+        db, doc_id, metadata_info, file=file
+    )
+    sync_enquiry_economics(db, doc.enquiry_id, commit=True)
+    return doc
+
 
 @router.post("/upload-single")
 def upload_single_document(

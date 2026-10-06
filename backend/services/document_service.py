@@ -56,6 +56,58 @@ def save_document(db: Session, file: UploadFile, enquiry_id: int, quote_id: int,
     logger.info(f"Document saved successfully: {file_path}")
     return db_document
 
+def update_additional_invoice_document(
+    db: Session,
+    doc_id: int,
+    metadata_info: dict,
+    file: UploadFile | None = None,
+):
+    """Update additional-invoice metadata; optionally replace the uploaded file."""
+    from fastapi import HTTPException
+
+    doc = db.query(ShipmentDocument).filter(ShipmentDocument.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if (doc.document_type or "") != "additionalInvoice":
+        raise HTTPException(status_code=400, detail="Not an additional invoice document")
+
+    if file and getattr(file, "filename", None):
+        if doc.file_path:
+            old_path = os.path.join(UPLOAD_DIR, doc.file_path)
+            if os.path.isfile(old_path):
+                try:
+                    os.remove(old_path)
+                except OSError:
+                    logger.warning("Could not remove old additional invoice file: %s", old_path)
+
+        file_extension = os.path.splitext(file.filename)[1]
+        MAX_FILE_SIZE = 2 * 1024 * 1024
+        file.file.seek(0, os.SEEK_END)
+        file_size = file.file.tell()
+        file.file.seek(0)
+        if file_size > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File {file.filename} exceeds the 2MB size limit.",
+            )
+
+        unique_filename = f"{uuid.uuid4()}{file_extension}"
+        file_path = os.path.join(UPLOAD_DIR, unique_filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        doc.file_name = file.filename
+        doc.file_path = unique_filename
+        doc.file_size = os.path.getsize(file_path)
+        doc.mime_type = file.content_type
+
+    doc.metadata_info = metadata_info
+    db.commit()
+    db.refresh(doc)
+    logger.info("Updated additional invoice document id=%s enquiry_id=%s", doc.id, doc.enquiry_id)
+    return doc
+
+
 def get_documents_by_enquiry(db: Session, enquiry_id: int) -> List[ShipmentDocument]:
     """Get all documents associated with an enquiry"""
     return db.query(ShipmentDocument).filter(ShipmentDocument.enquiry_id == enquiry_id).all()
