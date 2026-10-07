@@ -758,10 +758,16 @@ function getChecklistState() {
     // Add metadata fields
     state.si_number = document.getElementById('si_number')?.value || '';
     state.consignee = document.getElementById('bl_consignee')?.value || '';
-    state.port_of_origin = document.getElementById('bl_port_origin')?.value || '';
-    state.final_destination = document.getElementById('bl_final_dest')?.value || '';
+    if (trackingBookingCancelled) {
+        state.port_of_origin = document.getElementById('cancelled_origin')?.value?.trim() || '';
+        state.final_destination = document.getElementById('cancelled_destination')?.value?.trim() || '';
+        state.vessel = document.getElementById('cancelled_vessel')?.value?.trim() || '';
+    } else {
+        state.port_of_origin = document.getElementById('bl_port_origin')?.value || '';
+        state.final_destination = document.getElementById('bl_final_dest')?.value || '';
+        state.vessel = document.getElementById('bl_vessel')?.value || '';
+    }
     state.master_number = document.getElementById('bl_master_number')?.value || '';
-    state.vessel = document.getElementById('bl_vessel')?.value || '';
     state.voyage = document.getElementById('bl_voyage')?.value || '';
     state.etd = document.getElementById('bl_etd')?.value || '';
     state.eta = document.getElementById('bl_eta')?.value || '';
@@ -958,6 +964,8 @@ function applyChecklistState(state, isBackend = false) {
         }
         el.value = value;
     });
+
+    applyCancelledRouteFieldsFromStatus(state);
 
     // Ensure dependencies are applied AFTER applying state
     checkAllDependencies();
@@ -1446,6 +1454,58 @@ window.addEventListener('message', (event) => {
     }
 });
 
+function applyCancelledRouteFieldsFromStatus(state) {
+    if (!state) return;
+    const originEl = document.getElementById('cancelled_origin');
+    const destEl = document.getElementById('cancelled_destination');
+    const vesselEl = document.getElementById('cancelled_vessel');
+    if (!originEl && !destEl && !vesselEl) return;
+
+    const originVal = (state.port_of_origin || '').trim()
+        || (currentEnquiryData?.origin || '').trim();
+    const destVal = (state.final_destination || '').trim()
+        || (currentEnquiryData?.destination || '').trim();
+    const vesselVal = (state.vessel || '').trim()
+        || (currentEnquiryData?.vessel || '').trim();
+
+    if (originEl) originEl.value = originVal;
+    if (destEl) destEl.value = destVal;
+    if (vesselEl) vesselEl.value = vesselVal;
+}
+
+async function saveCancelledRouteDetails() {
+    if (!currentEnquiryData?.id || !trackingBookingCancelled || !trackingQuoteConfirmed) return;
+
+    const payload = {
+        port_of_origin: document.getElementById('cancelled_origin')?.value?.trim() || '',
+        final_destination: document.getElementById('cancelled_destination')?.value?.trim() || '',
+        vessel: document.getElementById('cancelled_vessel')?.value?.trim() || '',
+    };
+
+    const blOrigin = document.getElementById('bl_port_origin');
+    const blDest = document.getElementById('bl_final_dest');
+    const blVessel = document.getElementById('bl_vessel');
+    if (blOrigin) blOrigin.value = payload.port_of_origin;
+    if (blDest) blDest.value = payload.final_destination;
+    if (blVessel) blVessel.value = payload.vessel;
+
+    try {
+        const response = await fetch(`${CONFIG.API_URL}/api/tracking/status/${currentEnquiryData.id}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            console.warn('Failed to save cancelled route details', err.detail || response.status);
+        }
+    } catch (e) {
+        console.error('Failed to save cancelled route details', e);
+    }
+}
+
+window.saveCancelledRouteDetails = saveCancelledRouteDetails;
+
 function syncCancelledBookingUi(isCancelled) {
     const checklist = document.getElementById('shipmentChecklistSection');
     const cancelledSec = document.getElementById('cancelledAdditionalSection');
@@ -1479,7 +1539,13 @@ function syncCancelledBookingUi(isCancelled) {
         saveTrackingBtn.disabled = isCancelled;
     }
 
-    if (!isCancelled) {
+    if (isCancelled) {
+        applyCancelledRouteFieldsFromStatus({
+            port_of_origin: document.getElementById('bl_port_origin')?.value,
+            final_destination: document.getElementById('bl_final_dest')?.value,
+            vessel: document.getElementById('bl_vessel')?.value,
+        });
+    } else {
         hideCancelledAdditionalInvoiceForm();
         clearAdditionalInvoiceEditMode();
     }

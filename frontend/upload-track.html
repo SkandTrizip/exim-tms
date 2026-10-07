@@ -258,6 +258,36 @@
                                     <i class="fas fa-plus"></i> Add charge
                                 </button>
                             </div>
+                            <div id="cancelledRouteFields"
+                                style="margin-bottom: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;">
+                                <div class="form-group" style="margin: 0;">
+                                    <label for="cancelled_origin"
+                                        style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block;">Origin
+                                        <span style="font-weight: 400;">(optional)</span></label>
+                                    <input type="text" id="cancelled_origin" class="form-control"
+                                        placeholder="Port or city of origin"
+                                        style="padding: 8px 10px; font-size: 13px;"
+                                        onchange="saveCancelledRouteDetails()">
+                                </div>
+                                <div class="form-group" style="margin: 0;">
+                                    <label for="cancelled_destination"
+                                        style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block;">Destination
+                                        <span style="font-weight: 400;">(optional)</span></label>
+                                    <input type="text" id="cancelled_destination" class="form-control"
+                                        placeholder="Port or city of destination"
+                                        style="padding: 8px 10px; font-size: 13px;"
+                                        onchange="saveCancelledRouteDetails()">
+                                </div>
+                                <div class="form-group" style="margin: 0;">
+                                    <label for="cancelled_vessel"
+                                        style="font-size: 11px; color: #64748b; margin-bottom: 4px; display: block;">Vessel name
+                                        <span style="font-weight: 400;">(optional)</span></label>
+                                    <input type="text" id="cancelled_vessel" class="form-control"
+                                        placeholder="Vessel name"
+                                        style="padding: 8px 10px; font-size: 13px;"
+                                        onchange="saveCancelledRouteDetails()">
+                                </div>
+                            </div>
                             <div id="cancelledAdditionalHost">
                                 <div id="additionalInvoiceFormRoot">
                                     <div id="details_additional_invoice"
