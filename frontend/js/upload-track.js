@@ -762,12 +762,13 @@ function getChecklistState() {
         state.port_of_origin = document.getElementById('cancelled_origin')?.value?.trim() || '';
         state.final_destination = document.getElementById('cancelled_destination')?.value?.trim() || '';
         state.vessel = document.getElementById('cancelled_vessel')?.value?.trim() || '';
+        state.master_number = document.getElementById('cancelled_master_number')?.value?.trim() || '';
     } else {
         state.port_of_origin = document.getElementById('bl_port_origin')?.value || '';
         state.final_destination = document.getElementById('bl_final_dest')?.value || '';
         state.vessel = document.getElementById('bl_vessel')?.value || '';
+        state.master_number = document.getElementById('bl_master_number')?.value || '';
     }
-    state.master_number = document.getElementById('bl_master_number')?.value || '';
     state.voyage = document.getElementById('bl_voyage')?.value || '';
     state.etd = document.getElementById('bl_etd')?.value || '';
     state.eta = document.getElementById('bl_eta')?.value || '';
@@ -1459,7 +1460,8 @@ function applyCancelledRouteFieldsFromStatus(state) {
     const originEl = document.getElementById('cancelled_origin');
     const destEl = document.getElementById('cancelled_destination');
     const vesselEl = document.getElementById('cancelled_vessel');
-    if (!originEl && !destEl && !vesselEl) return;
+    const masterEl = document.getElementById('cancelled_master_number');
+    if (!originEl && !destEl && !vesselEl && !masterEl) return;
 
     const originVal = (state.port_of_origin || '').trim()
         || (currentEnquiryData?.origin || '').trim();
@@ -1467,10 +1469,12 @@ function applyCancelledRouteFieldsFromStatus(state) {
         || (currentEnquiryData?.destination || '').trim();
     const vesselVal = (state.vessel || '').trim()
         || (currentEnquiryData?.vessel || '').trim();
+    const masterVal = (state.master_number || '').trim();
 
     if (originEl) originEl.value = originVal;
     if (destEl) destEl.value = destVal;
     if (vesselEl) vesselEl.value = vesselVal;
+    if (masterEl) masterEl.value = masterVal;
 }
 
 async function saveCancelledRouteDetails() {
@@ -1480,14 +1484,17 @@ async function saveCancelledRouteDetails() {
         port_of_origin: document.getElementById('cancelled_origin')?.value?.trim() || '',
         final_destination: document.getElementById('cancelled_destination')?.value?.trim() || '',
         vessel: document.getElementById('cancelled_vessel')?.value?.trim() || '',
+        master_number: document.getElementById('cancelled_master_number')?.value?.trim() || '',
     };
 
     const blOrigin = document.getElementById('bl_port_origin');
     const blDest = document.getElementById('bl_final_dest');
     const blVessel = document.getElementById('bl_vessel');
+    const blMaster = document.getElementById('bl_master_number');
     if (blOrigin) blOrigin.value = payload.port_of_origin;
     if (blDest) blDest.value = payload.final_destination;
     if (blVessel) blVessel.value = payload.vessel;
+    if (blMaster) blMaster.value = payload.master_number;
 
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/tracking/status/${currentEnquiryData.id}`, {
