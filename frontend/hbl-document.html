@@ -123,8 +123,19 @@
             #hblCargoPage1Box.has-cargo-overflow {
                 --hbl-cargo-row-h: calc(190px - var(--hbl-cargo-note-h)) !important;
             }
-            #hblCargoPage1Box.has-cargo-overflow .cargo-continued-note {
-                display: block !important;
+            #hblCargoPage1Box.has-cargo-overflow .cargo-table-preview tbody tr.cargo-data-row > td {
+                border-bottom: none !important;
+            }
+            #hblCargoPage1Box tfoot td.cargo-continued-note {
+                height: var(--hbl-cargo-note-h, 22px) !important;
+                line-height: var(--hbl-cargo-note-h, 22px) !important;
+                padding: 0 !important;
+                font-size: 11px !important;
+                font-weight: bold !important;
+                text-align: center !important;
+            }
+            #hblCargoPage1Box tfoot.hidden {
+                display: none !important;
             }
             #hblCargoPage1Box .cargo-table-preview tbody tr.cargo-data-row > td {
                 height: var(--hbl-cargo-row-h, 190px) !important;
@@ -566,25 +577,23 @@
             padding: 0;
             vertical-align: top;
         }
-        #hblCargoPage1Box .cargo-continued-note {
-            display: none;
+        /* Continued strip as table footer so borders align with the cargo grid (avoids PDF/print gaps). */
+        #hblCargoPage1Box.has-cargo-overflow .cargo-table tbody tr.cargo-data-row > td {
+            border-bottom: none;
+        }
+        #hblCargoPage1Box tfoot td.cargo-continued-note {
             height: var(--hbl-cargo-note-h);
             line-height: var(--hbl-cargo-note-h);
+            padding: 0;
             text-align: center;
             font-size: 11px;
             font-weight: bold;
-            border-top: 1px solid #000;
+            vertical-align: middle;
             background: #fff;
             box-sizing: border-box;
         }
-        #hblCargoPage1Box.has-cargo-overflow .cargo-continued-note {
-            display: block;
-        }
-        #hblCargoPage1Box .cargo-continued-note.hidden {
-            display: none !important;
-        }
-        #hblCargoPage1Box.has-cargo-overflow .cargo-continued-note:not(.hidden) {
-            display: block !important;
+        #hblCargoPage1Box tfoot.hidden {
+            display: none;
         }
         #hblPage2 .cargo-table tbody tr.cargo-data-row td {
             height: auto;
@@ -756,10 +765,10 @@
                             <img src="Logipod_Logo.png" alt="Logipod" class="mtd-company-logo">
                             <div class="mtd-company">LOGIPOD LOGISTICS PRIVATE LIMITED</div>
                             <div class="mtd-company-addr">
-                                3rd floor, Plot No. 448A, Udyog Vihar Phase 5 Industrial Complex Gurugram<br>
-                                Gurgaon Haryana India - 122016<br>
-                                Tel: +91 9988553772 -<br>
-                                exim_ops@logipod.in | www.logipod.in
+                                3rd Floor, Plot No. 448A, Udyog Vihar Phase 5, Industrial Complex Gurugram<br>
+                                Gurgaon, Haryana India - 122016<br>
+                                Tel:   +91 9988553772 -<br>
+                                Email: exim_ops@logipod.in | Website: www.logipod.in
                             </div>
                         </div>
                     </td>
@@ -838,7 +847,7 @@
                         <div class="field-val editable" id="voyageNo"></div>
                     </td>
                     <td colspan="2">
-                        <span class="field-label">Modes Means of Transport</span>
+                        <span class="field-label">Modes/Means of Transport</span>
                         <div class="field-val editable" id="modesTransport"></div>
                     </td>
                     <td colspan="2">
@@ -861,7 +870,7 @@
                     <tr>
                         <th>Container No(s)</th>
                         <th>Marks &amp; Number</th>
-                        <th>Number of packages, Kind of packages, General description of goods</th>
+                        <th>Number of Packages, Kind of Packages, General description of goods</th>
                         <th>Gross Weight</th>
                         <th>Measurement</th>
                     </tr>
@@ -875,8 +884,12 @@
                         <td class="cargo-preview-cell" id="cargoMeasurementPreview" data-cargo-source="cargoMeasurement"><div class="cargo-preview-inner editable" dir="ltr"></div></td>
                     </tr>
                 </tbody>
+                <tfoot id="hblCargoContinuedFoot" class="hidden" aria-hidden="true">
+                    <tr>
+                        <td colspan="5" class="cargo-continued-note">Details Contd. on Attached Sheet.</td>
+                    </tr>
+                </tfoot>
             </table>
-            <div id="hblCargoContinuedNote" class="cargo-continued-note hidden" aria-hidden="true">Details Contd. on Attached Sheet.</div>
             </div>
 
             <!-- Bottom Section -->

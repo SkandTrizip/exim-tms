@@ -431,7 +431,7 @@ function placeEndOfBlBlock(anyOverflow) {
 
 function updateCargoOverflowState() {
     const box = document.getElementById('hblCargoPage1Box');
-    const note = document.getElementById('hblCargoContinuedNote');
+    const note = document.getElementById('hblCargoContinuedFoot');
     const page2 = document.getElementById('hblPage2');
     const anyOverflow = hasAnyCargoOverflow();
     box?.classList.toggle('has-cargo-overflow', anyOverflow);
