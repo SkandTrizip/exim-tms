@@ -32,6 +32,61 @@ const HBL_ADDRESS_FIELD_IDS = new Set([
     'notifyParty1', 'notifyParty2', 'consignor', 'consignee', 'deliveryAgent',
 ]);
 
+/** Known acronyms / abbreviations kept uppercase on HBL party address blocks. */
+const HBL_ADDRESS_ABBREVS = new Set([
+    'SA', 'BV', 'NV', 'LLP', 'LLC', 'INC', 'PLC', 'GMBH', 'AG', 'KG',
+    'IEC', 'PAN', 'GST', 'GSTIN', 'VAT', 'CIN', 'TIN', 'AEO', 'UID',
+    'PVT', 'LTD', 'CO', 'PO', 'PIN', 'ZIP',
+]);
+
+function isHblAbbrevToken(word) {
+    if (!word || !/[A-Za-z]/.test(word)) return false;
+    const lettersOnly = word.replace(/[^A-Za-z]/g, '');
+    if (!lettersOnly) return false;
+    const upper = lettersOnly.toUpperCase();
+    if (HBL_ADDRESS_ABBREVS.has(upper)) return true;
+    // Dotted forms: S.A., B.V., N.V.
+    if (/^([A-Z]\.)+[A-Z]?\.?$/i.test(word)) return true;
+    // Short all-caps acronyms (2–3 letters), e.g. SA, BV
+    if (/^[A-Z]{2,3}$/.test(lettersOnly)) return true;
+    return false;
+}
+
+function titleCaseWord(word) {
+    if (!word) return word;
+    if (isHblAbbrevToken(word)) {
+        return word.replace(/[a-zA-Z]+/g, (seg) => seg.toUpperCase());
+    }
+    if (!/[a-zA-Z]/.test(word)) return word;
+    return word.replace(/[a-zA-Z]+/g, (seg) => {
+        if (isHblAbbrevToken(seg)) return seg.toUpperCase();
+        const lower = seg.toLowerCase();
+        return lower.charAt(0).toUpperCase() + lower.slice(1);
+    });
+}
+
+/** First letter upper, rest lower per word; abbreviations and emails preserved. */
+function formatHblAddressCase(text) {
+    if (!text) return '';
+    return String(text)
+        .split('\n')
+        .map((line) => {
+            if (!line.trim()) return line;
+            return line.replace(/[^\s]+/g, (token) => {
+                if (token.includes('@')) return token.toLowerCase();
+                if (/[/]/.test(token)) {
+                    return token.split('/').map((part) => titleCaseWord(part)).join('/');
+                }
+                return titleCaseWord(token);
+            });
+        })
+        .join('\n');
+}
+
+function formatHblAddressDisplay(raw) {
+    return softWrapLongTokens(formatHblAddressCase(raw));
+}
+
 function softWrapLongTokens(text) {
     if (!text) return '';
     // Ensure ",email@" becomes ", email@" and allow breaks on long tokens
@@ -75,7 +130,7 @@ function applySnapshot(s) {
             const el = document.getElementById(id);
             if (!el) continue;
             const raw = s.fields[id] ?? '';
-            el.textContent = HBL_ADDRESS_FIELD_IDS.has(id) ? softWrapLongTokens(raw) : raw;
+            el.textContent = HBL_ADDRESS_FIELD_IDS.has(id) ? formatHblAddressDisplay(raw) : raw;
         }
     }
     const sel = document.getElementById('blTypeSelect');
@@ -777,12 +832,12 @@ function fmtDate(iso) {
 function populateDocument(d) {
     document.getElementById('mtdBlNo').textContent = d.enquiry_number || '';
 
-    document.getElementById('consignor').textContent = softWrapLongTokens(d.consignor || d.client_name || '');
+    document.getElementById('consignor').textContent = formatHblAddressDisplay(d.consignor || d.client_name || '');
     document.getElementById('shipmentRefNo').textContent = d.enquiry_number || '';
-    document.getElementById('consignee').textContent = softWrapLongTokens(d.consignee || '');
-    document.getElementById('deliveryAgent').textContent = softWrapLongTokens(d.delivery_agent || '');
-    document.getElementById('notifyParty1').textContent = softWrapLongTokens(d.notify_party_address || '');
-    document.getElementById('notifyParty2').textContent = softWrapLongTokens(d.notify_party_2_address || '');
+    document.getElementById('consignee').textContent = formatHblAddressDisplay(d.consignee || '');
+    document.getElementById('deliveryAgent').textContent = formatHblAddressDisplay(d.delivery_agent || '');
+    document.getElementById('notifyParty1').textContent = formatHblAddressDisplay(d.notify_party_address || '');
+    document.getElementById('notifyParty2').textContent = formatHblAddressDisplay(d.notify_party_2_address || '');
 
     const origin = d.origin || '';
     const dest = d.destination || '';
