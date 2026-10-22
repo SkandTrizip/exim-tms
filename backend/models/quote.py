@@ -114,6 +114,7 @@ class QuoteCharge(Base):
     
     # Sequence for ordering
     charge_sequence = Column(Integer, default=0)
-    
+    hsn_sac = Column(String, nullable=True)
+
     # Relationships
     container = relationship("QuoteContainer", back_populates="charges")

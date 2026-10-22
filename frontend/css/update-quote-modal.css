@@ -242,8 +242,14 @@ body.embedded-mode.uq-modal-open {
 .uq-charges-table--editable col.col-sl-inr { width: 9%; }
 .uq-charges-table--editable col.col-client-rate { width: 8%; }
 .uq-charges-table--editable col.col-client-ex { width: 5%; }
-.uq-charges-table--editable col.col-client-inr { width: 9%; }
+.uq-charges-table--editable col.col-client-inr { width: 8%; }
+.uq-charges-table--editable col.col-hsn { width: 6%; }
 .uq-charges-table--editable col.col-actions { width: 3%; }
+
+.uq-charges-table input.uq-hsn {
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+}
 
 .uq-charges-table th {
     padding: 8px 10px;

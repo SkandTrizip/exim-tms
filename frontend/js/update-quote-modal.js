@@ -207,6 +207,9 @@ function mapApiQuoteToContainers(quote) {
                             exchangeRate,
                             ch.vendor_exchange_rate
                         ),
+                        hsn_sac: typeof resolveHsnSac === 'function'
+                            ? resolveHsnSac(ch.charge_description, ch.hsn_sac)
+                            : (ch.hsn_sac || ''),
                     };
                 }),
         }));
@@ -232,6 +235,9 @@ function mapSnapshotContainersToEditable(snapshot) {
                     exchangeRate,
                     ch.vendor_exchange_rate
                 ),
+                hsn_sac: typeof resolveHsnSac === 'function'
+                    ? resolveHsnSac(ch.charge_description, ch.hsn_sac)
+                    : (ch.hsn_sac || ''),
             };
         }),
     }));
@@ -276,6 +282,7 @@ function renderInitialTable(containers) {
                         <th style="text-align:right">Client Rate</th>
                         <th title="Client exchange rate">Cl. Ex.</th>
                         <th style="text-align:right">Client (INR)</th>
+                        <th>HSN/SAC</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -292,6 +299,11 @@ function renderInitialTable(containers) {
                             <td>${ch.vendor_rate ?? ch.rate ?? ''}</td>
                             <td>${displayUqExRate(resolveUqClientExRate(ch.currency, ch.exchange_rate, ch.vendor_exchange_rate))}</td>
                             <td class="inr-cell" style="color:#374151">₹${Math.round(calcClientInr(ch)).toLocaleString()}</td>
+                            <td>${escapeHtml(
+                                typeof resolveHsnSac === 'function'
+                                    ? resolveHsnSac(ch.charge_description, ch.hsn_sac)
+                                    : (ch.hsn_sac || '—')
+                            )}</td>
                         </tr>
                     `).join('')}
                 </tbody>
@@ -329,6 +341,7 @@ function renderFinalTables() {
                     <col class="col-client-rate">
                     <col class="col-client-ex">
                     <col class="col-client-inr">
+                    <col class="col-hsn">
                     <col class="col-actions">
                 </colgroup>
                 <thead>
@@ -344,6 +357,7 @@ function renderFinalTables() {
                         <th style="text-align:right">Client Rate</th>
                         <th title="Client exchange rate">Cl. Ex.</th>
                         <th style="text-align:right">Client (INR)</th>
+                        <th title="HSN/SAC on printed invoice">HSN/SAC</th>
                         <th></th>
                     </tr>
                 </thead>
@@ -376,6 +390,9 @@ function renderFinalTables() {
                 exchange_rate: getUqExchangeRate('USD'),
                 vendor_rate: 0,
                 vendor_exchange_rate: getUqExchangeRate('USD'),
+                hsn_sac: typeof suggestHsnSacFromDescription === 'function'
+                    ? suggestHsnSacFromDescription('')
+                    : '996511',
             });
             renderFinalTables();
             updateFinalTotals();
@@ -395,6 +412,9 @@ function renderFinalRow(ch, cIdx, rIdx, defaultQty) {
     const inr = calcChargeInr({ ...ch, quantity: qty, exchange_rate: ex });
     const clientInr = calcClientInr({ ...ch, quantity: qty, exchange_rate: ex, vendor_exchange_rate: vendorEx });
     const exReadonly = curr === 'INR';
+    const hsnVal = typeof resolveHsnSac === 'function'
+        ? resolveHsnSac(ch.charge_description, ch.hsn_sac)
+        : (ch.hsn_sac || '');
     return `
         <tr data-cidx="${cIdx}" data-ridx="${rIdx}">
             <td><input type="text" class="uq-desc" value="${escapeHtml(ch.charge_description || '')}"></td>
@@ -422,6 +442,10 @@ function renderFinalRow(ch, cIdx, rIdx, defaultQty) {
             <td><input type="number" class="uq-vendor" value="${ch.vendor_rate ?? ch.rate ?? ''}" min="0" step="any"></td>
             <td><input type="number" class="uq-vendor-ex" value="${displayUqExRate(vendorEx)}" min="0" step="0.01" ${exReadonly ? 'readonly' : ''}></td>
             <td class="inr-cell uq-client-inr" style="color:#374151">₹${Math.round(clientInr).toLocaleString()}</td>
+            <td>
+                <input type="text" class="uq-hsn" value="${escapeHtml(hsnVal)}" placeholder="996511"
+                    inputmode="numeric" maxlength="8" aria-label="HSN or SAC code">
+            </td>
             <td>
                 <button type="button" class="btn-icon-overlay uq-remove-row" title="Remove charge" style="position:static;">
                     <i class="fas fa-trash"></i>
@@ -488,6 +512,15 @@ function bindFinalRowEvents(host) {
             uqState.finalContainers[cIdx].charges.splice(rIdx, 1);
             renderFinalTables();
         });
+        row.querySelector('.uq-desc')?.addEventListener('change', () => {
+            const hsnEl = row.querySelector('.uq-hsn');
+            if (!hsnEl || String(hsnEl.value || '').trim()) return;
+            const desc = row.querySelector('.uq-desc')?.value || '';
+            if (typeof resolveHsnSac === 'function') {
+                hsnEl.value = resolveHsnSac(desc, '');
+            }
+            sync();
+        });
     });
 }
 
@@ -505,6 +538,7 @@ function syncRowToState(row) {
     ch.exchange_rate = formatUqExRate(row.querySelector('.uq-ex')?.value);
     ch.vendor_rate = parseFloat(row.querySelector('.uq-vendor')?.value) || 0;
     ch.vendor_exchange_rate = formatUqExRate(row.querySelector('.uq-vendor-ex')?.value);
+    ch.hsn_sac = (row.querySelector('.uq-hsn')?.value || '').trim();
 }
 
 function updateRowInr(row) {
@@ -719,6 +753,11 @@ async function persistFinalQuoteRevision(remarks) {
                 exchange_rate: formatUqExRate(ch.exchange_rate),
                 vendor_rate: ch.vendor_rate,
                 vendor_exchange_rate: formatUqExRate(ch.vendor_exchange_rate),
+                hsn_sac: (ch.hsn_sac || '').trim() || (
+                    typeof resolveHsnSac === 'function'
+                        ? resolveHsnSac(ch.charge_description, '')
+                        : ''
+                ),
             })),
         })),
     };

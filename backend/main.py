@@ -54,6 +54,8 @@ _column_migrations = [
     ("final_quotes", "revision_remarks_other", "TEXT"),
     ("quote_charges", "vendor_exchange_rate", "FLOAT DEFAULT 1.0"),
     ("final_quote_charges", "vendor_exchange_rate", "FLOAT DEFAULT 1.0"),
+    ("quote_charges", "hsn_sac", "VARCHAR"),
+    ("final_quote_charges", "hsn_sac", "VARCHAR"),
     ("enquiry_economics", "sob_date", "DATE"),
     ("enquiry_economics", "si_date", "DATE"),
     ("overhead_payments", "pay_to_type", "VARCHAR DEFAULT 'payee'"),

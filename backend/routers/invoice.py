@@ -20,6 +20,7 @@ import io
 import datetime
 import os
 from backend.utils.logger import logger
+from backend.utils.hsn_sac import resolve_hsn_sac
 
 router = APIRouter(prefix="/invoice", tags=["Invoice"])
 
@@ -651,25 +652,21 @@ def generate_invoice_pdf(
 
                 desc_lower = (charge.charge_description or "").lower()
 
-                # Determine SAC and GST pct
-                sac_code = "996511"  # Default
+                sac_code = resolve_hsn_sac(
+                    charge.charge_description,
+                    getattr(charge, "hsn_sac", None),
+                )
                 if "air freight" in desc_lower:
-                    sac_code = "996531"
                     gst_pct = 18.0
                 elif "ocean freight" in desc_lower or "freight" in desc_lower:
-                    sac_code = "996521"
                     gst_pct = 5.0
                 elif "bl fee" in desc_lower or "bl charge" in desc_lower:
-                    sac_code = "996799"
                     gst_pct = 18.0
                 elif "origin thc" in desc_lower or "origin terminal" in desc_lower:
-                    sac_code = "996711"
                     gst_pct = 18.0
                 elif "seal charge" in desc_lower or "seal fee" in desc_lower:
-                    sac_code = "996799"
                     gst_pct = 18.0
                 elif "facilitation" in desc_lower:
-                    sac_code = "996711"
                     gst_pct = 18.0
                 else:
                     gst_pct = 18.0

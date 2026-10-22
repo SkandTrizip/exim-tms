@@ -10,6 +10,7 @@ from backend.schemas.final_quote import FinalQuoteUpdate
 from backend.constants.quote_remarks import validate_quote_remarks
 from backend.services.enquiry_economics_service import sync_enquiry_economics
 from backend.utils.logger import logger
+from backend.utils.hsn_sac import resolve_hsn_sac
 
 
 def _load_source_quote(db: Session, quote_id: int) -> Optional[Quote]:
@@ -120,6 +121,10 @@ def _copy_source_to_final(db: Session, source: Quote) -> FinalQuote:
                 vendor_rate=src_charge.vendor_rate,
                 vendor_exchange_rate=vendor_ex,
                 charge_sequence=seq,
+                hsn_sac=resolve_hsn_sac(
+                    src_charge.charge_description,
+                    src_charge.hsn_sac,
+                ),
             )
             db.add(db_charge)
 
@@ -216,6 +221,10 @@ def update_final_revision(db: Session, source_quote_id: int, data: FinalQuoteUpd
                 vendor_rate=charge_data.vendor_rate,
                 vendor_exchange_rate=charge_data.vendor_exchange_rate,
                 charge_sequence=seq,
+                hsn_sac=resolve_hsn_sac(
+                    charge_data.charge_description,
+                    charge_data.hsn_sac,
+                ),
             )
             db.add(db_charge)
 

@@ -96,10 +96,10 @@ INCOTERMS = [
 SHIPPING_LINES = ["Maersk", "MSC", "CMA CGM", "Hapag-Lloyd", "ONE", "Evergreen", "HMM", "Yang Ming", "ZIM", "Wan Hai"]
 
 DEFAULT_CHARGES = [
-    { "desc": "Ocean Freight", "account": "On Your Account", "curr": "USD", "on": "Per Container" },
-    { "desc": "BL Fee", "account": "On Your Account", "curr": "INR", "on": "Per BL" },
-    { "desc": "Origin THC", "account": "On Your Account", "curr": "INR", "on": "Per Container" },
-    { "desc": "Seal Charge", "account": "On Your Account", "curr": "INR", "on": "Per Container" },
+    { "desc": "Ocean Freight", "account": "On Your Account", "curr": "USD", "on": "Per Container", "hsn_sac": "996521" },
+    { "desc": "BL Fee", "account": "On Your Account", "curr": "INR", "on": "Per BL", "hsn_sac": "996799" },
+    { "desc": "Origin THC", "account": "On Your Account", "curr": "INR", "on": "Per Container", "hsn_sac": "996711" },
+    { "desc": "Seal Charge", "account": "On Your Account", "curr": "INR", "on": "Per Container", "hsn_sac": "996799" },
 ]
 
 # Prefilled pricing lines when shipment type is Air Freight (HSN/SAC for invoicing reference).

@@ -9,6 +9,7 @@ import datetime
 import json
 from backend.constants.quote_remarks import validate_quote_remarks
 from backend.utils.logger import logger
+from backend.utils.hsn_sac import resolve_hsn_sac
 
 def _load_quote_full(db: Session, quote_id: int) -> Optional[Quote]:
     return (
@@ -218,7 +219,11 @@ def create_quote(db: Session, quote_data: QuoteCreate) -> Quote:
                 final_inr_amount=calculated_inr,
                 vendor_rate=charge_data.vendor_rate,
                 vendor_exchange_rate=charge_data.vendor_exchange_rate,
-                charge_sequence=seq          # preserve row order
+                charge_sequence=seq,  # preserve row order
+                hsn_sac=resolve_hsn_sac(
+                    charge_data.charge_description,
+                    charge_data.hsn_sac,
+                ),
             )
             db.add(db_charge)
 
@@ -350,7 +355,11 @@ def update_quote(db: Session, quote_id: int, quote_data: QuoteUpdate) -> Quote:
                     final_inr_amount=calculated_inr,
                     vendor_rate=charge_data.vendor_rate,
                     vendor_exchange_rate=charge_data.vendor_exchange_rate,
-                    charge_sequence=seq
+                    charge_sequence=seq,
+                    hsn_sac=resolve_hsn_sac(
+                        charge_data.charge_description,
+                        charge_data.hsn_sac,
+                    ),
                 )
                 db.add(db_charge)
 
