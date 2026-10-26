@@ -215,6 +215,60 @@
     color: #334155;
 }
 
+.inv-tracker-card--collapsible .inv-tracker-card-head {
+    border-bottom: none;
+}
+
+.inv-tracker-card--collapsible.is-expanded .inv-tracker-card-head {
+    border-bottom: 1px solid var(--border-light);
+}
+
+.inv-tracker-collapse-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    background: #fff;
+    border: 1px solid var(--border-light);
+    border-radius: 8px;
+    cursor: pointer;
+    min-height: 44px;
+    min-width: 44px;
+    justify-content: center;
+}
+
+.inv-tracker-collapse-btn:hover {
+    border-color: #cbd5e1;
+    color: var(--text-primary);
+}
+
+.inv-tracker-collapse-btn:focus-visible {
+    outline: 2px solid #2563eb;
+    outline-offset: 2px;
+}
+
+.inv-tracker-collapse-icon {
+    font-size: 11px;
+    transition: transform 0.2s ease;
+}
+
+.inv-tracker-collapse-icon.is-expanded {
+    transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .inv-tracker-collapse-icon {
+        transition: none;
+    }
+}
+
+.inv-tracker-collapsible-panel[hidden] {
+    display: none;
+}
+
 .inv-tracker-card-body {
     max-height: 360px;
     overflow: auto;

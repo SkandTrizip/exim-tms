@@ -6,6 +6,10 @@
         data: null,
         clientFilter: '',
         loading: false,
+        analyticsCollapsed: {
+            collection: true,
+            by_month: true,
+        },
     };
 
     function formatDate(val) {
@@ -205,6 +209,57 @@
             </table>`;
     }
 
+    function renderCollapsibleAnalyticsCard(key, title, innerHtml) {
+        const collapsed = state.analyticsCollapsed[key] !== false;
+        return `
+            <div class="inv-tracker-card inv-tracker-card--collapsible" data-analytics-key="${escape(key)}">
+                <div class="inv-tracker-card-head">
+                    <h3>${escape(title)}</h3>
+                    <button type="button" class="inv-tracker-collapse-btn" aria-expanded="${collapsed ? 'false' : 'true'}"
+                        aria-controls="invTrackerPanel-${escape(key)}">
+                        <span class="inv-tracker-collapse-label">${collapsed ? 'View' : 'Hide'}</span>
+                        <i class="fas fa-chevron-down inv-tracker-collapse-icon" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div id="invTrackerPanel-${escape(key)}" class="inv-tracker-collapsible-panel"${collapsed ? ' hidden' : ''}>
+                    ${innerHtml}
+                </div>
+            </div>`;
+    }
+
+    function setAnalyticsCardCollapsed(card, collapsed) {
+        const key = card.dataset.analyticsKey;
+        const panel = card.querySelector('.inv-tracker-collapsible-panel');
+        const btn = card.querySelector('.inv-tracker-collapse-btn');
+        const label = btn?.querySelector('.inv-tracker-collapse-label');
+        const icon = btn?.querySelector('.inv-tracker-collapse-icon');
+        if (key) state.analyticsCollapsed[key] = collapsed;
+        if (panel) {
+            if (collapsed) panel.setAttribute('hidden', '');
+            else panel.removeAttribute('hidden');
+        }
+        if (btn) btn.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+        if (label) label.textContent = collapsed ? 'View' : 'Hide';
+        if (icon) icon.classList.toggle('is-expanded', !collapsed);
+        card.classList.toggle('is-expanded', !collapsed);
+    }
+
+    function bindCollapsibleAnalyticsCards(root) {
+        root.querySelectorAll('.inv-tracker-card--collapsible').forEach((card) => {
+            const key = card.dataset.analyticsKey;
+            const collapsed = state.analyticsCollapsed[key] !== false;
+            setAnalyticsCardCollapsed(card, collapsed);
+            const btn = card.querySelector('.inv-tracker-collapse-btn');
+            if (!btn || btn.dataset.bound) return;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', () => {
+                const panel = card.querySelector('.inv-tracker-collapsible-panel');
+                const isHidden = panel?.hasAttribute('hidden');
+                setAnalyticsCardCollapsed(card, !isHidden);
+            });
+        });
+    }
+
     function renderDashboard(data) {
         const panel = document.getElementById('invoiceTrackerPanel');
         if (!panel || !data) return;
@@ -303,18 +358,16 @@
             </div>
 
             <div class="inv-tracker-analytics">
-                <div class="inv-tracker-card">
-                    <div class="inv-tracker-card-head">
-                        <h3>Collection performance</h3>
-                    </div>
-                    ${renderDonut(data.analytics?.collection || {}, s.on_time_rate_pct)}
-                </div>
-                <div class="inv-tracker-card">
-                    <div class="inv-tracker-card-head">
-                        <h3>On time vs late — by invoice month</h3>
-                    </div>
-                    ${renderMonthBars(data.analytics?.by_month)}
-                </div>
+                ${renderCollapsibleAnalyticsCard(
+                    'collection',
+                    'Collection performance',
+                    renderDonut(data.analytics?.collection || {}, s.on_time_rate_pct)
+                )}
+                ${renderCollapsibleAnalyticsCard(
+                    'by_month',
+                    'On time vs late — by invoice month',
+                    renderMonthBars(data.analytics?.by_month)
+                )}
             </div>
 
             <div class="inv-tracker-card">
@@ -326,6 +379,8 @@
 
             <p class="cell-muted" style="font-size:12px;margin:0;">As of ${escape(data.as_of || '')} (IST). On-time = payment received on or before due date.</p>
         `;
+
+        bindCollapsibleAnalyticsCards(panel);
 
         document.getElementById('invTrackerRefreshBtn')?.addEventListener('click', () => loadInvoiceTracker(true));
         document.getElementById('invTrackerClientFilter')?.addEventListener('change', (e) => {
