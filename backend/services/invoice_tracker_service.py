@@ -51,7 +51,7 @@ def _serialize_invoice_row(
     origin: str,
     destination: str,
     today: date,
-    due_soon_days: int = 3,
+    due_soon_days: int = 5,
 ) -> Dict[str, Any]:
     due = inv.payment_due_date
     days = _days_remaining(due, today)
@@ -93,7 +93,7 @@ def _serialize_invoice_row(
 def get_invoice_tracker_dashboard(
     db: Session,
     *,
-    due_soon_days: int = 3,
+    due_soon_days: int = 5,
     client_name: Optional[str] = None,
     months_back: int = 12,
 ) -> Dict[str, Any]:
@@ -214,6 +214,19 @@ def get_invoice_tracker_dashboard(
     open_count = overdue_unpaid_count + len(due_soon) + len(open_upcoming)
     paid_with_timing = collection_on_time + collection_late
 
+    days_to_pay: List[int] = []
+    credit_periods: List[int] = []
+    for inv, *_ in rows:
+        dtp = _days_to_payment_received(inv)
+        if dtp is not None:
+            days_to_pay.append(dtp)
+        cp = _credit_period_days(inv)
+        if cp is not None:
+            credit_periods.append(cp)
+
+    avg_days_to_payment = _avg(days_to_pay)
+    avg_credit_period = _avg(credit_periods)
+
     return {
         "as_of": today.isoformat(),
         "due_soon_days": due_soon_days,
@@ -229,6 +242,10 @@ def get_invoice_tracker_dashboard(
             "on_time_paid_count": collection_on_time,
             "late_paid_count": collection_late,
             "on_time_rate_pct": _pct(collection_on_time, paid_with_timing),
+            "avg_days_to_payment_received": avg_days_to_payment,
+            "avg_credit_period_days": avg_credit_period,
+            "avg_payment_sample_count": len(days_to_pay),
+            "avg_credit_sample_count": len(credit_periods),
         },
         "past_due": past_due,
         "due_soon": due_soon,
@@ -252,6 +269,26 @@ def _pct(numerator: int, denominator: int) -> Optional[float]:
     if denominator <= 0:
         return None
     return round(100.0 * numerator / denominator, 1)
+
+
+def _days_to_payment_received(inv: Invoice) -> Optional[int]:
+    if not is_payment_received(inv):
+        return None
+    if not inv.invoice_date or not inv.payment_date:
+        return None
+    return (inv.payment_date - inv.invoice_date).days
+
+
+def _credit_period_days(inv: Invoice) -> Optional[int]:
+    if not inv.invoice_date or not inv.payment_due_date:
+        return None
+    return (inv.payment_due_date - inv.invoice_date).days
+
+
+def _avg(values: List[int]) -> Optional[float]:
+    if not values:
+        return None
+    return round(sum(values) / len(values), 1)
 
 
 def _build_month_series(

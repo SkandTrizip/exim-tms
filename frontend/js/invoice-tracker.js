@@ -180,7 +180,15 @@
             </div>`;
     }
 
-    function renderClientTable(clients) {
+    function formatAvgDays(val) {
+        if (val == null || val === '') return '—';
+        const n = Number(val);
+        if (!Number.isFinite(n)) return '—';
+        return Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : n.toFixed(1);
+    }
+
+    function renderClientTable(clients, soonDays) {
+        const soon = soonDays != null ? soonDays : 5;
         const rows = clients || [];
         if (!rows.length) {
             return '<div class="inv-tracker-empty">No client breakdown yet.</div>';
@@ -193,7 +201,7 @@
                         <th class="num">On time</th>
                         <th class="num">Late</th>
                         <th class="num">Overdue</th>
-                        <th class="num">Due ≤3d</th>
+                        <th class="num">Due ≤${soon}d</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -265,7 +273,7 @@
         if (!panel || !data) return;
 
         const s = data.summary || {};
-        const soonDays = data.due_soon_days || 3;
+        const soonDays = data.due_soon_days || 5;
         window._invoiceTrackerSummary = {
             past_due_count: s.past_due_count || 0,
             due_within_3_days_count: s.due_within_days_count || 0,
@@ -308,9 +316,14 @@
                     <div class="inv-tracker-kpi-sub">${s.pending_not_due_count || 0} not yet due</div>
                 </div>
                 <div class="inv-tracker-kpi">
-                    <div class="inv-tracker-kpi-label">On-time rate</div>
-                    <div class="inv-tracker-kpi-value">${s.on_time_rate_pct != null ? s.on_time_rate_pct + '%' : '—'}</div>
-                    <div class="inv-tracker-kpi-sub">${s.on_time_paid_count || 0} of ${(s.on_time_paid_count || 0) + (s.late_paid_count || 0)} paid</div>
+                    <div class="inv-tracker-kpi-label">Avg payment received</div>
+                    <div class="inv-tracker-kpi-value inv-tracker-kpi-value--compare">
+                        <span>${formatAvgDays(s.avg_days_to_payment_received)}</span>
+                        <span class="inv-tracker-kpi-vs">vs</span>
+                        <span>${formatAvgDays(s.avg_credit_period_days)}</span>
+                        <span class="inv-tracker-kpi-unit">days</span>
+                    </div>
+                    <div class="inv-tracker-kpi-sub">Collection time vs avg credit period${s.avg_payment_sample_count ? ` (${s.avg_payment_sample_count} paid)` : ''}</div>
                 </div>
             </div>
             </section>
@@ -382,7 +395,7 @@
             <section class="invoice-tracker-section" aria-labelledby="invTrackerClientHeading">
                 <h2 class="invoice-tracker-section-title" id="invTrackerClientHeading">By client</h2>
             <div class="inv-tracker-card inv-tracker-card--client">
-                <div class="inv-tracker-card-body">${renderClientTable(data.analytics?.by_client)}</div>
+                <div class="inv-tracker-card-body">${renderClientTable(data.analytics?.by_client, soonDays)}</div>
             </div>
             </section>
 
@@ -407,7 +420,7 @@
         panel.style.display = 'block';
         panel.innerHTML = '<div class="inv-tracker-loading"><i class="fas fa-spinner fa-spin"></i> Loading invoice tracker…</div>';
 
-        const params = new URLSearchParams({ due_soon_days: '3', months_back: '12' });
+        const params = new URLSearchParams({ due_soon_days: '5', months_back: '12' });
         if (state.clientFilter) params.set('client_name', state.clientFilter);
 
         try {
@@ -440,15 +453,18 @@
         };
         set('dashTrackerPastDue', String(s.past_due_count ?? '—'));
         set('dashTrackerDueSoon', String(s.due_within_days_count ?? '—'));
-        set(
-            'dashTrackerOnTime',
-            s.on_time_rate_pct != null ? `${s.on_time_rate_pct}%` : '—'
-        );
+        const pay = s.avg_days_to_payment_received;
+        const cred = s.avg_credit_period_days;
+        if (pay != null && cred != null) {
+            set('dashTrackerAvgPay', `${formatAvgDays(pay)} vs ${formatAvgDays(cred)}`);
+        } else {
+            set('dashTrackerAvgPay', '—');
+        }
     }
 
     async function prefetchInvoiceTrackerSummary() {
         try {
-            const res = await fetch(`${CONFIG.API_URL}/api/invoice/tracker?due_soon_days=3&months_back=1`);
+            const res = await fetch(`${CONFIG.API_URL}/api/invoice/tracker?due_soon_days=5&months_back=1`);
             const text = await res.text();
             if (!res.ok) return;
             const data = JSON.parse(text);

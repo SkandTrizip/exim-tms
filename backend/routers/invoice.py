@@ -282,7 +282,7 @@ def get_invoice_rates_preview(
 
 @router.get("/tracker")
 def invoice_tracker_dashboard(
-    due_soon_days: int = Query(3, ge=0, le=30),
+    due_soon_days: int = Query(5, ge=0, le=30),
     client_name: Optional[str] = Query(None),
     months_back: int = Query(12, ge=1, le=36),
     db: Session = Depends(get_db),
