@@ -279,6 +279,24 @@ def get_invoice_rates_preview(
         "lines": lines,
     }
 
+@router.get("/tracker")
+def invoice_tracker_dashboard(
+    due_soon_days: int = Query(3, ge=0, le=30),
+    client_name: Optional[str] = Query(None),
+    months_back: int = Query(12, ge=1, le=36),
+    db: Session = Depends(get_db),
+):
+    """Past-due and due-soon invoices plus collection analytics."""
+    from backend.services.invoice_tracker_service import get_invoice_tracker_dashboard
+
+    return get_invoice_tracker_dashboard(
+        db,
+        due_soon_days=due_soon_days,
+        client_name=client_name,
+        months_back=months_back,
+    )
+
+
 @router.get("/list")
 def list_all_invoices(db: Session = Depends(get_db)):
     """List all recorded invoices for payment tracking"""

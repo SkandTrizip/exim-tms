@@ -1,0 +1,301 @@
+"""Invoice payment due tracking and collection analytics."""
+
+from __future__ import annotations
+
+from collections import defaultdict
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional
+from zoneinfo import ZoneInfo
+
+from sqlalchemy.orm import Session
+
+from backend.models.enquiry import Enquiry
+from backend.models.invoice import Invoice
+
+IST = ZoneInfo("Asia/Kolkata")
+
+
+def today_ist() -> date:
+    return datetime.now(IST).date()
+
+
+def _days_remaining(due: Optional[date], today: date) -> Optional[int]:
+    if due is None:
+        return None
+    return (due - today).days
+
+
+def _timing_bucket(
+    is_paid: bool,
+    payment_due_date: Optional[date],
+    payment_date: Optional[date],
+    today: date,
+) -> str:
+    """
+    on_time | late | overdue_unpaid | pending | unknown
+    """
+    if is_paid:
+        if payment_due_date is None or payment_date is None:
+            return "unknown"
+        return "on_time" if payment_date <= payment_due_date else "late"
+    if payment_due_date is not None and payment_due_date < today:
+        return "overdue_unpaid"
+    return "pending"
+
+
+def _serialize_invoice_row(
+    inv: Invoice,
+    enquiry_number: str,
+    client_name: str,
+    origin: str,
+    destination: str,
+    today: date,
+    due_soon_days: int = 3,
+) -> Dict[str, Any]:
+    due = inv.payment_due_date
+    days = _days_remaining(due, today)
+    timing = _timing_bucket(inv.is_paid, due, inv.payment_date, today)
+
+    urgency = "paid"
+    if not inv.is_paid:
+        if days is not None and days < 0:
+            urgency = "past_due"
+        elif days is not None and 0 <= days <= due_soon_days:
+            urgency = "due_soon"
+        else:
+            urgency = "upcoming"
+
+    return {
+        "id": inv.id,
+        "enquiry_id": inv.enquiry_id,
+        "enquiry_number": enquiry_number,
+        "client_name": client_name or "",
+        "origin": origin or "",
+        "destination": destination or "",
+        "invoice_number": inv.invoice_number,
+        "invoice_date": inv.invoice_date,
+        "payment_due_date": due,
+        "is_paid": bool(inv.is_paid),
+        "payment_date": inv.payment_date,
+        "received_amount": inv.received_amount,
+        "item_type": getattr(inv, "item_type", "all") or "all",
+        "currency_mode": getattr(inv, "currency_mode", None),
+        "remark": getattr(inv, "remark", None),
+        "days_remaining": days,
+        "days_overdue": abs(days) if days is not None and days < 0 else 0,
+        "timing": timing,
+        "urgency": urgency,
+    }
+
+
+def get_invoice_tracker_dashboard(
+    db: Session,
+    *,
+    due_soon_days: int = 3,
+    client_name: Optional[str] = None,
+    months_back: int = 12,
+) -> Dict[str, Any]:
+    due_soon_days = max(0, min(due_soon_days, 30))
+    months_back = max(1, min(months_back, 36))
+    today = today_ist()
+
+    q = (
+        db.query(
+            Invoice,
+            Enquiry.enquiry_number,
+            Enquiry.client_name,
+            Enquiry.origin,
+            Enquiry.destination,
+        )
+        .join(Enquiry, Invoice.enquiry_id == Enquiry.id)
+        .filter(Enquiry.is_void == False)  # noqa: E712
+    )
+    if client_name and client_name.strip():
+        q = q.filter(Enquiry.client_name.ilike(f"%{client_name.strip()}%"))
+
+    rows = q.order_by(Invoice.payment_due_date.asc().nullslast(), Invoice.created_at.desc()).all()
+
+    past_due: List[Dict[str, Any]] = []
+    due_soon: List[Dict[str, Any]] = []
+    open_upcoming: List[Dict[str, Any]] = []
+
+    collection_on_time = 0
+    collection_late = 0
+    collection_unknown = 0
+    overdue_unpaid_count = 0
+    pending_not_due_count = 0
+
+    by_month: Dict[str, Dict[str, int]] = defaultdict(
+        lambda: {"on_time": 0, "late": 0, "unknown": 0, "invoiced_count": 0}
+    )
+    by_client: Dict[str, Dict[str, int]] = defaultdict(
+        lambda: {
+            "on_time": 0,
+            "late": 0,
+            "overdue_open": 0,
+            "due_soon_open": 0,
+            "pending_open": 0,
+            "paid_count": 0,
+        }
+    )
+
+    for inv, enq_num, client, origin, dest in rows:
+        item = _serialize_invoice_row(
+            inv, enq_num, client, origin, dest, today, due_soon_days=due_soon_days
+        )
+        client_key = (client or "Unknown").strip() or "Unknown"
+
+        if not inv.is_paid:
+            if item["urgency"] == "past_due":
+                past_due.append(item)
+                by_client[client_key]["overdue_open"] += 1
+                overdue_unpaid_count += 1
+            elif item["urgency"] == "due_soon":
+                due_soon.append(item)
+                by_client[client_key]["due_soon_open"] += 1
+            else:
+                open_upcoming.append(item)
+                by_client[client_key]["pending_open"] += 1
+                pending_not_due_count += 1
+        else:
+            by_client[client_key]["paid_count"] += 1
+
+        timing = item["timing"]
+        if timing == "on_time":
+            collection_on_time += 1
+            by_client[client_key]["on_time"] += 1
+        elif timing == "late":
+            collection_late += 1
+            by_client[client_key]["late"] += 1
+        elif timing == "unknown" and inv.is_paid:
+            collection_unknown += 1
+            by_client[client_key]["late"] += 0  # noqa: no-op — keep structure
+
+        inv_date = inv.invoice_date or inv.payment_due_date
+        if inv_date and inv.is_paid:
+            month_key = inv_date.strftime("%Y-%m")
+            by_month[month_key]["invoiced_count"] += 1
+            if timing == "on_time":
+                by_month[month_key]["on_time"] += 1
+            elif timing == "late":
+                by_month[month_key]["late"] += 1
+            else:
+                by_month[month_key]["unknown"] += 1
+
+    def _sort_open(a: Dict[str, Any], b: Dict[str, Any]) -> int:
+        da = a.get("days_remaining")
+        db_ = b.get("days_remaining")
+        if da is None and db_ is None:
+            return 0
+        if da is None:
+            return 1
+        if db_ is None:
+            return -1
+        return da - db_
+
+    past_due.sort(key=lambda x: (x.get("days_remaining") is None, x.get("days_remaining", 0)))
+    due_soon.sort(key=_sort_open)
+    open_upcoming.sort(key=_sort_open)
+
+    month_series = _build_month_series(by_month, months_back, today)
+
+    client_series = sorted(
+        [
+            {
+                "client_name": name,
+                **counts,
+                "on_time_pct": _pct(counts["on_time"], counts["on_time"] + counts["late"]),
+            }
+            for name, counts in by_client.items()
+            if counts["paid_count"] > 0
+                or counts["overdue_open"] > 0
+                or counts["due_soon_open"] > 0
+                or counts["pending_open"] > 0
+        ],
+        key=lambda c: (-(c["overdue_open"] + c["due_soon_open"]), c["client_name"]),
+    )
+
+    open_count = overdue_unpaid_count + len(due_soon) + len(open_upcoming)
+    paid_with_timing = collection_on_time + collection_late
+
+    return {
+        "as_of": today.isoformat(),
+        "due_soon_days": due_soon_days,
+        "summary": {
+            "total_invoices": len(rows),
+            "open_count": open_count,
+            "past_due_count": len(past_due),
+            "due_within_days_count": len(due_soon),
+            "due_soon_days": due_soon_days,
+            "overdue_unpaid_count": overdue_unpaid_count,
+            "pending_not_due_count": pending_not_due_count,
+            "paid_count": sum(1 for inv, *_ in rows if inv.is_paid),
+            "on_time_paid_count": collection_on_time,
+            "late_paid_count": collection_late,
+            "on_time_rate_pct": _pct(collection_on_time, paid_with_timing),
+        },
+        "past_due": past_due,
+        "due_soon": due_soon,
+        "open_upcoming": open_upcoming,
+        "analytics": {
+            "collection": {
+                "on_time": collection_on_time,
+                "late": collection_late,
+                "unknown": collection_unknown,
+                "overdue_unpaid": overdue_unpaid_count,
+                "pending_not_due": pending_not_due_count,
+            },
+            "by_month": month_series,
+            "by_client": client_series[:50],
+        },
+        "clients": sorted({(c or "").strip() for _, _, c, _, _ in rows if c}),
+    }
+
+
+def _pct(numerator: int, denominator: int) -> Optional[float]:
+    if denominator <= 0:
+        return None
+    return round(100.0 * numerator / denominator, 1)
+
+
+def _build_month_series(
+    by_month: Dict[str, Dict[str, int]],
+    months_back: int,
+    today: date,
+) -> List[Dict[str, Any]]:
+    """Last N calendar months including current, ascending."""
+    keys: List[str] = []
+    y, m = today.year, today.month
+    for _ in range(months_back):
+        keys.append(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+    keys.reverse()
+
+    out: List[Dict[str, Any]] = []
+    for key in keys:
+        bucket = by_month.get(key, {"on_time": 0, "late": 0, "unknown": 0, "invoiced_count": 0})
+        paid = bucket["on_time"] + bucket["late"] + bucket["unknown"]
+        out.append(
+            {
+                "month": key,
+                "label": _month_label(key),
+                "on_time": bucket["on_time"],
+                "late": bucket["late"],
+                "unknown": bucket["unknown"],
+                "invoiced_count": bucket["invoiced_count"],
+                "on_time_pct": _pct(bucket["on_time"], paid),
+            }
+        )
+    return out
+
+
+def _month_label(ym: str) -> str:
+    try:
+        y, m = ym.split("-")
+        dt = date(int(y), int(m), 1)
+        return dt.strftime("%b %Y")
+    except (ValueError, TypeError):
+        return ym

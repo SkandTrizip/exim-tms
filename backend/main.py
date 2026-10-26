@@ -79,6 +79,8 @@ _index_migrations = [
     ("quotes", "idx_quotes_status", "status"),
     ("quotes", "idx_quotes_enquiry_id", "enquiry_id"),
     ("shipment_statuses", "idx_shipment_statuses_enquiry_id", "enquiry_id"),
+    ("invoices", "idx_invoices_payment_due_date", "payment_due_date"),
+    ("invoices", "idx_invoices_is_paid", "is_paid"),
 ]
 with engine.connect() as _conn:
     for _table, _index_name, _column in _index_migrations:

@@ -10,6 +10,7 @@
     <link href="css/modal.css" rel="stylesheet">
     <link href="css/action-modal.css" rel="stylesheet">
     <link href="css/update-quote-modal.css" rel="stylesheet">
+    <link href="css/invoice-tracker.css" rel="stylesheet">
     <link href="css/quote-remarks.css" rel="stylesheet">
     <link href="css/masters.css" rel="stylesheet">
     <link href="css/global-search.css" rel="stylesheet">
@@ -49,6 +50,7 @@
                             <li><a href="#finance-payments" class="sidebar-link rail-subnav-link" id="navFinancePayments">Payment to Shipping Line</a></li>
                             <li><a href="#finance-invoices" class="sidebar-link rail-subnav-link" id="navFinanceInvoices">Create Invoice</a></li>
                             <li><a href="#finance-received" class="sidebar-link rail-subnav-link" id="navFinanceReceived">Payments Received</a></li>
+                            <li><a href="#finance-tracker" class="sidebar-link rail-subnav-link" id="navFinanceTracker">Invoice Tracker</a></li>
                         </ul>
                     </div>
 
@@ -920,7 +922,16 @@
                                     <div class="status-section-count"><span data-count="received">0</span> LEFT</div>
                                 </div>
                             </button>
+                            <button type="button" class="status-section-card" data-view="finance" data-section="tracker" role="tab" aria-selected="false">
+                                <div class="status-section-icon traffic"><i class="fas fa-calendar-check"></i></div>
+                                <div class="status-section-body">
+                                    <div class="status-section-label">Invoice Tracker</div>
+                                    <div class="status-section-count"><span data-count="tracker">0</span> ATTENTION</div>
+                                </div>
+                            </button>
                         </div>
+
+                        <div id="invoiceTrackerPanel" class="invoice-tracker-panel" style="display: none;" aria-live="polite"></div>
 
                         <div class="finance-completion-tabs" id="financeCompletionTabs" role="tablist" aria-label="Finance pending and completed">
                             <button type="button" class="finance-completion-tab active" data-completion="pending" role="tab" aria-selected="true">
@@ -1399,6 +1410,7 @@
     <script src="js/action-modal.js"></script>
     <script src="js/masters.js"></script>
     <script src="js/globe.js"></script>
+    <script src="js/invoice-tracker.js"></script>
     <script src="js/app.js"></script>
 </body>
 
