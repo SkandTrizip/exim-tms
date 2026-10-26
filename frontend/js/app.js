@@ -135,7 +135,6 @@ const STATUS_SECTION_LABELS = {
         payments: 'Payment to Shipping Line',
         invoices: 'Create Invoice',
         received: 'Payments Received',
-        tracker: 'Invoice Tracker',
     }
 };
 
@@ -294,7 +293,9 @@ function updateFinanceTableChrome(subView) {
 }
 
 function renderFinanceReceivedInvoiceRow(inv) {
-    const paid = !!inv.is_paid;
+    const paid = typeof isInvoicePaymentReceived === 'function'
+        ? isInvoicePaymentReceived(inv)
+        : !!inv.is_paid;
     const statusHtml = paid
         ? '<span class="badge badge-completed"><i class="fas fa-check-circle"></i> PAID</span>'
         : '<span class="badge badge-pending"><i class="fas fa-clock"></i> AWAITING PAYMENT</span>';
@@ -331,12 +332,14 @@ async function renderFinanceReceivedTable(invoices) {
 
     updateFinanceTableChrome('received');
     updateFinanceStats();
-    financeReceivedCount = (invoices || []).filter((inv) => !inv.is_paid).length;
+    financeReceivedCount = (invoices || []).filter((inv) => !isInvoicePaymentReceived(inv)).length;
     updateFinanceCompletionCounts();
     updateStatusSectionCounts();
 
     const showCompleted = currentFinanceCompletionTab === 'completed';
-    const filtered = (invoices || []).filter((inv) => showCompleted ? !!inv.is_paid : !inv.is_paid);
+    const filtered = (invoices || []).filter((inv) =>
+        showCompleted ? isInvoicePaymentReceived(inv) : !isInvoicePaymentReceived(inv)
+    );
 
     if (!filtered.length) {
         const emptyMsg = showCompleted
@@ -748,13 +751,6 @@ function countFinanceInvoiceTasks(completionTab) {
 }
 
 function countFinanceSection(section) {
-    if (section === 'tracker') {
-        const s = window._invoiceTrackerSummary;
-        if (s) {
-            return (s.past_due_count || 0) + (s.due_within_3_days_count || 0);
-        }
-        return 0;
-    }
     return countFinanceCompletion(section, 'pending');
 }
 
@@ -776,7 +772,9 @@ function countFinanceCompletion(section, completionTab) {
     if (section === 'received') {
         // Pending count for main card comes from financeReceivedCount (invoice list).
         if (!window._financeReceivedInvoices) return showCompleted ? 0 : financeReceivedCount;
-        return window._financeReceivedInvoices.filter((inv) => showCompleted ? !!inv.is_paid : !inv.is_paid).length;
+        return window._financeReceivedInvoices.filter((inv) =>
+            showCompleted ? isInvoicePaymentReceived(inv) : !isInvoicePaymentReceived(inv)
+        ).length;
     }
     return 0;
 }
@@ -835,7 +833,7 @@ function updateStatusSectionCounts() {
 
     const financeEl = document.getElementById('financeStatusSections');
     if (financeEl) {
-        ['payments', 'invoices', 'received', 'tracker'].forEach((section) => {
+        ['payments', 'invoices', 'received'].forEach((section) => {
             const span = financeEl.querySelector(`[data-count="${section}"]`);
             if (span) span.textContent = countFinanceSection(section);
         });
@@ -872,8 +870,7 @@ function initStatusSections() {
                 setFinanceCompletionTab('pending');
                 const hash = section === 'payments' ? '#finance-payments'
                     : section === 'invoices' ? '#finance-invoices'
-                        : section === 'tracker' ? '#finance-tracker'
-                            : '#finance-received';
+                        : '#finance-received';
                 if (window.location.hash !== hash) window.location.hash = hash;
                 updateFinanceTable(section);
             }
@@ -2863,7 +2860,9 @@ function handleRouting() {
         showQuotesView();
     } else if (hash === '#tracking') {
         showTrackingView();
-    } else if (hash === '#finance' || hash === '#finance-payments' || hash === '#finance-invoices' || hash === '#finance-received' || hash === '#finance-tracker') {
+    } else if (hash === '#finance-tracker' || hash === '#invoice-tracker') {
+        showInvoiceTrackerView();
+    } else if (hash === '#finance' || hash === '#finance-payments' || hash === '#finance-invoices' || hash === '#finance-received') {
         const subView = hash.replace('#finance-', '');
         showFinanceView(subView === '#finance' ? null : subView);
     } else if (hash === '#masters') {
@@ -2941,7 +2940,23 @@ function showDashboardView() {
     hideAllViews();
     setActiveLink('navDashboard');
     document.getElementById('dashboardView').style.display = 'block';
+    if (typeof prefetchInvoiceTrackerSummary === 'function') {
+        prefetchInvoiceTrackerSummary();
+    }
 }
+
+async function showInvoiceTrackerView() {
+    hideAllViews();
+    setActiveLink('navInvoiceTracker');
+    closeOtherRailGroups(null);
+    const view = document.getElementById('invoiceTrackerView');
+    if (view) view.style.display = 'block';
+    if (typeof loadInvoiceTracker === 'function') {
+        await loadInvoiceTracker(true);
+    }
+}
+
+window.showInvoiceTrackerView = showInvoiceTrackerView;
 
 function showGlobeView() {
     hideAllViews();
@@ -3040,10 +3055,6 @@ async function showFinanceView(subView = null) {
         if (title) title.textContent = 'Payments Received from Client';
         if (desc) desc.textContent = 'Record and track payments received from clients for invoices';
         setActiveLink('navFinanceReceived');
-    } else if (section === 'tracker') {
-        if (title) title.textContent = 'Invoice Tracker';
-        if (desc) desc.textContent = 'Past-due and upcoming payments with collection analytics';
-        setActiveLink('navFinanceTracker');
     } else {
         if (title) title.textContent = 'Finance';
         if (desc) desc.textContent = 'Manage payments and client invoices';
@@ -3054,12 +3065,6 @@ async function showFinanceView(subView = null) {
     if (section === 'invoices') {
         await fetchFinanceInvoicesCache();
     }
-    if (section === 'tracker') {
-        if (typeof showInvoiceTrackerPanel === 'function') showInvoiceTrackerPanel(true);
-        if (typeof loadInvoiceTracker === 'function') await loadInvoiceTracker();
-        return;
-    }
-    if (typeof showInvoiceTrackerPanel === 'function') showInvoiceTrackerPanel(false);
     await updateFinanceTable(section);
 }
 
@@ -3111,6 +3116,8 @@ function hideAllViews() {
     document.getElementById('trackingView').style.display = 'none';
     const financeView = document.getElementById('financeView');
     if (financeView) financeView.style.display = 'none';
+    const invoiceTrackerView = document.getElementById('invoiceTrackerView');
+    if (invoiceTrackerView) invoiceTrackerView.style.display = 'none';
     const shipmentView = document.getElementById('shipmentDetailView');
     if (shipmentView) shipmentView.style.display = 'none';
 
@@ -3593,13 +3600,6 @@ async function updateFinanceTable(subView = null) {
     setActiveStatusSection('finance', currentFinanceSubView);
     updateViewStatusPill('finance', currentFinanceSubView);
 
-    if (currentFinanceSubView === 'tracker') {
-        if (typeof showInvoiceTrackerPanel === 'function') showInvoiceTrackerPanel(true);
-        if (typeof loadInvoiceTracker === 'function') await loadInvoiceTracker();
-        return;
-    }
-    if (typeof showInvoiceTrackerPanel === 'function') showInvoiceTrackerPanel(false);
-
     if (currentFinanceSubView === 'received') {
         if (!tbody) return;
         if (tableWrap) tableWrap.style.display = 'block';
@@ -3618,7 +3618,7 @@ async function updateFinanceTable(subView = null) {
             }
             if (res.ok && Array.isArray(payload)) {
                 window._financeReceivedInvoices = payload;
-                financeReceivedCount = payload.filter((inv) => !inv.is_paid).length;
+                financeReceivedCount = payload.filter((inv) => !isInvoicePaymentReceived(inv)).length;
                 updateStatusSectionCounts();
                 updateFinanceCompletionCounts();
                 try {
@@ -3758,9 +3758,9 @@ window.applyFinanceSavedRefresh = async function applyFinanceSavedRefresh(option
     if (options.section === 'invoices' || currentFinanceSubView === 'invoices') {
         await fetchFinanceInvoicesCache();
     }
-    if (options.section === 'tracker' || currentFinanceSubView === 'tracker') {
-        if (typeof loadInvoiceTracker === 'function') await loadInvoiceTracker(true);
-        return;
+    const onTracker = window.location.hash === '#invoice-tracker' || window.location.hash === '#finance-tracker';
+    if (onTracker && typeof loadInvoiceTracker === 'function') {
+        await loadInvoiceTracker(true);
     }
     await updateFinanceTable(currentFinanceSubView || 'payments');
     if (typeof updateFinanceStats === 'function') updateFinanceStats();

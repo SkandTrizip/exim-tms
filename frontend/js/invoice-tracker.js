@@ -26,7 +26,10 @@
 
     function daysPill(inv, soonDays) {
         const soon = soonDays != null ? soonDays : 3;
-        if (inv.is_paid) {
+        const received = typeof isInvoicePaymentReceived === 'function'
+            ? isInvoicePaymentReceived(inv)
+            : !!inv.is_paid;
+        if (received) {
             return '<span class="inv-days-pill inv-days-pill--ok"><i class="fas fa-check"></i> Paid</span>';
         }
         const d = inv.days_remaining;
@@ -55,16 +58,16 @@
 
     function renderRow(inv, soonDays) {
         const meta = invoiceMeta(inv);
-        const amount = inv.is_paid && inv.received_amount != null
+        const amount = received && inv.received_amount != null
             ? `₹${Number(inv.received_amount).toLocaleString()}`
             : '—';
-        const recordBtn = typeof renderFinanceDrawerActionBtn === 'function' && !inv.is_paid
+        const recordBtn = typeof renderFinanceDrawerActionBtn === 'function' && !received
             ? renderFinanceDrawerActionBtn('finance-received', inv.id, {
                 icon: 'money-bill-wave',
                 label: 'Record',
                 title: 'Record client payment',
             })
-            : (inv.is_paid && typeof renderFinanceDrawerActionBtn === 'function'
+            : (received && typeof renderFinanceDrawerActionBtn === 'function'
                 ? renderFinanceDrawerActionBtn('finance-received', inv.id, {
                     primary: false,
                     icon: 'check-circle',
@@ -207,10 +210,9 @@
         window._invoiceTrackerSummary = {
             past_due_count: s.past_due_count || 0,
             due_within_3_days_count: s.due_within_days_count || 0,
+            on_time_rate_pct: s.on_time_rate_pct,
         };
-        if (typeof updateStatusSectionCounts === 'function') {
-            updateStatusSectionCounts();
-        }
+        updateDashboardTrackerTeasers(s);
 
         panel.innerHTML = `
             <div class="invoice-tracker-toolbar">
@@ -342,7 +344,13 @@
 
         try {
             const res = await fetch(`${CONFIG.API_URL}/api/invoice/tracker?${params}`);
-            const data = await res.json();
+            const text = await res.text();
+            let data;
+            try {
+                data = text ? JSON.parse(text) : {};
+            } catch (_) {
+                throw new Error(res.ok ? 'Invalid response from server' : (text.slice(0, 120) || `HTTP ${res.status}`));
+            }
             if (!res.ok) {
                 throw new Error(data.detail || `HTTP ${res.status}`);
             }
@@ -356,17 +364,36 @@
         }
     }
 
-    function showInvoiceTrackerPanel(show) {
-        const panel = document.getElementById('invoiceTrackerPanel');
-        const tableWrap = document.getElementById('financeTableWrap');
-        const tabs = document.getElementById('financeCompletionTabs');
-        const pagination = document.getElementById('financePagination');
-        if (panel) panel.style.display = show ? 'block' : 'none';
-        if (tableWrap) tableWrap.style.display = show ? 'none' : 'block';
-        if (tabs) tabs.style.display = show ? 'none' : '';
-        if (pagination) pagination.style.display = show ? 'none' : '';
+    function updateDashboardTrackerTeasers(summary) {
+        const s = summary || {};
+        const set = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = val;
+        };
+        set('dashTrackerPastDue', String(s.past_due_count ?? '—'));
+        set('dashTrackerDueSoon', String(s.due_within_days_count ?? '—'));
+        set(
+            'dashTrackerOnTime',
+            s.on_time_rate_pct != null ? `${s.on_time_rate_pct}%` : '—'
+        );
+    }
+
+    async function prefetchInvoiceTrackerSummary() {
+        try {
+            const res = await fetch(`${CONFIG.API_URL}/api/invoice/tracker?due_soon_days=3&months_back=1`);
+            const text = await res.text();
+            if (!res.ok) return;
+            const data = JSON.parse(text);
+            window._invoiceTrackerSummary = {
+                past_due_count: data.summary?.past_due_count || 0,
+                due_within_3_days_count: data.summary?.due_within_days_count || 0,
+                on_time_rate_pct: data.summary?.on_time_rate_pct,
+            };
+            updateDashboardTrackerTeasers(data.summary);
+        } catch (_) { /* non-blocking */ }
     }
 
     window.loadInvoiceTracker = loadInvoiceTracker;
-    window.showInvoiceTrackerPanel = showInvoiceTrackerPanel;
+    window.prefetchInvoiceTrackerSummary = prefetchInvoiceTrackerSummary;
+    window.updateDashboardTrackerTeasers = updateDashboardTrackerTeasers;
 })();

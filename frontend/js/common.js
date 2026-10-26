@@ -27,6 +27,13 @@ function escapeAttr(s) {
         .replace(/</g, '&lt;');
 }
 
+/** Client payment received if a payment date exists (UTR/reference not required). */
+function isInvoicePaymentReceived(inv) {
+    if (!inv) return false;
+    if (inv.payment_date) return true;
+    return !!inv.is_paid;
+}
+
 document.addEventListener('DOMContentLoaded', function () {
     const user = localStorage.getItem('user');
     if (user) {

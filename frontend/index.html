@@ -32,6 +32,9 @@
                     <a href="#dashboard" class="sidebar-link rail-link active" id="navDashboard" title="Dashboard" aria-label="Dashboard">
                         <i class="fas fa-home"></i>
                     </a>
+                    <a href="#invoice-tracker" class="sidebar-link rail-link" id="navInvoiceTracker" title="Invoice Tracker" aria-label="Invoice Tracker">
+                        <i class="fas fa-calendar-check"></i>
+                    </a>
                     <a href="#enquiries" class="sidebar-link rail-link" id="navEnquiries" title="Sales" aria-label="Sales">
                         <i class="fas fa-chart-line"></i>
                     </a>
@@ -50,7 +53,6 @@
                             <li><a href="#finance-payments" class="sidebar-link rail-subnav-link" id="navFinancePayments">Payment to Shipping Line</a></li>
                             <li><a href="#finance-invoices" class="sidebar-link rail-subnav-link" id="navFinanceInvoices">Create Invoice</a></li>
                             <li><a href="#finance-received" class="sidebar-link rail-subnav-link" id="navFinanceReceived">Payments Received</a></li>
-                            <li><a href="#finance-tracker" class="sidebar-link rail-subnav-link" id="navFinanceTracker">Invoice Tracker</a></li>
                         </ul>
                     </div>
 
@@ -142,6 +144,29 @@
                                 </button>
                             </div>
                         </div>
+
+                        <section class="dashboard-finance-hub" aria-label="Finance overview">
+                            <div class="dashboard-finance-hub__head">
+                                <h2 class="dashboard-finance-hub__title">Finance</h2>
+                                <a href="#invoice-tracker" class="btn btn-secondary dashboard-finance-hub__link">
+                                    <i class="fas fa-calendar-check"></i> Open Invoice Tracker
+                                </a>
+                            </div>
+                            <div class="dashboard-finance-hub__cards">
+                                <a href="#invoice-tracker" class="dashboard-finance-hub-card dashboard-finance-hub-card--alert">
+                                    <span class="dashboard-finance-hub-card__label">Past due</span>
+                                    <span class="dashboard-finance-hub-card__value" id="dashTrackerPastDue">—</span>
+                                </a>
+                                <a href="#invoice-tracker" class="dashboard-finance-hub-card dashboard-finance-hub-card--warn">
+                                    <span class="dashboard-finance-hub-card__label">Due in 3 days</span>
+                                    <span class="dashboard-finance-hub-card__value" id="dashTrackerDueSoon">—</span>
+                                </a>
+                                <a href="#invoice-tracker" class="dashboard-finance-hub-card">
+                                    <span class="dashboard-finance-hub-card__label">On-time collections</span>
+                                    <span class="dashboard-finance-hub-card__value" id="dashTrackerOnTime">—</span>
+                                </a>
+                            </div>
+                        </section>
 
                         <section class="biz-analytics" aria-label="Business analytics">
                             <div class="analytics-command-bar" id="analyticsCommandBar">
@@ -922,16 +947,7 @@
                                     <div class="status-section-count"><span data-count="received">0</span> LEFT</div>
                                 </div>
                             </button>
-                            <button type="button" class="status-section-card" data-view="finance" data-section="tracker" role="tab" aria-selected="false">
-                                <div class="status-section-icon traffic"><i class="fas fa-calendar-check"></i></div>
-                                <div class="status-section-body">
-                                    <div class="status-section-label">Invoice Tracker</div>
-                                    <div class="status-section-count"><span data-count="tracker">0</span> ATTENTION</div>
-                                </div>
-                            </button>
                         </div>
-
-                        <div id="invoiceTrackerPanel" class="invoice-tracker-panel" style="display: none;" aria-live="polite"></div>
 
                         <div class="finance-completion-tabs" id="financeCompletionTabs" role="tablist" aria-label="Finance pending and completed">
                             <button type="button" class="finance-completion-tab active" data-completion="pending" role="tab" aria-selected="true">
@@ -1010,6 +1026,25 @@
 
                         <div id="financeReceivedSections" class="table-card list-table-card" style="display: none;"></div>
                         <div class="pagination-container" id="financePagination"></div>
+                    </div>
+
+                    <!-- Invoice Tracker (Dashboard finance view) -->
+                    <div id="invoiceTrackerView" class="view-content" style="display: none;">
+                        <div class="view-topbar">
+                            <div class="view-title">
+                                <h1 class="view-h1">Invoice Tracker</h1>
+                                <div class="view-subtitle">Past-due and upcoming client payments with collection analytics</div>
+                            </div>
+                            <div class="page-actions">
+                                <a href="#dashboard" class="btn btn-secondary">
+                                    <i class="fas fa-home"></i> Dashboard
+                                </a>
+                                <a href="#finance-received" class="btn btn-secondary">
+                                    <i class="fas fa-coins"></i> Record payment
+                                </a>
+                            </div>
+                        </div>
+                        <div id="invoiceTrackerPanel" class="invoice-tracker-panel" aria-live="polite"></div>
                     </div>
 
                     <!-- Masters Dashboard -->

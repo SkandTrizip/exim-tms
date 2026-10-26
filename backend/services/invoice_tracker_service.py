@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.models.enquiry import Enquiry
 from backend.models.invoice import Invoice
+from backend.utils.invoice_payment import is_payment_received
 
 IST = ZoneInfo("Asia/Kolkata")
 
@@ -54,10 +55,11 @@ def _serialize_invoice_row(
 ) -> Dict[str, Any]:
     due = inv.payment_due_date
     days = _days_remaining(due, today)
-    timing = _timing_bucket(inv.is_paid, due, inv.payment_date, today)
+    paid = is_payment_received(inv)
+    timing = _timing_bucket(paid, due, inv.payment_date, today)
 
     urgency = "paid"
-    if not inv.is_paid:
+    if not paid:
         if days is not None and days < 0:
             urgency = "past_due"
         elif days is not None and 0 <= days <= due_soon_days:
@@ -75,7 +77,7 @@ def _serialize_invoice_row(
         "invoice_number": inv.invoice_number,
         "invoice_date": inv.invoice_date,
         "payment_due_date": due,
-        "is_paid": bool(inv.is_paid),
+        "is_paid": paid,
         "payment_date": inv.payment_date,
         "received_amount": inv.received_amount,
         "item_type": getattr(inv, "item_type", "all") or "all",
@@ -140,12 +142,13 @@ def get_invoice_tracker_dashboard(
     )
 
     for inv, enq_num, client, origin, dest in rows:
+        paid = is_payment_received(inv)
         item = _serialize_invoice_row(
             inv, enq_num, client, origin, dest, today, due_soon_days=due_soon_days
         )
         client_key = (client or "Unknown").strip() or "Unknown"
 
-        if not inv.is_paid:
+        if not paid:
             if item["urgency"] == "past_due":
                 past_due.append(item)
                 by_client[client_key]["overdue_open"] += 1
@@ -167,12 +170,12 @@ def get_invoice_tracker_dashboard(
         elif timing == "late":
             collection_late += 1
             by_client[client_key]["late"] += 1
-        elif timing == "unknown" and inv.is_paid:
+        elif timing == "unknown" and paid:
             collection_unknown += 1
             by_client[client_key]["late"] += 0  # noqa: no-op — keep structure
 
         inv_date = inv.invoice_date or inv.payment_due_date
-        if inv_date and inv.is_paid:
+        if inv_date and paid:
             month_key = inv_date.strftime("%Y-%m")
             by_month[month_key]["invoiced_count"] += 1
             if timing == "on_time":
@@ -182,20 +185,13 @@ def get_invoice_tracker_dashboard(
             else:
                 by_month[month_key]["unknown"] += 1
 
-    def _sort_open(a: Dict[str, Any], b: Dict[str, Any]) -> int:
-        da = a.get("days_remaining")
-        db_ = b.get("days_remaining")
-        if da is None and db_ is None:
-            return 0
-        if da is None:
-            return 1
-        if db_ is None:
-            return -1
-        return da - db_
+    def _sort_open_key(row: Dict[str, Any]) -> tuple:
+        da = row.get("days_remaining")
+        return (da is None, da if da is not None else 0)
 
-    past_due.sort(key=lambda x: (x.get("days_remaining") is None, x.get("days_remaining", 0)))
-    due_soon.sort(key=_sort_open)
-    open_upcoming.sort(key=_sort_open)
+    past_due.sort(key=_sort_open_key)
+    due_soon.sort(key=_sort_open_key)
+    open_upcoming.sort(key=_sort_open_key)
 
     month_series = _build_month_series(by_month, months_back, today)
 
@@ -229,7 +225,7 @@ def get_invoice_tracker_dashboard(
             "due_soon_days": due_soon_days,
             "overdue_unpaid_count": overdue_unpaid_count,
             "pending_not_due_count": pending_not_due_count,
-            "paid_count": sum(1 for inv, *_ in rows if inv.is_paid),
+            "paid_count": sum(1 for inv, *_ in rows if is_payment_received(inv)),
             "on_time_paid_count": collection_on_time,
             "late_paid_count": collection_late,
             "on_time_rate_pct": _pct(collection_on_time, paid_with_timing),

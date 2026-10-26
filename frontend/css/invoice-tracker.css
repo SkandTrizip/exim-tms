@@ -1,4 +1,91 @@
-/* Invoice tracker dashboard (Finance → Invoice Tracker) */
+/* Invoice tracker — Dashboard finance view (#invoice-tracker) */
+
+.dashboard-finance-hub {
+    margin-bottom: 24px;
+    padding: 18px 20px;
+    border-radius: 16px;
+    border: 1px solid var(--border-light);
+    background: #fff;
+    box-shadow: var(--shadow-sm, 0 1px 2px rgba(15, 23, 42, 0.06));
+}
+
+.dashboard-finance-hub__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.dashboard-finance-hub__title {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+.dashboard-finance-hub__cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.dashboard-finance-hub-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border-light);
+    background: #f8fafc;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dashboard-finance-hub-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+}
+
+.dashboard-finance-hub-card--alert {
+    background: linear-gradient(180deg, #fff 0%, #fef2f2 100%);
+    border-color: #fecaca;
+}
+
+.dashboard-finance-hub-card--warn {
+    background: linear-gradient(180deg, #fff 0%, #fffbeb 100%);
+    border-color: #fde68a;
+}
+
+.dashboard-finance-hub-card__label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-tertiary);
+}
+
+.dashboard-finance-hub-card__value {
+    font-size: 26px;
+    font-weight: 800;
+    color: var(--text-primary);
+}
+
+#invoiceTrackerView .view-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+#invoiceTrackerView .page-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
 
 .invoice-tracker-panel {
     display: flex;

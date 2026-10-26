@@ -76,7 +76,7 @@
                 <td>${escapeHtml(invoice.invoice_number)}</td>
                 <td>${escapeHtml(invoice.customer_invoice_no || '—')}</td>
                 <td>${formatDate(invoice.invoice_date)}</td>
-                <td>${invoice.is_paid ? 'Paid' : 'Pending'}</td>
+                <td>${(typeof isInvoicePaymentReceived === 'function' ? isInvoicePaymentReceived(invoice) : invoice.is_paid) ? 'Paid' : 'Pending'}</td>
             </tr>`).join('');
         return `
             <table class="shipment-mini-table">

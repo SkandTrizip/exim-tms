@@ -110,6 +110,20 @@ with engine.connect() as _conn:
         logger.info("Overheads overhead_name index migration skipped")
     _conn.commit()
 
+# Payment received = payment_date set (UTR/reference optional)
+with engine.connect() as _conn:
+    try:
+        _conn.execute(
+            text(
+                "UPDATE invoices SET is_paid = true "
+                "WHERE payment_date IS NOT NULL AND COALESCE(is_paid, false) = false"
+            )
+        )
+        _conn.commit()
+        logger.info("Synced invoices.is_paid from payment_date where needed")
+    except ProgrammingError:
+        logger.info("Invoice is_paid sync skipped")
+
 app = FastAPI(
     title="Exim TMS API",
     description="Backend API for Exim Transport Management System",

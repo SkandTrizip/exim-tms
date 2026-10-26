@@ -21,6 +21,7 @@ import datetime
 import os
 from backend.utils.logger import logger
 from backend.utils.hsn_sac import resolve_hsn_sac
+from backend.utils.invoice_payment import is_payment_received
 
 router = APIRouter(prefix="/invoice", tags=["Invoice"])
 
@@ -46,8 +47,8 @@ class InvoiceCreate(BaseModel):
 class InvoicePayment(BaseModel):
     payment_date: datetime.date
     payment_type: str = "NEFT"
-    payment_reference: str
-    received_amount: float
+    payment_reference: Optional[str] = None
+    received_amount: Optional[float] = None
 
 
 def _reject_main_invoice_when_booking_cancelled(
@@ -289,12 +290,17 @@ def invoice_tracker_dashboard(
     """Past-due and due-soon invoices plus collection analytics."""
     from backend.services.invoice_tracker_service import get_invoice_tracker_dashboard
 
-    return get_invoice_tracker_dashboard(
-        db,
-        due_soon_days=due_soon_days,
-        client_name=client_name,
-        months_back=months_back,
-    )
+    try:
+        return get_invoice_tracker_dashboard(
+            db,
+            due_soon_days=due_soon_days,
+            client_name=client_name,
+            months_back=months_back,
+        )
+    except Exception as exc:
+        logger.exception("Invoice tracker dashboard failed")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/list")
@@ -323,7 +329,7 @@ def list_all_invoices(db: Session = Depends(get_db)):
             "client_name": client,
             "origin": origin or "",
             "destination": destination or "",
-            "is_paid": inv.is_paid,
+            "is_paid": is_payment_received(inv),
             "payment_date": inv.payment_date,
             "payment_type": inv.payment_type,
             "payment_reference": inv.payment_reference,
@@ -348,16 +354,20 @@ def record_invoice_payment(invoice_id: int, payment: InvoicePayment, db: Session
     
     db_invoice.is_paid = True
     db_invoice.payment_date = payment.payment_date
-    db_invoice.payment_type = payment.payment_type
-    db_invoice.payment_reference = payment.payment_reference
-    db_invoice.received_amount = payment.received_amount
-    
-    # Also update shipment status if exists
+    db_invoice.payment_type = payment.payment_type or "NEFT"
+    if payment.payment_reference:
+        db_invoice.payment_reference = payment.payment_reference
+    if payment.received_amount is not None:
+        db_invoice.received_amount = payment.received_amount
+
+    # Also update shipment status if exists (UTR optional)
     status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == db_invoice.enquiry_id).first()
     if status:
         status.pay_client = datetime.datetime.combine(payment.payment_date, datetime.time.min)
-        status.utr_number = payment.payment_reference
-        status.payment_amount = int(payment.received_amount)
+        if payment.payment_reference:
+            status.utr_number = payment.payment_reference
+        if payment.received_amount is not None:
+            status.payment_amount = int(payment.received_amount)
     
     db.commit()
     logger.info(f"Payment recorded for invoice {db_invoice.invoice_number}")

@@ -31,9 +31,12 @@ async function fetchInvoiceDetails() {
                 document.getElementById('display_enquiry_number').textContent = currentInvoice.enquiry_number;
                 document.getElementById('display_client_name').textContent = currentInvoice.client_name;
                 document.getElementById('display_invoice_date').textContent = new Date(currentInvoice.invoice_date).toLocaleDateString();
-                document.getElementById('display_payment_status').textContent = currentInvoice.is_paid ? 'Paid' : 'Pending';
+                const received = typeof isInvoicePaymentReceived === 'function'
+                    ? isInvoicePaymentReceived(currentInvoice)
+                    : !!currentInvoice.is_paid;
+                document.getElementById('display_payment_status').textContent = received ? 'Paid' : 'Pending';
 
-                if (currentInvoice.is_paid) {
+                if (received) {
                     document.getElementById('payment_date').value = currentInvoice.payment_date;
                     document.getElementById('payment_type').value = currentInvoice.payment_type || 'NEFT';
                     document.getElementById('payment_reference').value = currentInvoice.payment_reference || '';
@@ -55,17 +58,17 @@ async function savePayment() {
     const ref = document.getElementById('payment_reference').value;
     const amount = parseFloat(document.getElementById('received_amount').value);
 
-    if (isNaN(amount) || amount <= 0 || !date || !ref) {
-        alert('Please fill all required details (Date, Amount, Reference)');
+    if (!date) {
+        alert('Please enter the payment received date.');
         return;
     }
 
     const payload = {
         payment_date: date,
         payment_type: type,
-        payment_reference: ref,
-        received_amount: amount
     };
+    if (ref) payload.payment_reference = ref;
+    if (!isNaN(amount) && amount > 0) payload.received_amount = amount;
 
     try {
         const response = await fetch(`${CONFIG.API_URL}/api/invoice/payment/${invoiceId}`, {
