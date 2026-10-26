@@ -26,10 +26,7 @@
 
     function daysPill(inv, soonDays) {
         const soon = soonDays != null ? soonDays : 3;
-        const received = typeof isInvoicePaymentReceived === 'function'
-            ? isInvoicePaymentReceived(inv)
-            : !!inv.is_paid;
-        if (received) {
+        if (invoicePaymentReceived(inv)) {
             return '<span class="inv-days-pill inv-days-pill--ok"><i class="fas fa-check"></i> Paid</span>';
         }
         const d = inv.days_remaining;
@@ -56,8 +53,15 @@
         return parts.length ? parts.join(' · ') : '';
     }
 
+    function invoicePaymentReceived(inv) {
+        return typeof isInvoicePaymentReceived === 'function'
+            ? isInvoicePaymentReceived(inv)
+            : !!(inv && (inv.payment_date || inv.is_paid));
+    }
+
     function renderRow(inv, soonDays) {
         const meta = invoiceMeta(inv);
+        const received = invoicePaymentReceived(inv);
         const amount = received && inv.received_amount != null
             ? `₹${Number(inv.received_amount).toLocaleString()}`
             : '—';
