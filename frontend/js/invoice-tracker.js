@@ -289,6 +289,8 @@
                 </button>
             </div>
 
+            <section class="invoice-tracker-section" aria-labelledby="invTrackerOverviewHeading">
+                <h2 class="invoice-tracker-section-title" id="invTrackerOverviewHeading">Overview</h2>
             <div class="invoice-tracker-kpis">
                 <div class="inv-tracker-kpi inv-tracker-kpi--danger">
                     <div class="inv-tracker-kpi-label">Past due</div>
@@ -311,7 +313,10 @@
                     <div class="inv-tracker-kpi-sub">${s.on_time_paid_count || 0} of ${(s.on_time_paid_count || 0) + (s.late_paid_count || 0)} paid</div>
                 </div>
             </div>
+            </section>
 
+            <section class="invoice-tracker-section" aria-labelledby="invTrackerActionHeading">
+                <h2 class="invoice-tracker-section-title" id="invTrackerActionHeading">Action needed</h2>
             <div class="invoice-tracker-grid">
                 <div class="inv-tracker-card">
                     <div class="inv-tracker-card-head">
@@ -356,7 +361,10 @@
                     </div>
                 </div>
             </div>
+            </section>
 
+            <section class="invoice-tracker-section" aria-labelledby="invTrackerAnalyticsHeading">
+                <h2 class="invoice-tracker-section-title" id="invTrackerAnalyticsHeading">Analytics</h2>
             <div class="inv-tracker-analytics">
                 ${renderCollapsibleAnalyticsCard(
                     'collection',
@@ -369,15 +377,16 @@
                     renderMonthBars(data.analytics?.by_month)
                 )}
             </div>
+            </section>
 
-            <div class="inv-tracker-card">
-                <div class="inv-tracker-card-head">
-                    <h3>By client</h3>
-                </div>
+            <section class="invoice-tracker-section" aria-labelledby="invTrackerClientHeading">
+                <h2 class="invoice-tracker-section-title" id="invTrackerClientHeading">By client</h2>
+            <div class="inv-tracker-card inv-tracker-card--client">
                 <div class="inv-tracker-card-body">${renderClientTable(data.analytics?.by_client)}</div>
             </div>
+            </section>
 
-            <p class="cell-muted" style="font-size:12px;margin:0;">As of ${escape(data.as_of || '')} (IST). On-time = payment received on or before due date.</p>
+            <p class="invoice-tracker-footnote">As of ${escape(data.as_of || '')} (IST). On-time = payment received on or before due date.</p>
         `;
 
         bindCollapsibleAnalyticsCards(panel);
