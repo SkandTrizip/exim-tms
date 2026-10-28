@@ -26,6 +26,37 @@ def _days_remaining(due: Optional[date], today: date) -> Optional[int]:
     return (due - today).days
 
 
+def actual_collection_period_days(inv: Invoice) -> Optional[int]:
+    """Payment date − invoice date (days to receive payment)."""
+    if not is_payment_received(inv):
+        return None
+    if not inv.invoice_date or not inv.payment_date:
+        return None
+    return (inv.payment_date - inv.invoice_date).days
+
+
+def stated_credit_period_days(inv: Invoice) -> Optional[int]:
+    """Due date − invoice date (days allowed before payment is due)."""
+    if not inv.invoice_date or not inv.payment_due_date:
+        return None
+    return (inv.payment_due_date - inv.invoice_date).days
+
+
+def payment_delay_days(inv: Invoice) -> Optional[int]:
+    """
+    Average days delinquent (ADD) per invoice:
+    actual collection period − stated credit period (= payment date − due date).
+    0 = paid on due date; positive = late; negative = early.
+    """
+    if not is_payment_received(inv):
+        return None
+    actual = actual_collection_period_days(inv)
+    stated = stated_credit_period_days(inv)
+    if actual is None or stated is None:
+        return None
+    return actual - stated
+
+
 def _timing_bucket(
     is_paid: bool,
     payment_due_date: Optional[date],
@@ -33,12 +64,19 @@ def _timing_bucket(
     today: date,
 ) -> str:
     """
-    on_time | late | overdue_unpaid | pending | unknown
+    early | on_time | late | unknown | overdue_unpaid | pending
+
+    Paid timing uses payment delay (payment date − due date).
     """
     if is_paid:
         if payment_due_date is None or payment_date is None:
             return "unknown"
-        return "on_time" if payment_date <= payment_due_date else "late"
+        delay = (payment_date - payment_due_date).days
+        if delay < 0:
+            return "early"
+        if delay == 0:
+            return "on_time"
+        return "late"
     if payment_due_date is not None and payment_due_date < today:
         return "overdue_unpaid"
     return "pending"
@@ -67,6 +105,10 @@ def _serialize_invoice_row(
         else:
             urgency = "upcoming"
 
+    stated = stated_credit_period_days(inv)
+    actual = actual_collection_period_days(inv) if paid else None
+    delay = payment_delay_days(inv) if paid else None
+
     return {
         "id": inv.id,
         "enquiry_id": inv.enquiry_id,
@@ -83,6 +125,9 @@ def _serialize_invoice_row(
         "item_type": getattr(inv, "item_type", "all") or "all",
         "currency_mode": getattr(inv, "currency_mode", None),
         "remark": getattr(inv, "remark", None),
+        "stated_credit_period_days": stated,
+        "actual_collection_period_days": actual,
+        "payment_delay_days": delay,
         "days_remaining": days,
         "days_overdue": abs(days) if days is not None and days < 0 else 0,
         "timing": timing,
@@ -121,6 +166,7 @@ def get_invoice_tracker_dashboard(
     due_soon: List[Dict[str, Any]] = []
     open_upcoming: List[Dict[str, Any]] = []
 
+    collection_early = 0
     collection_on_time = 0
     collection_late = 0
     collection_unknown = 0
@@ -128,10 +174,11 @@ def get_invoice_tracker_dashboard(
     pending_not_due_count = 0
 
     by_month: Dict[str, Dict[str, int]] = defaultdict(
-        lambda: {"on_time": 0, "late": 0, "unknown": 0, "invoiced_count": 0}
+        lambda: {"early": 0, "on_time": 0, "late": 0, "unknown": 0, "invoiced_count": 0}
     )
     by_client: Dict[str, Dict[str, int]] = defaultdict(
         lambda: {
+            "early": 0,
             "on_time": 0,
             "late": 0,
             "overdue_open": 0,
@@ -164,7 +211,10 @@ def get_invoice_tracker_dashboard(
             by_client[client_key]["paid_count"] += 1
 
         timing = item["timing"]
-        if timing == "on_time":
+        if timing == "early":
+            collection_early += 1
+            by_client[client_key]["early"] += 1
+        elif timing == "on_time":
             collection_on_time += 1
             by_client[client_key]["on_time"] += 1
         elif timing == "late":
@@ -172,13 +222,14 @@ def get_invoice_tracker_dashboard(
             by_client[client_key]["late"] += 1
         elif timing == "unknown" and paid:
             collection_unknown += 1
-            by_client[client_key]["late"] += 0  # noqa: no-op — keep structure
 
         inv_date = inv.invoice_date or inv.payment_due_date
         if inv_date and paid:
             month_key = inv_date.strftime("%Y-%m")
             by_month[month_key]["invoiced_count"] += 1
-            if timing == "on_time":
+            if timing == "early":
+                by_month[month_key]["early"] += 1
+            elif timing == "on_time":
                 by_month[month_key]["on_time"] += 1
             elif timing == "late":
                 by_month[month_key]["late"] += 1
@@ -200,7 +251,10 @@ def get_invoice_tracker_dashboard(
             {
                 "client_name": name,
                 **counts,
-                "on_time_pct": _pct(counts["on_time"], counts["on_time"] + counts["late"]),
+                "on_time_pct": _pct(
+                    counts["on_time"],
+                    counts["early"] + counts["on_time"] + counts["late"],
+                ),
             }
             for name, counts in by_client.items()
             if counts["paid_count"] > 0
@@ -212,20 +266,24 @@ def get_invoice_tracker_dashboard(
     )
 
     open_count = overdue_unpaid_count + len(due_soon) + len(open_upcoming)
-    paid_with_timing = collection_on_time + collection_late
+    paid_with_timing = collection_early + collection_on_time + collection_late
 
-    days_to_pay: List[int] = []
-    credit_periods: List[int] = []
+    actual_periods: List[int] = []
+    stated_periods: List[int] = []
+    payment_delays: List[int] = []
     for inv, *_ in rows:
-        dtp = _days_to_payment_received(inv)
-        if dtp is not None:
-            days_to_pay.append(dtp)
-        cp = _credit_period_days(inv)
-        if cp is not None:
-            credit_periods.append(cp)
+        actual = actual_collection_period_days(inv)
+        stated = stated_credit_period_days(inv)
+        delay = payment_delay_days(inv)
+        if actual is None or stated is None or delay is None:
+            continue
+        actual_periods.append(actual)
+        stated_periods.append(stated)
+        payment_delays.append(delay)
 
-    avg_days_to_payment = _avg(days_to_pay)
-    avg_credit_period = _avg(credit_periods)
+    avg_actual_collection = _avg(actual_periods)
+    avg_stated_credit = _avg(stated_periods)
+    avg_payment_delay = _avg(payment_delays)
 
     return {
         "as_of": today.isoformat(),
@@ -239,19 +297,28 @@ def get_invoice_tracker_dashboard(
             "overdue_unpaid_count": overdue_unpaid_count,
             "pending_not_due_count": pending_not_due_count,
             "paid_count": sum(1 for inv, *_ in rows if is_payment_received(inv)),
+            "early_paid_count": collection_early,
             "on_time_paid_count": collection_on_time,
             "late_paid_count": collection_late,
             "on_time_rate_pct": _pct(collection_on_time, paid_with_timing),
-            "avg_days_to_payment_received": avg_days_to_payment,
-            "avg_credit_period_days": avg_credit_period,
-            "avg_payment_sample_count": len(days_to_pay),
-            "avg_credit_sample_count": len(credit_periods),
+            "not_late_rate_pct": _pct(
+                collection_early + collection_on_time, paid_with_timing
+            ),
+            "avg_actual_collection_period_days": avg_actual_collection,
+            "avg_stated_credit_period_days": avg_stated_credit,
+            "avg_payment_delay_days": avg_payment_delay,
+            "avg_days_to_payment_received": avg_actual_collection,
+            "avg_credit_period_days": avg_stated_credit,
+            "metrics_sample_count": len(actual_periods),
+            "avg_payment_sample_count": len(actual_periods),
+            "avg_credit_sample_count": len(stated_periods),
         },
         "past_due": past_due,
         "due_soon": due_soon,
         "open_upcoming": open_upcoming,
         "analytics": {
             "collection": {
+                "early": collection_early,
                 "on_time": collection_on_time,
                 "late": collection_late,
                 "unknown": collection_unknown,
@@ -269,20 +336,6 @@ def _pct(numerator: int, denominator: int) -> Optional[float]:
     if denominator <= 0:
         return None
     return round(100.0 * numerator / denominator, 1)
-
-
-def _days_to_payment_received(inv: Invoice) -> Optional[int]:
-    if not is_payment_received(inv):
-        return None
-    if not inv.invoice_date or not inv.payment_date:
-        return None
-    return (inv.payment_date - inv.invoice_date).days
-
-
-def _credit_period_days(inv: Invoice) -> Optional[int]:
-    if not inv.invoice_date or not inv.payment_due_date:
-        return None
-    return (inv.payment_due_date - inv.invoice_date).days
 
 
 def _avg(values: List[int]) -> Optional[float]:
@@ -309,17 +362,22 @@ def _build_month_series(
 
     out: List[Dict[str, Any]] = []
     for key in keys:
-        bucket = by_month.get(key, {"on_time": 0, "late": 0, "unknown": 0, "invoiced_count": 0})
-        paid = bucket["on_time"] + bucket["late"] + bucket["unknown"]
+        bucket = by_month.get(
+            key,
+            {"early": 0, "on_time": 0, "late": 0, "unknown": 0, "invoiced_count": 0},
+        )
+        paid = bucket["early"] + bucket["on_time"] + bucket["late"] + bucket["unknown"]
+        timed = bucket["early"] + bucket["on_time"] + bucket["late"]
         out.append(
             {
                 "month": key,
                 "label": _month_label(key),
+                "early": bucket["early"],
                 "on_time": bucket["on_time"],
                 "late": bucket["late"],
                 "unknown": bucket["unknown"],
                 "invoiced_count": bucket["invoiced_count"],
-                "on_time_pct": _pct(bucket["on_time"], paid),
+                "on_time_pct": _pct(bucket["on_time"], timed),
             }
         )
     return out

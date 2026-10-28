@@ -125,6 +125,12 @@ CUSTOMER_INVOICING_TYPES = {
     CUSTOMER_INVOICING_DUAL_USD_INR: "Dual — USD charges invoice + INR charges invoice",
 }
 
+def _invoice_bank_accounts_for_frontend() -> dict:
+    from backend.utils.invoice_bank import INVOICE_BANK_ACCOUNTS
+
+    return INVOICE_BANK_ACCOUNTS
+
+
 def get_frontend_config() -> dict:
     return {
         "containerTypes": CONTAINER_TYPES,
@@ -139,6 +145,7 @@ def get_frontend_config() -> dict:
         "airDefaultCharges": AIR_DEFAULT_CHARGES,
         "CHARGE_CURRENCIES": CHARGE_CURRENCIES,
         "customerInvoicingTypes": CUSTOMER_INVOICING_TYPES,
+        "invoiceBankAccounts": _invoice_bank_accounts_for_frontend(),
     }
 
 

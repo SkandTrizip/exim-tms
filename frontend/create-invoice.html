@@ -87,6 +87,64 @@
             border-color: var(--primary);
             box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
         }
+
+        .invoice-bank-toggle {
+            display: inline-flex;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f1f5f9;
+        }
+
+        .invoice-bank-toggle-btn {
+            border: none;
+            background: transparent;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--navy-600);
+            cursor: pointer;
+            min-height: 36px;
+            transition: background 0.15s, color 0.15s;
+        }
+
+        .invoice-bank-toggle-btn:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+
+        .invoice-bank-toggle-btn.is-active {
+            background: white;
+            color: var(--navy-800);
+            box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+        }
+
+        .invoice-bank-preview {
+            margin-top: 10px;
+            font-size: 12px;
+            line-height: 1.5;
+            color: var(--navy-700);
+            background: #f9fafb;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px 12px;
+        }
+
+        .invoice-bank-preview dt {
+            font-weight: 600;
+            display: inline;
+        }
+
+        .invoice-bank-preview dd {
+            display: inline;
+            margin: 0 0 0 4px;
+        }
+
+        .invoice-bank-preview dd::after {
+            content: "";
+            display: block;
+            margin-bottom: 4px;
+        }
     </style>
 </head>
 
@@ -214,6 +272,18 @@
                         <div class="form-row">
                             <span class="field-label">Payment Due Date</span>
                             <input type="date" class="manual-input" id="payment_due_date">
+                        </div>
+                        <div class="form-row">
+                            <span class="field-label">Bank on invoice</span>
+                            <div>
+                                <div class="invoice-bank-toggle" role="group" aria-label="Bank account on invoice PDF">
+                                    <button type="button" class="invoice-bank-toggle-btn is-active" id="bankAccountInrBtn"
+                                        data-bank="inr" aria-pressed="true">INR account</button>
+                                    <button type="button" class="invoice-bank-toggle-btn" id="bankAccountUsdBtn"
+                                        data-bank="usd" aria-pressed="false">USD account</button>
+                                </div>
+                                <dl class="invoice-bank-preview" id="invoice_bank_preview" aria-live="polite"></dl>
+                            </div>
                         </div>
                         <div class="form-row">
                             <span class="field-label">Job No</span>

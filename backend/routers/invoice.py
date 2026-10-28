@@ -22,6 +22,7 @@ import os
 from backend.utils.logger import logger
 from backend.utils.hsn_sac import resolve_hsn_sac
 from backend.utils.invoice_payment import is_payment_received
+from backend.utils.invoice_bank import invoice_bank_details_html, normalize_bank_account_key
 
 router = APIRouter(prefix="/invoice", tags=["Invoice"])
 
@@ -386,6 +387,10 @@ def generate_invoice_pdf(
     item_type: str = "all",      # 'all', 'main', or 'additional'
     currency_mode: Optional[str] = None,
     additional_doc_id: Optional[int] = None,
+    bank_account: Optional[str] = Query(
+        None,
+        description="Bank block on PDF: inr (default) or usd",
+    ),
     db: Session = Depends(get_db)
 ):
     # 1. Fetch Data
@@ -857,14 +862,7 @@ def generate_invoice_pdf(
     # Bank Details Table (Single Account)
     bank_style = ParagraphStyle('BankStyle', parent=styles['Normal'], fontSize=7, leading=9)
     
-    bank_info = """<b><u>Bank Details for Payment</u></b><br/>
-    <b>Account Name:</b> LOGIPOD LOGISTICS PRIVATE LIMITED<br/>
-    <b>Bank Name:</b> STATE BANK OF INDIA<br/>
-    <b>Account Number:</b> 44327943415<br/>
-    <b>IFSC Code:</b> SBIN0050933<br/>
-    <b>Branch:</b> GURGAON - MID CORPORATE<br/>
-    <b>Branch Address:</b> Plot No. 91, IDC, 1st Floor, MG Road, Gurgaon 122001
-    """
+    bank_info = invoice_bank_details_html(normalize_bank_account_key(bank_account))
     
     bank_data = [[Paragraph(bank_info, bank_style)]]
     

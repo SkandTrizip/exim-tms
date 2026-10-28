@@ -105,39 +105,49 @@
         return items.map((inv) => renderRow(inv, soonDays)).join('');
     }
 
-    function renderDonut(collection, onTimePct) {
+    function renderDonut(collection, onTimePct, avgPaymentDelay) {
+        const early = collection.early || 0;
         const onTime = collection.on_time || 0;
         const late = collection.late || 0;
-        const total = onTime + late;
+        const total = early + onTime + late;
         if (total <= 0) {
             return '<div class="inv-tracker-empty">No paid invoices with due dates yet.</div>';
         }
+        const earlyAngle = (early / total) * 360;
         const onAngle = (onTime / total) * 360;
         const size = 120;
         const cx = 60;
         const cy = 60;
         const r = 48;
-        const pathOn = typeof buildAnalyticsPiePath === 'function'
-            ? buildAnalyticsPiePath(cx, cy, r, 0, onAngle)
-            : '';
-        const pathLate = typeof buildAnalyticsPiePath === 'function'
-            ? buildAnalyticsPiePath(cx, cy, r, onAngle, 360)
-            : '';
+        const build = typeof buildAnalyticsPiePath === 'function' ? buildAnalyticsPiePath : null;
+        let a0 = 0;
+        const pathEarly = build && early > 0 ? build(cx, cy, r, a0, a0 + earlyAngle) : '';
+        a0 += earlyAngle;
+        const pathOn = build && onTime > 0 ? build(cx, cy, r, a0, a0 + onAngle) : '';
+        a0 += onAngle;
+        const pathLate = build && late > 0 ? build(cx, cy, r, a0, 360) : '';
+        const centerMain = avgPaymentDelay != null ? formatPaymentDelay(avgPaymentDelay) : (onTimePct != null ? onTimePct + '%' : '—');
+        const centerSub = avgPaymentDelay != null ? 'avg ADD' : 'on due date';
 
         return `
             <div class="inv-collection-donut-wrap">
-                <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="On-time vs late payments">
+                <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" role="img" aria-label="Early, on-time, and late payments by payment delay">
                     <circle cx="${cx}" cy="${cy}" r="${r}" fill="#f1f5f9"/>
+                    ${pathEarly ? `<path d="${pathEarly}" fill="#3b82f6"/>` : ''}
                     ${pathOn ? `<path d="${pathOn}" fill="#059669"/>` : ''}
-                    ${pathLate && late > 0 ? `<path d="${pathLate}" fill="#f97316"/>` : ''}
+                    ${pathLate ? `<path d="${pathLate}" fill="#f97316"/>` : ''}
                     <circle cx="${cx}" cy="${cy}" r="28" fill="#fff"/>
-                    <text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="14" font-weight="700" fill="#0f172a">${onTimePct != null ? onTimePct + '%' : '—'}</text>
-                    <text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="9" fill="#64748b">on time</text>
+                    <text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="13" font-weight="700" fill="#0f172a">${centerMain}</text>
+                    <text x="${cx}" y="${cy + 12}" text-anchor="middle" font-size="9" fill="#64748b">${centerSub}</text>
                 </svg>
                 <div class="inv-collection-legend">
                     <div class="inv-collection-legend-item">
+                        <span class="inv-collection-legend-dot" style="background:#3b82f6"></span>
+                        Early (${early})
+                    </div>
+                    <div class="inv-collection-legend-item">
                         <span class="inv-collection-legend-dot" style="background:#059669"></span>
-                        On time (${onTime})
+                        On due date (${onTime})
                     </div>
                     <div class="inv-collection-legend-item">
                         <span class="inv-collection-legend-dot" style="background:#f97316"></span>
@@ -156,7 +166,7 @@
     }
 
     function renderMonthBars(series) {
-        const rows = (series || []).filter((m) => (m.on_time + m.late + m.unknown) > 0);
+        const rows = (series || []).filter((m) => (m.early + m.on_time + m.late + m.unknown) > 0);
         if (!rows.length) {
             return '<div class="inv-tracker-empty">No paid invoices in the selected period.</div>';
         }
@@ -164,13 +174,17 @@
         return `
             <div class="inv-month-bars">
                 ${recent.map((m) => {
-                    const total = m.on_time + m.late + m.unknown;
-                    const onPct = total ? (m.on_time / total) * 100 : 0;
-                    const latePct = total ? (m.late / total) * 100 : 0;
+                    const early = m.early || 0;
+                    const total = early + m.on_time + m.late + m.unknown;
+                    const timed = early + m.on_time + m.late;
+                    const earlyPct = timed ? (early / timed) * 100 : 0;
+                    const onPct = timed ? (m.on_time / timed) * 100 : 0;
+                    const latePct = timed ? (m.late / timed) * 100 : 0;
                     return `
                         <div class="inv-month-bar-row">
                             <span>${escape(m.label || m.month)}</span>
-                            <div class="inv-month-bar-track" title="${m.on_time} on time, ${m.late} late">
+                            <div class="inv-month-bar-track" title="${early} early, ${m.on_time} on due date, ${m.late} late">
+                                <div class="inv-month-bar-early" style="width:${earlyPct}%"></div>
                                 <div class="inv-month-bar-on" style="width:${onPct}%"></div>
                                 <div class="inv-month-bar-late" style="width:${latePct}%"></div>
                             </div>
@@ -187,6 +201,22 @@
         return Math.abs(n - Math.round(n)) < 0.05 ? String(Math.round(n)) : n.toFixed(1);
     }
 
+    function formatPaymentDelay(val) {
+        if (val == null || val === '') return '—';
+        const n = Number(val);
+        if (!Number.isFinite(n)) return '—';
+        const rounded = Math.abs(n - Math.round(n)) < 0.05 ? Math.round(n) : Number(n.toFixed(1));
+        if (rounded === 0) return '0 days';
+        const sign = rounded > 0 ? '+' : '';
+        return `${sign}${rounded} days`;
+    }
+
+    function avgCollectionKpi(s) {
+        const actual = s.avg_actual_collection_period_days ?? s.avg_days_to_payment_received;
+        const stated = s.avg_stated_credit_period_days ?? s.avg_credit_period_days;
+        return { actual, stated };
+    }
+
     function renderClientTable(clients, soonDays) {
         const soon = soonDays != null ? soonDays : 5;
         const rows = clients || [];
@@ -198,7 +228,8 @@
                 <thead>
                     <tr>
                         <th>Client</th>
-                        <th class="num">On time</th>
+                        <th class="num">Early</th>
+                        <th class="num">On due date</th>
                         <th class="num">Late</th>
                         <th class="num">Overdue</th>
                         <th class="num">Due ≤${soon}d</th>
@@ -208,6 +239,7 @@
                     ${rows.slice(0, 15).map((c) => `
                         <tr>
                             <td class="cell-upper">${escape(c.client_name)}</td>
+                            <td class="num">${c.early || 0}</td>
                             <td class="num">${c.on_time || 0}</td>
                             <td class="num">${c.late || 0}</td>
                             <td class="num">${c.overdue_open || 0}</td>
@@ -318,12 +350,12 @@
                 <div class="inv-tracker-kpi">
                     <div class="inv-tracker-kpi-label">Avg payment received</div>
                     <div class="inv-tracker-kpi-value inv-tracker-kpi-value--compare">
-                        <span>${formatAvgDays(s.avg_days_to_payment_received)}</span>
+                        <span>${formatAvgDays(avgCollectionKpi(s).actual)}</span>
                         <span class="inv-tracker-kpi-vs">vs</span>
-                        <span>${formatAvgDays(s.avg_credit_period_days)}</span>
+                        <span>${formatAvgDays(avgCollectionKpi(s).stated)}</span>
                         <span class="inv-tracker-kpi-unit">days</span>
                     </div>
-                    <div class="inv-tracker-kpi-sub">Collection time vs avg credit period${s.avg_payment_sample_count ? ` (${s.avg_payment_sample_count} paid)` : ''}</div>
+                    <div class="inv-tracker-kpi-sub">Actual collection period vs stated credit period${s.metrics_sample_count || s.avg_payment_sample_count ? ` (${s.metrics_sample_count || s.avg_payment_sample_count} paid)` : ''}${s.avg_payment_delay_days != null ? ` · Avg payment delay (ADD): ${formatPaymentDelay(s.avg_payment_delay_days)}` : ''}</div>
                 </div>
             </div>
             </section>
@@ -382,11 +414,11 @@
                 ${renderCollapsibleAnalyticsCard(
                     'collection',
                     'Collection performance',
-                    renderDonut(data.analytics?.collection || {}, s.on_time_rate_pct)
+                    renderDonut(data.analytics?.collection || {}, s.on_time_rate_pct, s.avg_payment_delay_days)
                 )}
                 ${renderCollapsibleAnalyticsCard(
                     'by_month',
-                    'On time vs late — by invoice month',
+                    'Payment delay — by invoice month',
                     renderMonthBars(data.analytics?.by_month)
                 )}
             </div>
@@ -399,7 +431,7 @@
             </div>
             </section>
 
-            <p class="invoice-tracker-footnote">As of ${escape(data.as_of || '')} (IST). On-time = payment received on or before due date.</p>
+            <p class="invoice-tracker-footnote">As of ${escape(data.as_of || '')} (IST). Stated credit period = due date − invoice date. Actual collection period = payment date − invoice date. Payment delay (ADD) = actual − stated (0 = on due date, positive = late, negative = early).</p>
         `;
 
         bindCollapsibleAnalyticsCards(panel);
@@ -453,8 +485,7 @@
         };
         set('dashTrackerPastDue', String(s.past_due_count ?? '—'));
         set('dashTrackerDueSoon', String(s.due_within_days_count ?? '—'));
-        const pay = s.avg_days_to_payment_received;
-        const cred = s.avg_credit_period_days;
+        const { actual: pay, stated: cred } = avgCollectionKpi(s);
         if (pay != null && cred != null) {
             set('dashTrackerAvgPay', `${formatAvgDays(pay)} vs ${formatAvgDays(cred)}`);
         } else {

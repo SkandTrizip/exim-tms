@@ -123,6 +123,78 @@ function applyBookingCancelledInvoiceMode() {
     }
 }
 
+const DEFAULT_INVOICE_BANK_ACCOUNTS = {
+    inr: {
+        label: 'INR account',
+        account_name: 'LOGIPOD LOGISTICS PRIVATE LIMITED',
+        bank_name: 'STATE BANK OF INDIA',
+        account_number: '44327943415',
+        ifsc: 'SBIN0050933',
+        branch: 'GURGAON - MID CORPORATE',
+        branch_address: 'Plot No. 91, IDC, 1st Floor, MG Road, Gurgaon 122001',
+    },
+    usd: {
+        label: 'USD account',
+        account_name: 'LOGIPOD LOGISTICS PRIVATE LIMITED',
+        bank_name: 'STATE BANK OF INDIA',
+        account_number: '45672491839',
+        ifsc: 'SBIN0050933',
+        swift: 'SBININBBP53',
+        branch: 'GURGAON - MID CORPORATE',
+        branch_address: 'Plot No. 91, IDC, 1st Floor, MG Road, Gurgaon 122001',
+    },
+};
+
+function getInvoiceBankAccountsConfig() {
+    const fromConfig = typeof CONFIG !== 'undefined' && CONFIG.invoiceBankAccounts;
+    if (fromConfig && fromConfig.inr && fromConfig.usd) return fromConfig;
+    return DEFAULT_INVOICE_BANK_ACCOUNTS;
+}
+
+function getSelectedBankAccount() {
+    const usdBtn = document.getElementById('bankAccountUsdBtn');
+    if (usdBtn && usdBtn.classList.contains('is-active')) return 'usd';
+    return 'inr';
+}
+
+function renderInvoiceBankPreview(key) {
+    const preview = document.getElementById('invoice_bank_preview');
+    if (!preview) return;
+    const accounts = getInvoiceBankAccountsConfig();
+    const acct = accounts[key] || accounts.inr;
+    const rows = [
+        ['Account name', acct.account_name],
+        ['Bank', acct.bank_name],
+        ['Account number', acct.account_number],
+        ['IFSC', acct.ifsc],
+    ];
+    if (acct.swift) rows.push(['SWIFT', acct.swift]);
+    if (acct.branch) rows.push(['Branch', acct.branch]);
+    if (acct.branch_address) rows.push(['Branch address', acct.branch_address]);
+    preview.innerHTML = rows
+        .map(([label, value]) => `<dt>${label}:</dt><dd>${value}</dd>`)
+        .join('');
+}
+
+function initInvoiceBankAccountToggle() {
+    const inrBtn = document.getElementById('bankAccountInrBtn');
+    const usdBtn = document.getElementById('bankAccountUsdBtn');
+    if (!inrBtn || !usdBtn) return;
+
+    function setBankAccount(key) {
+        const isInr = key !== 'usd';
+        inrBtn.classList.toggle('is-active', isInr);
+        usdBtn.classList.toggle('is-active', !isInr);
+        inrBtn.setAttribute('aria-pressed', isInr ? 'true' : 'false');
+        usdBtn.setAttribute('aria-pressed', !isInr ? 'true' : 'false');
+        renderInvoiceBankPreview(isInr ? 'inr' : 'usd');
+    }
+
+    inrBtn.addEventListener('click', () => setBankAccount('inr'));
+    usdBtn.addEventListener('click', () => setBankAccount('usd'));
+    setBankAccount('inr');
+}
+
 function getCustomerInvoiceNo() {
     const el = document.getElementById('customer_invoice_no');
     if (!el) return '';
@@ -157,6 +229,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     await fetchAllData({ presetAdditionalDocId, presetCurrencyMode });
+    initInvoiceBankAccountToggle();
 
     // Listen for invoice date changes to update due date and preview invoice number
     document.getElementById('invoice_date').addEventListener('change', function () {
@@ -507,6 +580,7 @@ async function generateInvoice(type = 'draft') {
         if ((params.get('item_type') || '') === 'additional' && addDocId) {
             params.append('additional_doc_id', String(addDocId));
         }
+        params.append('bank_account', getSelectedBankAccount());
 
         const pdfUrl = `${CONFIG.API_URL}/api/invoice/generate/${enquiryId}?${params.toString()}`;
         window.open(pdfUrl, '_blank');
