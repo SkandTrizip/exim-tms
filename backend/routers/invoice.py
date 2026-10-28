@@ -22,7 +22,7 @@ import os
 from backend.utils.logger import logger
 from backend.utils.hsn_sac import resolve_hsn_sac
 from backend.utils.invoice_payment import is_payment_received
-from backend.utils.invoice_bank import normalize_bank_account_key, pdf_bank_table_rows
+from backend.utils.invoice_bank import normalize_bank_account_key, pdf_bank_details_html
 
 router = APIRouter(prefix="/invoice", tags=["Invoice"])
 
@@ -234,24 +234,6 @@ def get_invoice_details(
         # Better to return null so frontend knows to show empty form
         return None
     return invoice
-
-
-def _pdf_bank_rows_for_currencies(
-    pdf_currencies: set,
-    apply_line_currency_split: bool,
-    invoice_currency_bucket: Optional[str],
-) -> list:
-    has_usd = "USD" in pdf_currencies
-    has_inr = "INR" in pdf_currencies or not pdf_currencies
-    if apply_line_currency_split and invoice_currency_bucket == "usd":
-        return pdf_bank_table_rows(include_usd_section=False, usd_only=True)
-    if apply_line_currency_split and invoice_currency_bucket == "inr":
-        return pdf_bank_table_rows(include_usd_section=False, usd_only=False)
-    if has_usd and not has_inr:
-        return pdf_bank_table_rows(include_usd_section=False, usd_only=True)
-    if has_usd and has_inr:
-        return pdf_bank_table_rows(include_usd_section=True, usd_only=False)
-    return pdf_bank_table_rows(include_usd_section=False, usd_only=False)
 
 
 @router.get("/rates-preview/{enquiry_id}")
@@ -673,7 +655,6 @@ def generate_invoice_pdf(
     grand_total_taxable = 0.0
     grand_total_inr = 0.0
     sn = 1
-    pdf_currencies_included: set = set()
     
     # Styles for table
     t_style_header = ParagraphStyle('THeader', parent=styles['Normal'], fontSize=6, fontName='Helvetica-Bold', alignment=1)
@@ -756,7 +737,6 @@ def generate_invoice_pdf(
                     Paragraph(f"{line_total:.2f}", t_style_row),
                 ]
                 table_data.append(row)
-                pdf_currencies_included.add(line_curr)
                 sn += 1
             
     # --- Add Additional Shipping Line Invoices (from tracking info metadata) ---
@@ -832,7 +812,6 @@ def generate_invoice_pdf(
                 Paragraph(f"{igst_amt:.2f}", t_style_row),
                 Paragraph(f"{line_total:.2f}", t_style_row),
             ])
-            pdf_currencies_included.add(curr)
             sn += 1
 
     if apply_line_currency_split and sn == 1:
@@ -880,48 +859,15 @@ def generate_invoice_pdf(
     elements.append(Paragraph(terms_text, ParagraphStyle('TermsStyle', parent=styles['Normal'], fontSize=6, leading=8)))
     elements.append(Spacer(1, 5))
 
-    bank_label_style = ParagraphStyle(
-        'BankLabel', parent=styles['Normal'], fontSize=7, fontName='Helvetica-Bold', leading=10
-    )
-    bank_value_style = ParagraphStyle(
-        'BankValue', parent=styles['Normal'], fontSize=7, fontName='Helvetica', leading=11
-    )
-    bank_row_defs = _pdf_bank_rows_for_currencies(
-        pdf_currencies_included,
-        apply_line_currency_split,
-        invoice_currency_bucket,
-    )
-    bank_table_data = []
-    bank_table_spans = []
-    for idx, (kind, text) in enumerate(bank_row_defs):
-        if kind == "__title__":
-            bank_table_data.append([Paragraph(f"<u>{text}</u>", bank_label_style), ""])
-            bank_table_spans.append(idx)
-        elif kind == "__gap__":
-            bank_table_data.append(["", ""])
-        else:
-            bank_table_data.append(
-                [
-                    Paragraph(f"{kind}", bank_label_style),
-                    Paragraph(text, bank_value_style),
-                ]
-            )
-    t_bank = Table(bank_table_data, colWidths=[1.85 * inch, 5.15 * inch])
-    bank_style_cmds = [
+    bank_style = ParagraphStyle('BankStyle', parent=styles['Normal'], fontSize=7, leading=9)
+    bank_info = pdf_bank_details_html()
+    bank_data = [[Paragraph(bank_info, bank_style)]]
+    t_bank = Table(bank_data, colWidths=[7.0 * inch])
+    t_bank.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-        ('LEFTPADDING', (0, 0), (-1, -1), 6),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
-        ('TOPPADDING', (0, 0), (-1, -1), 5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-    ]
-    for row_i in bank_table_spans:
-        bank_style_cmds.append(('SPAN', (0, row_i), (1, row_i)))
-    for row_i, (kind, _) in enumerate(bank_row_defs):
-        if kind == "__gap__":
-            bank_style_cmds.append(('TOPPADDING', (0, row_i), (-1, row_i), 12))
-            bank_style_cmds.append(('BOTTOMPADDING', (0, row_i), (-1, row_i), 4))
-    t_bank.setStyle(TableStyle(bank_style_cmds))
+        ('PADDING', (0, 0), (-1, -1), 5),
+    ]))
     elements.append(t_bank)
     elements.append(Spacer(1, 10))
     

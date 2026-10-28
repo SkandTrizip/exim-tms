@@ -1,7 +1,7 @@
 """Bank details shown on invoice PDFs (INR vs USD settlement accounts)."""
 from __future__ import annotations
 
-from typing import Literal, List, Tuple, Optional
+from typing import Literal, List, Tuple
 
 BankAccountKey = Literal["inr", "usd"]
 
@@ -27,7 +27,7 @@ INVOICE_BANK_ACCOUNTS: dict[str, dict[str, str]] = {
     },
 }
 
-# Row kinds for PDF table builder: ("label", "value") or ("__title__", text) or ("__gap__", "")
+# ("label", "value") | "__title__" | "__section__" | "__gap__"
 BankTableRow = Tuple[str, str]
 
 
@@ -52,53 +52,34 @@ def _account_field_rows(acct: dict[str, str]) -> List[BankTableRow]:
     return rows
 
 
-def pdf_bank_table_rows(
-    *,
-    include_usd_section: bool,
-    usd_only: bool = False,
-) -> List[BankTableRow]:
-    """
-    Build label/value rows for the invoice PDF bank block.
-    - INR-only invoice: INR account rows under one title.
-    - USD-only invoice: USD account rows (incl. SWIFT).
-    - Mixed or INR invoice with USD charges: INR block, gap, then USD extra block.
-    """
-    rows: List[BankTableRow] = []
-    if usd_only:
-        rows.append(("__title__", "Bank Details for Payment"))
-        rows.extend(_account_field_rows(INVOICE_BANK_ACCOUNTS["usd"]))
-        return rows
-
-    rows.append(("__title__", "Bank Details for Payment"))
+def pdf_bank_table_rows() -> List[BankTableRow]:
+    """Both INR and USD accounts under one Bank Details for Payment block."""
+    rows: List[BankTableRow] = [
+        ("__title__", "Bank Details for Payment"),
+        ("__section__", "INR account details"),
+    ]
     rows.extend(_account_field_rows(INVOICE_BANK_ACCOUNTS["inr"]))
-
-    if include_usd_section:
-        rows.append(("__gap__", ""))
-        rows.append(("__title__", "USD account (remittance in USD)"))
-        usd = INVOICE_BANK_ACCOUNTS["usd"]
-        rows.extend(
-            [
-                ("Account Name", usd["account_name"]),
-                ("Bank Name", usd["bank_name"]),
-                ("Account Number", usd["account_number"]),
-                ("IFSC Code", usd["ifsc"]),
-                ("SWIFT Code", usd.get("swift") or ""),
-            ]
-        )
+    rows.append(("__gap__", ""))
+    rows.append(("__section__", "USD account details"))
+    rows.extend(_account_field_rows(INVOICE_BANK_ACCOUNTS["usd"]))
     return rows
 
 
-def invoice_bank_details_html(account_key: str | None) -> str:
-    """Legacy single-block HTML (kept for compatibility)."""
-    key = normalize_bank_account_key(account_key)
-    usd_only = key == "usd"
-    rows = pdf_bank_table_rows(include_usd_section=False, usd_only=usd_only)
+def pdf_bank_details_html(rows: List[BankTableRow] | None = None) -> str:
+    """Single-cell bank block HTML (original invoice layout)."""
+    row_list = rows if rows is not None else pdf_bank_table_rows()
     parts: List[str] = []
-    for kind, text in rows:
+    for kind, text in row_list:
         if kind == "__title__":
             parts.append(f"<b><u>{text}</u></b><br/>")
+        elif kind == "__section__":
+            parts.append(f"<b>{text}</b><br/>")
         elif kind == "__gap__":
-            parts.append("<br/>")
+            parts.append("<br/><br/>")
         else:
             parts.append(f"<b>{kind}:</b> {text}<br/>")
     return "".join(parts)
+
+
+def invoice_bank_details_html(account_key: str | None = None) -> str:
+    return pdf_bank_details_html()
