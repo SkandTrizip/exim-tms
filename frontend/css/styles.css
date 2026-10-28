@@ -283,6 +283,22 @@ header {
     border-color: var(--navy-500);
 }
 
+a.btn,
+a.btn:hover,
+a.btn:focus,
+a.btn:focus-visible {
+    text-decoration: none;
+    color: inherit;
+}
+
+a.btn-secondary {
+    color: var(--navy-700);
+}
+
+a.btn-primary {
+    color: white;
+}
+
 .btn-remove {
     background: var(--error);
     color: white;
