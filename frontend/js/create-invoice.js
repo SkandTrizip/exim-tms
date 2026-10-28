@@ -212,6 +212,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 });
 
+function normalizeCustomerInvoicingType(raw) {
+    const val = (raw || 'standard').trim().toLowerCase();
+    return val === 'dual_usd_inr' ? 'dual_usd_inr' : 'standard';
+}
+
 function isDualInvoicingClient() {
     return customerInvoicingType === 'dual_usd_inr';
 }
@@ -225,14 +230,11 @@ function syncInvoiceCurrencyModeVisibility() {
 }
 
 function shouldShowBankAccountToggle() {
-    const itemType = getSelectedItemType();
-    if (itemType === 'additional') {
-        return invoicePreviewHasUsdLines;
-    }
-    if (isDualInvoicingClient()) {
+    if (invoicePreviewHasUsdLines) return true;
+    if (isDualInvoicingClient() && getSelectedItemType() !== 'additional') {
         return getSelectedCurrencyMode() === 'usd';
     }
-    return invoicePreviewHasUsdLines;
+    return false;
 }
 
 function syncInvoiceBankBarVisibility() {
@@ -313,8 +315,9 @@ async function fetchAllData({ presetAdditionalDocId, presetCurrencyMode } = {}) 
                 const master = data.master;
 
                 creditPeriod = master.credit_period || 0;
-                customerInvoicingType = (master.customer_invoicing_type || 'standard').trim().toLowerCase();
-                if (customerInvoicingType !== 'dual_usd_inr') customerInvoicingType = 'standard';
+                customerInvoicingType = normalizeCustomerInvoicingType(
+                    master.customer_invoicing_type
+                );
 
                 const currencySelect = document.getElementById('invoice_currency_mode');
                 if (currencySelect && presetCurrencyMode && ['usd', 'inr'].includes(presetCurrencyMode)) {
@@ -502,12 +505,17 @@ function applyInvoiceRatesPreview(data) {
         return;
     }
 
-    invoicePreviewHasUsdLines = (data.lines || []).some(
+    const count = (data.lines || []).length;
+    const linesHaveUsd = (data.lines || []).some(
         (line) => String(line.currency || '').toUpperCase() === 'USD'
     );
+    invoicePreviewHasUsdLines = linesHaveUsd
+        || (
+            isDualInvoicingClient()
+            && getSelectedCurrencyMode() === 'usd'
+            && count > 0
+        );
     syncInvoiceBankBarVisibility();
-
-    const count = (data.lines || []).length;
     if (banner) {
         const dualNote = isDualInvoicingClient()
             ? ` Dual-invoice client: includes only <strong>${(getSelectedCurrencyMode() || 'inr').toUpperCase()}</strong> charge lines from the quote.`
