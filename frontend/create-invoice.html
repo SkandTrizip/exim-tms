@@ -88,13 +88,6 @@
             box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
         }
 
-        #invoiceBankBarRow .air-flag-toggle {
-            margin: 0;
-        }
-
-        #invoiceBankBarRow.is-visible {
-            display: block !important;
-        }
     </style>
 </head>
 
@@ -139,15 +132,6 @@
             <div class="invoice-card">
                 <div class="invoice-card-header">
                     <h3 style="margin: 0; font-size: 18px; color: var(--navy-800);">Invoice Details</h3>
-                    <div id="invoiceBankBarRow" hidden>
-                        <label class="air-flag-toggle invoice-bank-switch" for="invoice_bank_usd_toggle">
-                            <span class="air-flag-label">INR</span>
-                            <input type="checkbox" id="invoice_bank_usd_toggle"
-                                aria-label="Payment bank on invoice: INR or USD account">
-                            <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
-                            <span class="air-flag-label">USD</span>
-                        </label>
-                    </div>
                 </div>
 
                 <div class="invoice-grid">

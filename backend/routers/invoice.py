@@ -22,7 +22,7 @@ import os
 from backend.utils.logger import logger
 from backend.utils.hsn_sac import resolve_hsn_sac
 from backend.utils.invoice_payment import is_payment_received
-from backend.utils.invoice_bank import invoice_bank_details_html, normalize_bank_account_key
+from backend.utils.invoice_bank import normalize_bank_account_key, pdf_bank_table_rows
 
 router = APIRouter(prefix="/invoice", tags=["Invoice"])
 
@@ -42,7 +42,6 @@ class InvoiceCreate(BaseModel):
     irn: Optional[str] = None
     item_type: str = "all"
     currency_mode: Optional[str] = None
-    bank_account: Optional[str] = "inr"
     additional_doc_id: Optional[int] = None
     remark: Optional[str] = None
 
@@ -147,8 +146,9 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
         payload = {k: v for k, v in invoice.dict().items() if k in allowed_fields}
         payload["invoice_number"] = allocated_number
         payload["item_type"] = item_type
-        payload["bank_account"] = normalize_bank_account_key(
-            getattr(invoice, "bank_account", None)
+        cm_saved = (payload.get("currency_mode") or "").strip().lower()
+        payload["bank_account"] = (
+            "usd" if cm_saved == "usd" else normalize_bank_account_key(None)
         )
         if not is_additional:
             invoicing_type = client_invoicing_service.get_customer_invoicing_type_for_enquiry(
@@ -236,54 +236,22 @@ def get_invoice_details(
     return invoice
 
 
-def _invoice_for_pdf_context(
-    db: Session,
-    enquiry_id: int,
-    item_type: str,
-    currency_mode: Optional[str],
-    additional_doc_id: Optional[int],
-) -> Optional[Invoice]:
-    it = (item_type or "all").strip().lower()
-    if it == "additional":
-        if additional_doc_id is None:
-            return None
-        return (
-            db.query(Invoice)
-            .filter(
-                Invoice.enquiry_id == enquiry_id,
-                Invoice.item_type == "additional",
-                Invoice.additional_doc_id == additional_doc_id,
-            )
-            .order_by(Invoice.id.desc())
-            .first()
-        )
-    q = db.query(Invoice).filter(
-        Invoice.enquiry_id == enquiry_id,
-        Invoice.item_type.in_(["all", "main"]),
-    )
-    cm = (currency_mode or "").strip().lower()
-    if cm in ("usd", "inr"):
-        q = q.filter(Invoice.currency_mode == cm)
-    return q.order_by(Invoice.id.desc()).first()
-
-
-def _resolve_pdf_bank_account(
-    bank_account: Optional[str],
-    db: Session,
-    enquiry_id: int,
-    item_type: str,
-    currency_mode: Optional[str],
-    additional_doc_id: Optional[int],
-) -> str:
-    """Bank on PDF is chosen explicitly — never derived from charge-line currency_mode."""
-    if bank_account is not None and str(bank_account).strip():
-        return normalize_bank_account_key(bank_account)
-    saved = _invoice_for_pdf_context(
-        db, enquiry_id, item_type, currency_mode, additional_doc_id
-    )
-    if saved and getattr(saved, "bank_account", None):
-        return normalize_bank_account_key(saved.bank_account)
-    return "inr"
+def _pdf_bank_rows_for_currencies(
+    pdf_currencies: set,
+    apply_line_currency_split: bool,
+    invoice_currency_bucket: Optional[str],
+) -> list:
+    has_usd = "USD" in pdf_currencies
+    has_inr = "INR" in pdf_currencies or not pdf_currencies
+    if apply_line_currency_split and invoice_currency_bucket == "usd":
+        return pdf_bank_table_rows(include_usd_section=False, usd_only=True)
+    if apply_line_currency_split and invoice_currency_bucket == "inr":
+        return pdf_bank_table_rows(include_usd_section=False, usd_only=False)
+    if has_usd and not has_inr:
+        return pdf_bank_table_rows(include_usd_section=False, usd_only=True)
+    if has_usd and has_inr:
+        return pdf_bank_table_rows(include_usd_section=True, usd_only=False)
+    return pdf_bank_table_rows(include_usd_section=False, usd_only=False)
 
 
 @router.get("/rates-preview/{enquiry_id}")
@@ -441,10 +409,6 @@ def generate_invoice_pdf(
     item_type: str = "all",      # 'all', 'main', or 'additional'
     currency_mode: Optional[str] = None,
     additional_doc_id: Optional[int] = None,
-    bank_account: Optional[str] = Query(
-        None,
-        description="Bank block on PDF: inr (default) or usd",
-    ),
     db: Session = Depends(get_db)
 ):
     # 1. Fetch Data
@@ -709,6 +673,7 @@ def generate_invoice_pdf(
     grand_total_taxable = 0.0
     grand_total_inr = 0.0
     sn = 1
+    pdf_currencies_included: set = set()
     
     # Styles for table
     t_style_header = ParagraphStyle('THeader', parent=styles['Normal'], fontSize=6, fontName='Helvetica-Bold', alignment=1)
@@ -791,6 +756,7 @@ def generate_invoice_pdf(
                     Paragraph(f"{line_total:.2f}", t_style_row),
                 ]
                 table_data.append(row)
+                pdf_currencies_included.add(line_curr)
                 sn += 1
             
     # --- Add Additional Shipping Line Invoices (from tracking info metadata) ---
@@ -866,6 +832,7 @@ def generate_invoice_pdf(
                 Paragraph(f"{igst_amt:.2f}", t_style_row),
                 Paragraph(f"{line_total:.2f}", t_style_row),
             ])
+            pdf_currencies_included.add(curr)
             sn += 1
 
     if apply_line_currency_split and sn == 1:
@@ -913,28 +880,48 @@ def generate_invoice_pdf(
     elements.append(Paragraph(terms_text, ParagraphStyle('TermsStyle', parent=styles['Normal'], fontSize=6, leading=8)))
     elements.append(Spacer(1, 5))
 
-    # Bank Details Table (Single Account)
-    bank_style = ParagraphStyle('BankStyle', parent=styles['Normal'], fontSize=7, leading=9)
-    
-    pdf_bank_key = _resolve_pdf_bank_account(
-        bank_account,
-        db,
-        enquiry_id,
-        item_type,
-        currency_mode,
-        additional_doc_id,
+    bank_label_style = ParagraphStyle(
+        'BankLabel', parent=styles['Normal'], fontSize=7, fontName='Helvetica-Bold', leading=10
     )
-    bank_info = invoice_bank_details_html(pdf_bank_key)
-    
-    bank_data = [[Paragraph(bank_info, bank_style)]]
-    
-    t_bank = Table(bank_data, colWidths=[7.0*inch])
-    t_bank.setStyle(TableStyle([
-        ('VALIGN', (0,0), (-1,-1), 'TOP'),
-        ('GRID', (0,0), (-1,-1), 0.5, colors.grey),
-        ('PADDING', (0,0), (-1,-1), 5),
-    ]))
-    
+    bank_value_style = ParagraphStyle(
+        'BankValue', parent=styles['Normal'], fontSize=7, fontName='Helvetica', leading=11
+    )
+    bank_row_defs = _pdf_bank_rows_for_currencies(
+        pdf_currencies_included,
+        apply_line_currency_split,
+        invoice_currency_bucket,
+    )
+    bank_table_data = []
+    bank_table_spans = []
+    for idx, (kind, text) in enumerate(bank_row_defs):
+        if kind == "__title__":
+            bank_table_data.append([Paragraph(f"<u>{text}</u>", bank_label_style), ""])
+            bank_table_spans.append(idx)
+        elif kind == "__gap__":
+            bank_table_data.append(["", ""])
+        else:
+            bank_table_data.append(
+                [
+                    Paragraph(f"{kind}", bank_label_style),
+                    Paragraph(text, bank_value_style),
+                ]
+            )
+    t_bank = Table(bank_table_data, colWidths=[1.85 * inch, 5.15 * inch])
+    bank_style_cmds = [
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('LEFTPADDING', (0, 0), (-1, -1), 6),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+    ]
+    for row_i in bank_table_spans:
+        bank_style_cmds.append(('SPAN', (0, row_i), (1, row_i)))
+    for row_i, (kind, _) in enumerate(bank_row_defs):
+        if kind == "__gap__":
+            bank_style_cmds.append(('TOPPADDING', (0, row_i), (-1, row_i), 12))
+            bank_style_cmds.append(('BOTTOMPADDING', (0, row_i), (-1, row_i), 4))
+    t_bank.setStyle(TableStyle(bank_style_cmds))
     elements.append(t_bank)
     elements.append(Spacer(1, 10))
     

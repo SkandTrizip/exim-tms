@@ -6,8 +6,6 @@ let additionalDocs = [];
 /** @type {'standard'|'dual_usd_inr'} */
 let customerInvoicingType = 'standard';
 let bookingCancelledForTrip = false;
-let invoicePreviewHasUsdLines = false;
-
 /**
  * Strip the branch suffix from a client name for invoicing.
  * "Acme Corp_Mumbai" → "Acme Corp"
@@ -124,33 +122,6 @@ function applyBookingCancelledInvoiceMode() {
     }
 }
 
-function getSelectedBankAccount() {
-    if (!shouldShowBankAccountToggle()) return 'inr';
-    const toggle = document.getElementById('invoice_bank_usd_toggle');
-    if (toggle && toggle.checked) return 'usd';
-    return 'inr';
-}
-
-function setSelectedBankAccount(key, options = {}) {
-    const toggle = document.getElementById('invoice_bank_usd_toggle');
-    if (!toggle) return;
-    const useUsd = (key || 'inr').toLowerCase() === 'usd';
-    toggle.checked = useUsd;
-    if (options.userSet) {
-        toggle.dataset.bankPreferenceSet = '1';
-    }
-}
-
-function initInvoiceBankAccountToggle() {
-    const toggle = document.getElementById('invoice_bank_usd_toggle');
-    if (!toggle || toggle.dataset.bankInit === '1') return;
-    toggle.dataset.bankInit = '1';
-    toggle.addEventListener('change', function () {
-        toggle.dataset.bankPreferenceSet = '1';
-    });
-    syncInvoiceBankBarVisibility();
-}
-
 function getCustomerInvoiceNo() {
     const el = document.getElementById('customer_invoice_no');
     if (!el) return '';
@@ -179,8 +150,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Set default Place of Supply
     document.getElementById('place_of_supply').value = '06AAFCL3674H1ZE/Gurugram';
 
-    initInvoiceBankAccountToggle();
-
     if (presetItemType) {
         const typeEl = document.getElementById('invoice_item_type');
         if (typeEl) typeEl.value = presetItemType;
@@ -197,7 +166,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Reload saved invoice per type (additional always gets a fresh number + empty IRN until saved)
     document.getElementById('invoice_item_type').addEventListener('change', async function () {
         syncInvoiceCurrencyModeVisibility();
-        syncInvoiceBankBarVisibility();
         await refreshInvoiceDetailsForSelection();
         await fetchInvoiceRatesPreview();
     });
@@ -205,7 +173,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     const currencyModeEl = document.getElementById('invoice_currency_mode');
     if (currencyModeEl) {
         currencyModeEl.addEventListener('change', async function () {
-            syncInvoiceBankBarVisibility();
             await refreshInvoiceDetailsForSelection();
             await fetchInvoiceRatesPreview();
         });
@@ -227,44 +194,6 @@ function syncInvoiceCurrencyModeVisibility() {
     if (!row || !select) return;
     const show = isDualInvoicingClient() && getSelectedItemType() !== 'additional';
     row.style.display = show ? '' : 'none';
-}
-
-function shouldShowBankAccountToggle() {
-    if (getSelectedItemType() === 'additional') {
-        return invoicePreviewHasUsdLines;
-    }
-    if (invoicePreviewHasUsdLines) return true;
-    if (isDualInvoicingClient() && getSelectedCurrencyMode() === 'usd') return true;
-    const banner = document.getElementById('invoiceRatesSourceBanner');
-    const bannerText = banner ? (banner.textContent || '') : '';
-    if (banner && !banner.hidden && /USD charge lines/i.test(bannerText)) {
-        return true;
-    }
-    return false;
-}
-
-function syncInvoiceBankBarVisibility() {
-    const row = document.getElementById('invoiceBankBarRow');
-    const toggle = document.getElementById('invoice_bank_usd_toggle');
-    if (!row) return;
-    const show = shouldShowBankAccountToggle();
-    if (show) {
-        row.removeAttribute('hidden');
-        row.classList.add('is-visible');
-        row.style.display = 'block';
-    } else {
-        row.setAttribute('hidden', '');
-        row.classList.remove('is-visible');
-        row.style.display = 'none';
-        if (toggle) {
-            toggle.checked = false;
-            delete toggle.dataset.bankPreferenceSet;
-        }
-        return;
-    }
-    if (toggle && !toggle.dataset.bankPreferenceSet) {
-        setSelectedBankAccount('usd');
-    }
 }
 
 function getSelectedCurrencyMode() {
@@ -335,9 +264,7 @@ async function fetchAllData({ presetAdditionalDocId, presetCurrencyMode } = {}) 
                 if (currencySelect && presetCurrencyMode && ['usd', 'inr'].includes(presetCurrencyMode)) {
                     currencySelect.value = presetCurrencyMode;
                 }
-                // bank_account toggle is independent — do not sync from currency_mode URL preset
                 syncInvoiceCurrencyModeVisibility();
-                syncInvoiceBankBarVisibility();
 
                 // Customer Name, Adrs & GST (Origin)
                 // Use clean company name (strip branch suffix) on invoice
@@ -475,9 +402,6 @@ async function refreshInvoiceDetailsForSelection() {
         if (invData.payment_due_date) document.getElementById('payment_due_date').value = invData.payment_due_date;
         if (invData.irn) document.getElementById('irn_val').value = invData.irn;
         else clearIrnField();
-        if (invData.bank_account) {
-            setSelectedBankAccount(invData.bank_account, { userSet: true });
-        }
         return;
     }
 
@@ -512,21 +436,11 @@ async function fetchInvoiceRatesPreview() {
 function applyInvoiceRatesPreview(data) {
     const banner = document.getElementById('invoiceRatesSourceBanner');
     if (!data) {
-        invoicePreviewHasUsdLines = false;
-        syncInvoiceBankBarVisibility();
+        if (banner) banner.hidden = true;
         return;
     }
 
     const count = (data.lines || []).length;
-    const linesHaveUsd = (data.lines || []).some(
-        (line) => String(line.currency || '').toUpperCase() === 'USD'
-    );
-    invoicePreviewHasUsdLines = linesHaveUsd
-        || (
-            isDualInvoicingClient()
-            && getSelectedCurrencyMode() === 'usd'
-            && count > 0
-        );
     if (banner) {
         const dualNote = isDualInvoicingClient()
             ? ` Dual-invoice client: includes only <strong>${(getSelectedCurrencyMode() || 'inr').toUpperCase()}</strong> charge lines from the quote.`
@@ -548,8 +462,6 @@ function applyInvoiceRatesPreview(data) {
             banner.hidden = true;
         }
     }
-
-    syncInvoiceBankBarVisibility();
 }
 
 function calculateDueDate() {
@@ -604,8 +516,6 @@ async function generateInvoice(type = 'draft') {
         if ((params.get('item_type') || '') === 'additional' && addDocId) {
             params.append('additional_doc_id', String(addDocId));
         }
-        params.append('bank_account', getSelectedBankAccount());
-
         const pdfUrl = `${CONFIG.API_URL}/api/invoice/generate/${enquiryId}?${params.toString()}`;
         window.open(pdfUrl, '_blank');
 
@@ -693,7 +603,6 @@ async function recordInvoice() {
         payment_due_date: document.getElementById('payment_due_date').value,
         item_type: itemType || 'all',
         currency_mode: currencyMode,
-        bank_account: getSelectedBankAccount(),
         additional_doc_id: additionalDocId,
         remark: itemType === 'additional'
             ? 'Additional invoice'
