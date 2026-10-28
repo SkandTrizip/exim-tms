@@ -333,7 +333,7 @@
                 <h2 class="invoice-tracker-section-title" id="invTrackerOverviewHeading">Overview</h2>
             <div class="invoice-tracker-kpis">
                 <div class="inv-tracker-kpi inv-tracker-kpi--danger">
-                    <div class="inv-tracker-kpi-label">Past due</div>
+                    <div class="inv-tracker-kpi-label">Overdue</div>
                     <div class="inv-tracker-kpi-value">${s.past_due_count || 0}</div>
                     <div class="inv-tracker-kpi-sub">Unpaid after due date</div>
                 </div>
@@ -355,7 +355,7 @@
                         <span>${formatAvgDays(avgCollectionKpi(s).stated)}</span>
                         <span class="inv-tracker-kpi-unit">days</span>
                     </div>
-                    <div class="inv-tracker-kpi-sub">Actual collection period vs stated credit period${s.metrics_sample_count || s.avg_payment_sample_count ? ` (${s.metrics_sample_count || s.avg_payment_sample_count} paid)` : ''}${s.avg_payment_delay_days != null ? ` · Avg payment delay (ADD): ${formatPaymentDelay(s.avg_payment_delay_days)}` : ''}</div>
+                    <div class="inv-tracker-kpi-sub">Actual collection period vs stated credit period${s.metrics_sample_count || s.avg_payment_sample_count ? ` (${s.metrics_sample_count || s.avg_payment_sample_count} paid)` : ''}</div>
                 </div>
             </div>
             </section>
@@ -365,7 +365,7 @@
             <div class="invoice-tracker-grid">
                 <div class="inv-tracker-card">
                     <div class="inv-tracker-card-head">
-                        <h3><i class="fas fa-circle-exclamation" style="color:#dc2626"></i> Past due</h3>
+                        <h3><i class="fas fa-circle-exclamation" style="color:#dc2626"></i> Overdue</h3>
                         <span class="count-badge">${(data.past_due || []).length}</span>
                     </div>
                     <div class="inv-tracker-card-body">
@@ -380,7 +380,7 @@
                                     <th></th>
                                 </tr>
                             </thead>
-                            <tbody>${renderTableRows(data.past_due, 'No past-due invoices.', soonDays)}</tbody>
+                            <tbody>${renderTableRows(data.past_due, 'No overdue invoices.', soonDays)}</tbody>
                         </table>
                     </div>
                 </div>
