@@ -434,6 +434,8 @@ def generate_invoice_pdf(
     if not apply_line_currency_split:
         invoice_currency_bucket = None
     amount_total_header = "Amt in INR"
+    # USD line-charge invoices omit INR conversion / GST columns (ROE, Taxable Amt, Rate, IGST, Amt in INR).
+    usd_line_invoice = invoice_currency_bucket == "usd"
 
     # 3. PDF Setup
     buffer = io.BytesIO()
@@ -648,12 +650,27 @@ def generate_invoice_pdf(
     elements.append(Spacer(1, 10))
     
     # Charge Details Table
-    col_widths = [0.4*inch, 1.3*inch, 0.6*inch, 0.4*inch, 0.7*inch, 0.4*inch, 0.7*inch, 0.45*inch, 0.75*inch, 0.4*inch, 0.65*inch, 0.85*inch]
-    headers = ["SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt", "ROE", "Taxable Amt", "Rate", "IGST", amount_total_header]
-    
+    if usd_line_invoice:
+        col_widths = [
+            0.5*inch, 2.4*inch, 0.85*inch, 0.55*inch, 1.0*inch, 0.6*inch, 1.1*inch,
+        ]
+        headers = [
+            "SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt",
+        ]
+    else:
+        col_widths = [
+            0.4*inch, 1.3*inch, 0.6*inch, 0.4*inch, 0.7*inch, 0.4*inch, 0.7*inch,
+            0.45*inch, 0.75*inch, 0.4*inch, 0.65*inch, 0.85*inch,
+        ]
+        headers = [
+            "SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt",
+            "ROE", "Taxable Amt", "Rate", "IGST", amount_total_header,
+        ]
+
     table_data = [headers]
     grand_total_taxable = 0.0
     grand_total_inr = 0.0
+    grand_total_curr_amt = 0.0
     sn = 1
     
     # Styles for table
@@ -721,6 +738,7 @@ def generate_invoice_pdf(
                 line_total = taxable_amt + igst_amt
                 grand_total_taxable += taxable_amt
                 grand_total_inr += line_total
+                grand_total_curr_amt += curr_amt
 
                 row = [
                     Paragraph(str(sn), t_style_row),
@@ -730,12 +748,15 @@ def generate_invoice_pdf(
                     Paragraph(rate_val, t_style_row),
                     Paragraph(unit_val, t_style_row),
                     Paragraph(f"{curr_amt:.2f}", t_style_row),
-                    Paragraph(f"{roe_display:.2f}", t_style_row),
-                    Paragraph(f"{taxable_amt:.2f}", t_style_row),
-                    Paragraph(f"{gst_pct:.0f}%", t_style_row),
-                    Paragraph(f"{igst_amt:.2f}", t_style_row),
-                    Paragraph(f"{line_total:.2f}", t_style_row),
                 ]
+                if not usd_line_invoice:
+                    row.extend([
+                        Paragraph(f"{roe_display:.2f}", t_style_row),
+                        Paragraph(f"{taxable_amt:.2f}", t_style_row),
+                        Paragraph(f"{gst_pct:.0f}%", t_style_row),
+                        Paragraph(f"{igst_amt:.2f}", t_style_row),
+                        Paragraph(f"{line_total:.2f}", t_style_row),
+                    ])
                 table_data.append(row)
                 sn += 1
             
@@ -797,8 +818,9 @@ def generate_invoice_pdf(
             line_total = taxable_amt + igst_amt
             grand_total_taxable += taxable_amt
             grand_total_inr += line_total
+            grand_total_curr_amt += curr_amt
 
-            table_data.append([
+            add_row = [
                 Paragraph(str(sn), t_style_row),
                 Paragraph(desc_val, t_style_row_left),
                 Paragraph(sac_code, t_style_row),
@@ -806,12 +828,16 @@ def generate_invoice_pdf(
                 Paragraph(f"{curr_amt:.2f}", t_style_row),
                 Paragraph("1.00", t_style_row),
                 Paragraph(f"{curr_amt:.2f}", t_style_row),
-                Paragraph(f"{roe_display:.2f}", t_style_row),
-                Paragraph(f"{taxable_amt:.2f}", t_style_row),
-                Paragraph(f"{gst_pct:.0f}%", t_style_row),
-                Paragraph(f"{igst_amt:.2f}", t_style_row),
-                Paragraph(f"{line_total:.2f}", t_style_row),
-            ])
+            ]
+            if not usd_line_invoice:
+                add_row.extend([
+                    Paragraph(f"{roe_display:.2f}", t_style_row),
+                    Paragraph(f"{taxable_amt:.2f}", t_style_row),
+                    Paragraph(f"{gst_pct:.0f}%", t_style_row),
+                    Paragraph(f"{igst_amt:.2f}", t_style_row),
+                    Paragraph(f"{line_total:.2f}", t_style_row),
+                ])
+            table_data.append(add_row)
             sn += 1
 
     if apply_line_currency_split and sn == 1:
@@ -820,33 +846,51 @@ def generate_invoice_pdf(
             status_code=422,
             detail=f"No billable {bucket_label} charge lines on this job for this invoice.",
         )
-            
-    # Summary rows
-    taxable_total_val = Paragraph(f"<b>{grand_total_taxable:.2f}</b>", t_style_row)
-    table_data.append([
-        '', Paragraph('<b>Total Taxable Amount</b>', t_style_row),
-        '', '', '', '', '', '', taxable_total_val, '', '', ''
-    ])
 
-    total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)
-    table_data.append([
-        '', Paragraph('<b>Total</b>', t_style_row),
-        '', '', '', '', '', '', '', '', '', total_val,
-    ])
+    # Summary rows
+    if usd_line_invoice:
+        total_val = Paragraph(f"<b>{grand_total_curr_amt:.2f}</b>", t_style_row)
+        table_data.append([
+            '', Paragraph('<b>Total</b>', t_style_row),
+            '', '', '', '', total_val,
+        ])
+        charge_table_style = TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('SPAN', (1, -1), (5, -1)),
+            ('ALIGN', (1, -1), (5, -1), 'RIGHT'),
+            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ])
+    else:
+        taxable_total_val = Paragraph(f"<b>{grand_total_taxable:.2f}</b>", t_style_row)
+        table_data.append([
+            '', Paragraph('<b>Total Taxable Amount</b>', t_style_row),
+            '', '', '', '', '', '', taxable_total_val, '', '', ''
+        ])
+
+        total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)
+        table_data.append([
+            '', Paragraph('<b>Total</b>', t_style_row),
+            '', '', '', '', '', '', '', '', '', total_val,
+        ])
+        charge_table_style = TableStyle([
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('SPAN', (1, -2), (7, -2)),
+            ('ALIGN', (1, -2), (7, -2), 'RIGHT'),
+            ('SPAN', (1, -1), (10, -1)),
+            ('ALIGN', (1, -1), (10, -1), 'RIGHT'),
+            ('FONTNAME', (0, -2), (-1, -1), 'Helvetica-Bold'),
+            ('TOPPADDING', (0, 0), (-1, -1), 2),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+        ])
 
     t_charges = Table(table_data, colWidths=col_widths, repeatRows=1)
-    t_charges.setStyle(TableStyle([
-        ('GRID', (0,0), (-1,-1), 0.5, colors.black),
-        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-        ('SPAN', (1,-2), (7,-2)),
-        ('ALIGN', (1,-2), (7,-2), 'RIGHT'),
-        ('SPAN', (1,-1), (10,-1)),
-        ('ALIGN', (1,-1), (10,-1), 'RIGHT'),
-        ('FONTNAME', (0,-2), (-1,-1), 'Helvetica-Bold'),
-        ('TOPPADDING', (0,0), (-1,-1), 2),
-        ('BOTTOMPADDING', (0,0), (-1,-1), 2),
-    ]))
+    t_charges.setStyle(charge_table_style)
     
     elements.append(t_charges)
     elements.append(Spacer(1, 10))
