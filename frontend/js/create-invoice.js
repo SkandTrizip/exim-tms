@@ -6,6 +6,7 @@ let additionalDocs = [];
 /** @type {'standard'|'dual_usd_inr'} */
 let customerInvoicingType = 'standard';
 let bookingCancelledForTrip = false;
+let invoicePreviewHasUsdLines = false;
 
 /**
  * Strip the branch suffix from a client name for invoicing.
@@ -152,9 +153,17 @@ function getInvoiceBankAccountsConfig() {
 }
 
 function getSelectedBankAccount() {
-    const usdBtn = document.getElementById('bankAccountUsdBtn');
-    if (usdBtn && usdBtn.classList.contains('is-active')) return 'usd';
+    const toggle = document.getElementById('invoice_bank_usd_toggle');
+    if (toggle && toggle.checked) return 'usd';
     return 'inr';
+}
+
+function setSelectedBankAccount(key) {
+    const toggle = document.getElementById('invoice_bank_usd_toggle');
+    if (!toggle) return;
+    const useUsd = (key || 'inr').toLowerCase() === 'usd';
+    toggle.checked = useUsd;
+    renderInvoiceBankPreview(useUsd ? 'usd' : 'inr');
 }
 
 function renderInvoiceBankPreview(key) {
@@ -177,22 +186,15 @@ function renderInvoiceBankPreview(key) {
 }
 
 function initInvoiceBankAccountToggle() {
-    const inrBtn = document.getElementById('bankAccountInrBtn');
-    const usdBtn = document.getElementById('bankAccountUsdBtn');
-    if (!inrBtn || !usdBtn) return;
-
-    function setBankAccount(key) {
-        const isInr = key !== 'usd';
-        inrBtn.classList.toggle('is-active', isInr);
-        usdBtn.classList.toggle('is-active', !isInr);
-        inrBtn.setAttribute('aria-pressed', isInr ? 'true' : 'false');
-        usdBtn.setAttribute('aria-pressed', !isInr ? 'true' : 'false');
-        renderInvoiceBankPreview(isInr ? 'inr' : 'usd');
-    }
-
-    inrBtn.addEventListener('click', () => setBankAccount('inr'));
-    usdBtn.addEventListener('click', () => setBankAccount('usd'));
-    setBankAccount('inr');
+    const toggle = document.getElementById('invoice_bank_usd_toggle');
+    if (!toggle || toggle.dataset.bankInit === '1') return;
+    toggle.dataset.bankInit = '1';
+    toggle.checked = false;
+    toggle.addEventListener('change', function () {
+        renderInvoiceBankPreview(getSelectedBankAccount());
+    });
+    setSelectedBankAccount('inr');
+    syncInvoiceBankBarVisibility();
 }
 
 function getCustomerInvoiceNo() {
@@ -223,13 +225,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Set default Place of Supply
     document.getElementById('place_of_supply').value = '06AAFCL3674H1ZE/Gurugram';
 
+    initInvoiceBankAccountToggle();
+
     if (presetItemType) {
         const typeEl = document.getElementById('invoice_item_type');
         if (typeEl) typeEl.value = presetItemType;
     }
 
     await fetchAllData({ presetAdditionalDocId, presetCurrencyMode });
-    initInvoiceBankAccountToggle();
 
     // Listen for invoice date changes to update due date and preview invoice number
     document.getElementById('invoice_date').addEventListener('change', function () {
@@ -240,12 +243,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     // Reload saved invoice per type (additional always gets a fresh number + empty IRN until saved)
     document.getElementById('invoice_item_type').addEventListener('change', async function () {
         syncInvoiceCurrencyModeVisibility();
+        syncInvoiceBankBarVisibility();
         await refreshInvoiceDetailsForSelection();
+        await fetchInvoiceRatesPreview();
     });
 
     const currencyModeEl = document.getElementById('invoice_currency_mode');
     if (currencyModeEl) {
         currencyModeEl.addEventListener('change', async function () {
+            syncInvoiceBankBarVisibility();
             await refreshInvoiceDetailsForSelection();
             await fetchInvoiceRatesPreview();
         });
@@ -262,6 +268,29 @@ function syncInvoiceCurrencyModeVisibility() {
     if (!row || !select) return;
     const show = isDualInvoicingClient() && getSelectedItemType() !== 'additional';
     row.style.display = show ? '' : 'none';
+}
+
+function shouldShowBankAccountToggle() {
+    const itemType = getSelectedItemType();
+    if (itemType === 'additional') {
+        return invoicePreviewHasUsdLines;
+    }
+    if (isDualInvoicingClient()) {
+        return getSelectedCurrencyMode() === 'usd';
+    }
+    return invoicePreviewHasUsdLines;
+}
+
+function syncInvoiceBankBarVisibility() {
+    const row = document.getElementById('invoiceBankBarRow');
+    if (!row) return;
+    const show = shouldShowBankAccountToggle();
+    row.hidden = !show;
+    if (!show) {
+        setSelectedBankAccount('inr');
+        return;
+    }
+    renderInvoiceBankPreview(getSelectedBankAccount());
 }
 
 function getSelectedCurrencyMode() {
@@ -331,7 +360,9 @@ async function fetchAllData({ presetAdditionalDocId, presetCurrencyMode } = {}) 
                 if (currencySelect && presetCurrencyMode && ['usd', 'inr'].includes(presetCurrencyMode)) {
                     currencySelect.value = presetCurrencyMode;
                 }
+                // bank_account toggle is independent — do not sync from currency_mode URL preset
                 syncInvoiceCurrencyModeVisibility();
+                syncInvoiceBankBarVisibility();
 
                 // Customer Name, Adrs & GST (Origin)
                 // Use clean company name (strip branch suffix) on invoice
@@ -469,6 +500,9 @@ async function refreshInvoiceDetailsForSelection() {
         if (invData.payment_due_date) document.getElementById('payment_due_date').value = invData.payment_due_date;
         if (invData.irn) document.getElementById('irn_val').value = invData.irn;
         else clearIrnField();
+        if (invData.bank_account) {
+            setSelectedBankAccount(invData.bank_account);
+        }
         return;
     }
 
@@ -502,7 +536,16 @@ async function fetchInvoiceRatesPreview() {
 
 function applyInvoiceRatesPreview(data) {
     const banner = document.getElementById('invoiceRatesSourceBanner');
-    if (!data) return;
+    if (!data) {
+        invoicePreviewHasUsdLines = false;
+        syncInvoiceBankBarVisibility();
+        return;
+    }
+
+    invoicePreviewHasUsdLines = (data.lines || []).some(
+        (line) => String(line.currency || '').toUpperCase() === 'USD'
+    );
+    syncInvoiceBankBarVisibility();
 
     const count = (data.lines || []).length;
     if (banner) {
@@ -669,6 +712,7 @@ async function recordInvoice() {
         payment_due_date: document.getElementById('payment_due_date').value,
         item_type: itemType || 'all',
         currency_mode: currencyMode,
+        bank_account: getSelectedBankAccount(),
         additional_doc_id: additionalDocId,
         remark: itemType === 'additional'
             ? 'Additional invoice'

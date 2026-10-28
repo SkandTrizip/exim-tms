@@ -42,6 +42,7 @@ class InvoiceCreate(BaseModel):
     irn: Optional[str] = None
     item_type: str = "all"
     currency_mode: Optional[str] = None
+    bank_account: Optional[str] = "inr"
     additional_doc_id: Optional[int] = None
     remark: Optional[str] = None
 
@@ -146,6 +147,9 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
         payload = {k: v for k, v in invoice.dict().items() if k in allowed_fields}
         payload["invoice_number"] = allocated_number
         payload["item_type"] = item_type
+        payload["bank_account"] = normalize_bank_account_key(
+            getattr(invoice, "bank_account", None)
+        )
         if not is_additional:
             invoicing_type = client_invoicing_service.get_customer_invoicing_type_for_enquiry(
                 db, invoice.enquiry_id
@@ -230,6 +234,56 @@ def get_invoice_details(
         # Better to return null so frontend knows to show empty form
         return None
     return invoice
+
+
+def _invoice_for_pdf_context(
+    db: Session,
+    enquiry_id: int,
+    item_type: str,
+    currency_mode: Optional[str],
+    additional_doc_id: Optional[int],
+) -> Optional[Invoice]:
+    it = (item_type or "all").strip().lower()
+    if it == "additional":
+        if additional_doc_id is None:
+            return None
+        return (
+            db.query(Invoice)
+            .filter(
+                Invoice.enquiry_id == enquiry_id,
+                Invoice.item_type == "additional",
+                Invoice.additional_doc_id == additional_doc_id,
+            )
+            .order_by(Invoice.id.desc())
+            .first()
+        )
+    q = db.query(Invoice).filter(
+        Invoice.enquiry_id == enquiry_id,
+        Invoice.item_type.in_(["all", "main"]),
+    )
+    cm = (currency_mode or "").strip().lower()
+    if cm in ("usd", "inr"):
+        q = q.filter(Invoice.currency_mode == cm)
+    return q.order_by(Invoice.id.desc()).first()
+
+
+def _resolve_pdf_bank_account(
+    bank_account: Optional[str],
+    db: Session,
+    enquiry_id: int,
+    item_type: str,
+    currency_mode: Optional[str],
+    additional_doc_id: Optional[int],
+) -> str:
+    """Bank on PDF is chosen explicitly — never derived from charge-line currency_mode."""
+    if bank_account is not None and str(bank_account).strip():
+        return normalize_bank_account_key(bank_account)
+    saved = _invoice_for_pdf_context(
+        db, enquiry_id, item_type, currency_mode, additional_doc_id
+    )
+    if saved and getattr(saved, "bank_account", None):
+        return normalize_bank_account_key(saved.bank_account)
+    return "inr"
 
 
 @router.get("/rates-preview/{enquiry_id}")
@@ -862,7 +916,15 @@ def generate_invoice_pdf(
     # Bank Details Table (Single Account)
     bank_style = ParagraphStyle('BankStyle', parent=styles['Normal'], fontSize=7, leading=9)
     
-    bank_info = invoice_bank_details_html(normalize_bank_account_key(bank_account))
+    pdf_bank_key = _resolve_pdf_bank_account(
+        bank_account,
+        db,
+        enquiry_id,
+        item_type,
+        currency_mode,
+        additional_doc_id,
+    )
+    bank_info = invoice_bank_details_html(pdf_bank_key)
     
     bank_data = [[Paragraph(bank_info, bank_style)]]
     

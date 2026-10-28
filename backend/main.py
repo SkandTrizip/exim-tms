@@ -45,6 +45,7 @@ _column_migrations = [
     ("invoices", "remark", "TEXT"),
     ("invoices", "additional_doc_id", "INTEGER"),
     ("invoices", "currency_mode", "VARCHAR"),
+    ("invoices", "bank_account", "VARCHAR"),
     ("client_master", "customer_invoicing_type", "VARCHAR DEFAULT 'standard'"),
     ("quotes", "initial_quote_snapshot", "TEXT"),
     ("quotes", "final_quote_snapshot", "TEXT"),
