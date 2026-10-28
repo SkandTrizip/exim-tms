@@ -88,35 +88,8 @@
             box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
         }
 
-        .invoice-bank-field .air-flag-toggle {
+        #invoiceBankBarRow .air-flag-toggle {
             margin: 0;
-        }
-
-        .invoice-bank-preview {
-            margin-top: 10px;
-            font-size: 12px;
-            line-height: 1.5;
-            color: var(--navy-700);
-            background: #f9fafb;
-            border: 1px solid #e2e8f0;
-            border-radius: 8px;
-            padding: 10px 12px;
-        }
-
-        .invoice-bank-preview dt {
-            font-weight: 600;
-            display: inline;
-        }
-
-        .invoice-bank-preview dd {
-            display: inline;
-            margin: 0 0 0 4px;
-        }
-
-        .invoice-bank-preview dd::after {
-            content: "";
-            display: block;
-            margin-bottom: 4px;
         }
     </style>
 </head>
@@ -162,6 +135,15 @@
             <div class="invoice-card">
                 <div class="invoice-card-header">
                     <h3 style="margin: 0; font-size: 18px; color: var(--navy-800);">Invoice Details</h3>
+                    <div id="invoiceBankBarRow" hidden>
+                        <label class="air-flag-toggle invoice-bank-switch" for="invoice_bank_usd_toggle">
+                            <span class="air-flag-label">INR</span>
+                            <input type="checkbox" id="invoice_bank_usd_toggle"
+                                aria-label="Payment bank on invoice: INR or USD account">
+                            <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                            <span class="air-flag-label">USD</span>
+                        </label>
+                    </div>
                 </div>
 
                 <div class="invoice-grid">
@@ -277,20 +259,6 @@
                                 <option value="inr">INR invoice — INR charge lines only</option>
                                 <option value="usd">USD invoice — USD charge lines only</option>
                             </select>
-                        </div>
-                        <div class="form-row" id="invoiceBankBarRow" hidden>
-                            <span class="field-label" id="invoice_bank_bar_label">Bank on invoice</span>
-                            <div class="invoice-bank-field">
-                                <label class="air-flag-toggle invoice-bank-switch" for="invoice_bank_usd_toggle">
-                                    <span class="air-flag-label">INR</span>
-                                    <input type="checkbox" id="invoice_bank_usd_toggle"
-                                        aria-labelledby="invoice_bank_bar_label"
-                                        aria-label="Off for INR account, on for USD account">
-                                    <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
-                                    <span class="air-flag-label">USD</span>
-                                </label>
-                                <dl class="invoice-bank-preview" id="invoice_bank_preview" aria-live="polite"></dl>
-                            </div>
                         </div>
                         <div class="form-row" id="additionalInvoiceRefRow" style="display:none;">
                             <span class="field-label">Additional Invoice Ref</span>

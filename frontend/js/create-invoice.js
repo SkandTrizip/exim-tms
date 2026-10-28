@@ -124,76 +124,30 @@ function applyBookingCancelledInvoiceMode() {
     }
 }
 
-const DEFAULT_INVOICE_BANK_ACCOUNTS = {
-    inr: {
-        label: 'INR account',
-        account_name: 'LOGIPOD LOGISTICS PRIVATE LIMITED',
-        bank_name: 'STATE BANK OF INDIA',
-        account_number: '44327943415',
-        ifsc: 'SBIN0050933',
-        branch: 'GURGAON - MID CORPORATE',
-        branch_address: 'Plot No. 91, IDC, 1st Floor, MG Road, Gurgaon 122001',
-    },
-    usd: {
-        label: 'USD account',
-        account_name: 'LOGIPOD LOGISTICS PRIVATE LIMITED',
-        bank_name: 'STATE BANK OF INDIA',
-        account_number: '45672491839',
-        ifsc: 'SBIN0050933',
-        swift: 'SBININBBP53',
-        branch: 'GURGAON - MID CORPORATE',
-        branch_address: 'Plot No. 91, IDC, 1st Floor, MG Road, Gurgaon 122001',
-    },
-};
-
-function getInvoiceBankAccountsConfig() {
-    const fromConfig = typeof CONFIG !== 'undefined' && CONFIG.invoiceBankAccounts;
-    if (fromConfig && fromConfig.inr && fromConfig.usd) return fromConfig;
-    return DEFAULT_INVOICE_BANK_ACCOUNTS;
-}
-
 function getSelectedBankAccount() {
+    if (!shouldShowBankAccountToggle()) return 'inr';
     const toggle = document.getElementById('invoice_bank_usd_toggle');
     if (toggle && toggle.checked) return 'usd';
     return 'inr';
 }
 
-function setSelectedBankAccount(key) {
+function setSelectedBankAccount(key, options = {}) {
     const toggle = document.getElementById('invoice_bank_usd_toggle');
     if (!toggle) return;
     const useUsd = (key || 'inr').toLowerCase() === 'usd';
     toggle.checked = useUsd;
-    renderInvoiceBankPreview(useUsd ? 'usd' : 'inr');
-}
-
-function renderInvoiceBankPreview(key) {
-    const preview = document.getElementById('invoice_bank_preview');
-    if (!preview) return;
-    const accounts = getInvoiceBankAccountsConfig();
-    const acct = accounts[key] || accounts.inr;
-    const rows = [
-        ['Account name', acct.account_name],
-        ['Bank', acct.bank_name],
-        ['Account number', acct.account_number],
-        ['IFSC', acct.ifsc],
-    ];
-    if (acct.swift) rows.push(['SWIFT', acct.swift]);
-    if (acct.branch) rows.push(['Branch', acct.branch]);
-    if (acct.branch_address) rows.push(['Branch address', acct.branch_address]);
-    preview.innerHTML = rows
-        .map(([label, value]) => `<dt>${label}:</dt><dd>${value}</dd>`)
-        .join('');
+    if (options.userSet) {
+        toggle.dataset.bankPreferenceSet = '1';
+    }
 }
 
 function initInvoiceBankAccountToggle() {
     const toggle = document.getElementById('invoice_bank_usd_toggle');
     if (!toggle || toggle.dataset.bankInit === '1') return;
     toggle.dataset.bankInit = '1';
-    toggle.checked = false;
     toggle.addEventListener('change', function () {
-        renderInvoiceBankPreview(getSelectedBankAccount());
+        toggle.dataset.bankPreferenceSet = '1';
     });
-    setSelectedBankAccount('inr');
     syncInvoiceBankBarVisibility();
 }
 
@@ -283,14 +237,20 @@ function shouldShowBankAccountToggle() {
 
 function syncInvoiceBankBarVisibility() {
     const row = document.getElementById('invoiceBankBarRow');
+    const toggle = document.getElementById('invoice_bank_usd_toggle');
     if (!row) return;
     const show = shouldShowBankAccountToggle();
     row.hidden = !show;
     if (!show) {
-        setSelectedBankAccount('inr');
+        if (toggle) {
+            toggle.checked = false;
+            delete toggle.dataset.bankPreferenceSet;
+        }
         return;
     }
-    renderInvoiceBankPreview(getSelectedBankAccount());
+    if (toggle && !toggle.dataset.bankPreferenceSet) {
+        setSelectedBankAccount('usd');
+    }
 }
 
 function getSelectedCurrencyMode() {
@@ -501,7 +461,7 @@ async function refreshInvoiceDetailsForSelection() {
         if (invData.irn) document.getElementById('irn_val').value = invData.irn;
         else clearIrnField();
         if (invData.bank_account) {
-            setSelectedBankAccount(invData.bank_account);
+            setSelectedBankAccount(invData.bank_account, { userSet: true });
         }
         return;
     }
