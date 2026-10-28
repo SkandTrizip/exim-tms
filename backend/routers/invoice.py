@@ -22,7 +22,7 @@ import os
 from backend.utils.logger import logger
 from backend.utils.hsn_sac import resolve_hsn_sac
 from backend.utils.invoice_payment import is_payment_received
-from backend.utils.invoice_bank import normalize_bank_account_key, pdf_bank_details_html
+from backend.utils.invoice_bank import normalize_bank_account_key, pdf_bank_section_html
 
 router = APIRouter(prefix="/invoice", tags=["Invoice"])
 
@@ -829,7 +829,10 @@ def generate_invoice_pdf(
     ])
 
     total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)
-    table_data.append(['', 'Total', '', '', '', '', '', '', '', '', '', total_val])
+    table_data.append([
+        '', Paragraph('<b>Total</b>', t_style_row),
+        '', '', '', '', '', '', '', '', '', total_val,
+    ])
 
     t_charges = Table(table_data, colWidths=col_widths, repeatRows=1)
     t_charges.setStyle(TableStyle([
@@ -860,12 +863,19 @@ def generate_invoice_pdf(
     elements.append(Spacer(1, 5))
 
     bank_style = ParagraphStyle('BankStyle', parent=styles['Normal'], fontSize=7, leading=9)
-    bank_info = pdf_bank_details_html()
-    bank_data = [[Paragraph(bank_info, bank_style)]]
-    t_bank = Table(bank_data, colWidths=[7.0 * inch])
+    bank_title = Paragraph("<b><u>Bank Details for Payment</u></b>", bank_style)
+    bank_inr = Paragraph(pdf_bank_section_html("inr", "INR account details"), bank_style)
+    bank_usd = Paragraph(pdf_bank_section_html("usd", "USD account details"), bank_style)
+    bank_data = [
+        [bank_title, ""],
+        [bank_inr, bank_usd],
+    ]
+    t_bank = Table(bank_data, colWidths=[3.5 * inch, 3.5 * inch])
     t_bank.setStyle(TableStyle([
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
         ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+        ('SPAN', (0, 0), (1, 0)),
         ('PADDING', (0, 0), (-1, -1), 5),
     ]))
     elements.append(t_bank)

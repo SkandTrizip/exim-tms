@@ -65,8 +65,16 @@ def pdf_bank_table_rows() -> List[BankTableRow]:
     return rows
 
 
+def pdf_bank_section_html(account_key: BankAccountKey, section_title: str) -> str:
+    """One account block (INR or USD) for side-by-side bank table."""
+    parts: List[str] = [f"<b>{section_title}</b><br/>"]
+    for kind, text in _account_field_rows(INVOICE_BANK_ACCOUNTS[account_key]):
+        parts.append(f"<b>{kind}:</b> {text}<br/>")
+    return "".join(parts)
+
+
 def pdf_bank_details_html(rows: List[BankTableRow] | None = None) -> str:
-    """Single-cell bank block HTML (original invoice layout)."""
+    """Stacked layout (legacy)."""
     row_list = rows if rows is not None else pdf_bank_table_rows()
     parts: List[str] = []
     for kind, text in row_list:
