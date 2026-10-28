@@ -230,9 +230,15 @@ function syncInvoiceCurrencyModeVisibility() {
 }
 
 function shouldShowBankAccountToggle() {
+    if (getSelectedItemType() === 'additional') {
+        return invoicePreviewHasUsdLines;
+    }
     if (invoicePreviewHasUsdLines) return true;
-    if (isDualInvoicingClient() && getSelectedItemType() !== 'additional') {
-        return getSelectedCurrencyMode() === 'usd';
+    if (isDualInvoicingClient() && getSelectedCurrencyMode() === 'usd') return true;
+    const banner = document.getElementById('invoiceRatesSourceBanner');
+    const bannerText = banner ? (banner.textContent || '') : '';
+    if (banner && !banner.hidden && /USD charge lines/i.test(bannerText)) {
+        return true;
     }
     return false;
 }
@@ -242,8 +248,14 @@ function syncInvoiceBankBarVisibility() {
     const toggle = document.getElementById('invoice_bank_usd_toggle');
     if (!row) return;
     const show = shouldShowBankAccountToggle();
-    row.hidden = !show;
-    if (!show) {
+    if (show) {
+        row.removeAttribute('hidden');
+        row.classList.add('is-visible');
+        row.style.display = 'block';
+    } else {
+        row.setAttribute('hidden', '');
+        row.classList.remove('is-visible');
+        row.style.display = 'none';
         if (toggle) {
             toggle.checked = false;
             delete toggle.dataset.bankPreferenceSet;
@@ -515,7 +527,6 @@ function applyInvoiceRatesPreview(data) {
             && getSelectedCurrencyMode() === 'usd'
             && count > 0
         );
-    syncInvoiceBankBarVisibility();
     if (banner) {
         const dualNote = isDualInvoicingClient()
             ? ` Dual-invoice client: includes only <strong>${(getSelectedCurrencyMode() || 'inr').toUpperCase()}</strong> charge lines from the quote.`
@@ -537,6 +548,8 @@ function applyInvoiceRatesPreview(data) {
             banner.hidden = true;
         }
     }
+
+    syncInvoiceBankBarVisibility();
 }
 
 function calculateDueDate() {

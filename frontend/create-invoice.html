@@ -88,33 +88,12 @@
             box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
         }
 
-        .invoice-top-strip {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: flex-start;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 16px;
-        }
-
-        .invoice-top-strip #invoiceRatesSourceBanner {
-            flex: 1 1 240px;
-            margin-bottom: 0;
-        }
-
-        #invoiceBankBarRow {
-            flex-shrink: 0;
-            align-self: center;
-            margin-left: auto;
-        }
-
         #invoiceBankBarRow .air-flag-toggle {
             margin: 0;
         }
 
-        html.embedded-mode #invoiceBankBarRow:not([hidden]),
-        body.embedded-mode #invoiceBankBarRow:not([hidden]) {
-            display: block;
+        #invoiceBankBarRow.is-visible {
+            display: block !important;
         }
     </style>
 </head>
@@ -153,24 +132,22 @@
                 <p style="color: var(--text-secondary);">Fill in the details to generate your customer invoice</p>
             </div>
 
-            <div class="invoice-top-strip">
-                <div id="invoiceRatesSourceBanner" hidden
-                    style="padding: 12px 16px; border-radius: 10px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-size: 13px; font-weight: 600;">
-                </div>
-                <div id="invoiceBankBarRow" hidden>
-                    <label class="air-flag-toggle invoice-bank-switch" for="invoice_bank_usd_toggle">
-                        <span class="air-flag-label">INR</span>
-                        <input type="checkbox" id="invoice_bank_usd_toggle"
-                            aria-label="Payment bank on invoice: INR or USD account">
-                        <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
-                        <span class="air-flag-label">USD</span>
-                    </label>
-                </div>
+            <div id="invoiceRatesSourceBanner" hidden
+                style="margin-bottom: 16px; padding: 12px 16px; border-radius: 10px; background: #ecfdf5; border: 1px solid #a7f3d0; color: #065f46; font-size: 13px; font-weight: 600;">
             </div>
 
             <div class="invoice-card">
                 <div class="invoice-card-header">
                     <h3 style="margin: 0; font-size: 18px; color: var(--navy-800);">Invoice Details</h3>
+                    <div id="invoiceBankBarRow" hidden>
+                        <label class="air-flag-toggle invoice-bank-switch" for="invoice_bank_usd_toggle">
+                            <span class="air-flag-label">INR</span>
+                            <input type="checkbox" id="invoice_bank_usd_toggle"
+                                aria-label="Payment bank on invoice: INR or USD account">
+                            <span class="toggle-track" aria-hidden="true"><span class="toggle-thumb"></span></span>
+                            <span class="air-flag-label">USD</span>
+                        </label>
+                    </div>
                 </div>
 
                 <div class="invoice-grid">
