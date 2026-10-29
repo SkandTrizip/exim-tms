@@ -1827,14 +1827,14 @@ function renderMonthlyAnalyticsChart(series, metric, options = {}) {
                         <em>${hasValue ? `${pct}%` : '—'}</em>
                     </div>
                     <div class="analytics-pie-card-meta">
-                        ${hasValue ? formatInrLakhs(s.value) : '₹0'} · ${s.trips} trip${s.trips === 1 ? '' : 's'}
+                        ${hasValue ? formatInrLakhs(s.value) : '₹0'} · ${s.trips} shipment${s.trips === 1 ? '' : 's'}
                     </div>
                 </div>
             </li>`;
     }).join('');
 
     if (!legendMonths.length) {
-        wrap.innerHTML = `<div class="analytics-chart-empty">No trips in this financial year yet.</div>`;
+        wrap.innerHTML = `<div class="analytics-chart-empty">No shipments in this financial year yet.</div>`;
         return;
     }
 
@@ -1965,7 +1965,7 @@ function syncAnalyticsDetailsTableHead() {
         head.innerHTML = `
             <tr>
                 <th data-col="client">Client</th>
-                <th class="num" data-col="trips">Trips</th>
+                <th class="num" data-col="trips">Shipments</th>
                 <th class="num" data-col="revenue">Revenue</th>
                 <th class="num" data-col="cost">Cost</th>
                 <th class="num" data-col="margin">Margin</th>
@@ -2471,12 +2471,12 @@ function renderAnalyticsDetailsTable() {
             const clientLabel = analyticsClientFilterLabel();
             subtitle.textContent = clientLabel
                 ? `Client-wise totals for ${clientLabel}`
-                : 'Client-wise cost, revenue, and trips for the selected period';
+                : 'Client-wise cost, revenue, and shipments for the selected period';
         } else {
             const ongoingCount = (analyticsDetailsState.rows || []).filter((r) => r.economics_status === 'ongoing').length;
             subtitle.textContent = ongoingCount
                 ? `Settled + ongoing · ${ongoingCount} ongoing in pipeline`
-                : 'SOB-settled trips for the selected period';
+                : 'SOB-settled shipments for the selected period';
         }
     }
 }
@@ -3967,7 +3967,7 @@ window.toggleBookingCancelled = async function (enquiryId, event) {
             isCancelled ? 'Restore booking' : 'Mark booking cancelled',
             isCancelled
                 ? `Restore the booking for <strong>${enq.enquiry_number}</strong>? Freight cost and revenue will count in analytics again.`
-                : `Mark the booking for <strong>${enq.enquiry_number}</strong> as <strong>cancelled</strong>? Trip freight cost and revenue will be excluded from analytics. Booked overheads (detention, cancellation charges, etc.) will still count.`,
+                : `Mark the booking for <strong>${enq.enquiry_number}</strong> as <strong>cancelled</strong>? Shipment freight cost and revenue will be excluded from analytics. Booked overheads (detention, cancellation charges, etc.) will still count.`,
             isCancelled ? 'info' : 'warning',
             () => resolve(true)
         );

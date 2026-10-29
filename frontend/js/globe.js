@@ -55,7 +55,7 @@
         const el = document.getElementById('tradeGlobeSummary');
         if (!el || !summary) return;
         el.textContent =
-            `${summary.resolved_trips || 0} mapped trips · ` +
+            `${summary.resolved_trips || 0} mapped shipments · ` +
             `${summary.origin_ports || 0} origins · ` +
             `${summary.destination_ports || 0} destinations · ` +
             `${summary.routes || 0} routes`;
@@ -82,14 +82,14 @@
 
     function fillAside(data) {
         renderAsideList('tradeGlobeTopOrigins', data.origins, (p) =>
-            `<strong>${escape(p.name)}</strong><span>${p.count} trip${p.count === 1 ? '' : 's'}</span>`
+            `<strong>${escape(p.name)}</strong><span>${p.count} shipment${p.count === 1 ? '' : 's'}</span>`
         );
         renderAsideList('tradeGlobeTopDests', data.destinations, (p) =>
-            `<strong>${escape(p.name)}</strong><span>${p.count} trip${p.count === 1 ? '' : 's'}</span>`
+            `<strong>${escape(p.name)}</strong><span>${p.count} shipment${p.count === 1 ? '' : 's'}</span>`
         );
         renderAsideList('tradeGlobeTopRoutes', data.routes, (r) =>
             `<strong>${escape(r.origin_name)} → ${escape(r.destination_name)}</strong>` +
-            `<span>${r.count} trip${r.count === 1 ? '' : 's'}</span>`
+            `<span>${r.count} shipment${r.count === 1 ? '' : 's'}</span>`
         );
     }
 
@@ -152,7 +152,7 @@
             .pointColor('color')
             .pointsMerge(false)
             .pointLabel((d) =>
-                `<div class="globe-tip"><strong>${escape(d.name)}</strong><br>${d.kind === 'origin' ? 'Origin' : 'Destination'} · ${d.count} trip${d.count === 1 ? '' : 's'}</div>`
+                `<div class="globe-tip"><strong>${escape(d.name)}</strong><br>${d.kind === 'origin' ? 'Origin' : 'Destination'} · ${d.count} shipment${d.count === 1 ? '' : 's'}</div>`
             )
             .arcsData(activeArcs(data))
             .arcStartLat('startLat')
@@ -166,7 +166,7 @@
             .arcDashGap(0.2)
             .arcDashAnimateTime(reduceMotion ? 0 : 2800)
             .arcLabel((d) =>
-                `<div class="globe-tip"><strong>${escape(d.origin_name)} → ${escape(d.destination_name)}</strong><br>${d.count} trip${d.count === 1 ? '' : 's'}</div>`
+                `<div class="globe-tip"><strong>${escape(d.origin_name)} → ${escape(d.destination_name)}</strong><br>${d.count} shipment${d.count === 1 ? '' : 's'}</div>`
             );
 
         globe.controls().autoRotate = !reduceMotion;

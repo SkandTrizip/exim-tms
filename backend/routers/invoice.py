@@ -23,6 +23,7 @@ from backend.utils.logger import logger
 from backend.utils.hsn_sac import resolve_hsn_sac
 from backend.utils.invoice_payment import is_payment_received
 from backend.utils.invoice_bank import normalize_bank_account_key, pdf_bank_section_html
+from backend.utils.pdf_text import pdf_paragraph_markup
 
 router = APIRouter(prefix="/invoice", tags=["Invoice"])
 
@@ -597,7 +598,7 @@ def generate_invoice_pdf(
 
     def kv_row(label, value):
         """Label column gets the colon; value column is plain text so word-wrap aligns cleanly."""
-        return [Paragraph(f"{label} :", label_style), Paragraph(str(value), value_wrap_style)]
+        return [Paragraph(f"{label} :", label_style), Paragraph(pdf_paragraph_markup(value), value_wrap_style)]
 
     # Left Column Data
     left_col_data = []
@@ -742,7 +743,7 @@ def generate_invoice_pdf(
 
                 row = [
                     Paragraph(str(sn), t_style_row),
-                    Paragraph(charge.charge_description, t_style_row_left),
+                    Paragraph(pdf_paragraph_markup(charge.charge_description), t_style_row_left),
                     Paragraph(sac_code, t_style_row),
                     Paragraph(line_curr, t_style_row),
                     Paragraph(rate_val, t_style_row),
@@ -822,7 +823,7 @@ def generate_invoice_pdf(
 
             add_row = [
                 Paragraph(str(sn), t_style_row),
-                Paragraph(desc_val, t_style_row_left),
+                Paragraph(pdf_paragraph_markup(desc_val), t_style_row_left),
                 Paragraph(sac_code, t_style_row),
                 Paragraph(curr, t_style_row),
                 Paragraph(f"{curr_amt:.2f}", t_style_row),
