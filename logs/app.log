@@ -28,3 +28,4 @@
 2026-09-24 17:48:41,387 - exim_tms - INFO - Synced enquiry economics enquiry_id=83 cost_inr=1403567.0 revenue_inr=1408372.5 sob_date=2026-06-16 si_date=2026-06-05
 2026-09-24 17:51:26,049 - exim_tms - INFO - Synced enquiry economics enquiry_id=83 cost_inr=1403567.0 revenue_inr=1408372.5 sob_date=2026-06-16 si_date=2026-06-05
 2026-09-24 17:54:26,291 - exim_tms - INFO - Synced enquiry economics enquiry_id=83 cost_inr=1403567.0 revenue_inr=1439979.0 sob_date=2026-06-16 si_date=2026-06-05
+2026-10-30 17:56:56,155 - exim_tms - ERROR - Error fetching exchange rates: HTTPSConnectionPool(host='v6.exchangerate-api.com', port=443): Max retries exceeded with url: /v6/602d23926fb209dcce76d258/latest/USD (Caused by ProxyError('Unable to connect to proxy', OSError('Tunnel connection failed: 403 Forbidden')))

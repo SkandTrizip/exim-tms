@@ -447,7 +447,7 @@ function applyInvoiceRatesPreview(data) {
             : '';
         const isUsdInvoice = isDualInvoicingClient() && getSelectedCurrencyMode() === 'usd';
         const roeNote = isUsdInvoice
-            ? ' ROE on the PDF uses the current USD→INR rate from the exchange-rate API; amounts stay in USD (no ROE multiply) with GST applied the same as INR invoices.'
+            ? ' ROE on the PDF uses the USD→INR mid-rate for the invoice date from the exchange-rate API; amounts stay in USD (no ROE multiply) with GST applied the same as INR invoices.'
             : ' Exchange rates come from each line’s Client Ex. Rate on the quote.';
         if (data.source === 'final' && count > 0) {
             banner.hidden = false;

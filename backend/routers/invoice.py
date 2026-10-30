@@ -438,14 +438,35 @@ def generate_invoice_pdf(
     # USD dual invoices use the same GST columns as INR; settle in USD (no ROE multiply).
     usd_line_invoice = invoice_currency_bucket == "usd"
     amount_total_header = "Amt in USD" if usd_line_invoice else "Amt in INR"
+
+    # Resolve invoice calendar date early — USD ROE is the rate for this date only.
+    inv_date_for_roe = datetime.date.today()
+    if invoice_date:
+        for _fmt in ("%Y-%m-%d", "%d-%b-%y", "%d-%b-%Y"):
+            try:
+                inv_date_for_roe = datetime.datetime.strptime(invoice_date.strip(), _fmt).date()
+                break
+            except ValueError:
+                continue
+
     api_usd_roe: Optional[float] = None
     if usd_line_invoice:
         try:
-            api_usd_roe = round(float(exchange_rate_service.get_exchange_rate("USD", "INR")), 2)
+            api_usd_roe = round(
+                float(
+                    exchange_rate_service.get_exchange_rate(
+                        "USD", "INR", rate_date=inv_date_for_roe
+                    )
+                ),
+                2,
+            )
         except (TypeError, ValueError) as exc:
             raise HTTPException(
                 status_code=502,
-                detail=f"Could not fetch current USD exchange rate: {exc}",
+                detail=(
+                    f"Could not fetch USD exchange rate for invoice date "
+                    f"{inv_date_for_roe.isoformat()}: {exc}"
+                ),
             ) from exc
 
     # 3. PDF Setup
@@ -567,20 +588,14 @@ def generate_invoice_pdf(
         house_no = "N/A"
     
     inv_no_val = invoice_number if invoice_number else "INV-DRAFT"
-    inv_date_val = invoice_date if invoice_date else datetime.date.today().strftime("%d-%b-%y")
-    try:
-        if "-" in inv_date_val and len(inv_date_val) == 10: 
-             inv_date_val = datetime.datetime.strptime(inv_date_val, "%Y-%m-%d").strftime("%d-%b-%y")
-    except:
-        pass
+    inv_date_val = inv_date_for_roe.strftime("%d-%b-%y")
         
     due_date_val = "N/A"
     if client_master and client_master.credit_period:
         try:
-             d = datetime.datetime.strptime(inv_date_val, "%d-%b-%y")
-             due = d + datetime.timedelta(days=client_master.credit_period)
+             due = inv_date_for_roe + datetime.timedelta(days=client_master.credit_period)
              due_date_val = due.strftime("%d-%b-%y")
-        except:
+        except Exception:
              pass
     
     # --- Layout Construction ---
