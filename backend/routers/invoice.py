@@ -687,6 +687,7 @@ def generate_invoice_pdf(
 
     table_data = [headers]
     grand_total_taxable = 0.0
+    grand_total_igst = 0.0
     grand_total_inr = 0.0
     grand_total_curr_amt = 0.0
     sn = 1
@@ -762,6 +763,7 @@ def generate_invoice_pdf(
                 igst_amt = taxable_amt * (gst_pct / 100.0)
                 line_total = taxable_amt + igst_amt
                 grand_total_taxable += taxable_amt
+                grand_total_igst += igst_amt
                 grand_total_inr += line_total
                 grand_total_curr_amt += curr_amt
 
@@ -846,6 +848,7 @@ def generate_invoice_pdf(
             igst_amt = taxable_amt * (gst_pct / 100.0)
             line_total = taxable_amt + igst_amt
             grand_total_taxable += taxable_amt
+            grand_total_igst += igst_amt
             grand_total_inr += line_total
             grand_total_curr_amt += curr_amt
 
@@ -880,6 +883,12 @@ def generate_invoice_pdf(
         '', '', '', '', '', '', taxable_total_val, '', '', ''
     ])
 
+    igst_total_val = Paragraph(f"<b>{grand_total_igst:.2f}</b>", t_style_row)
+    table_data.append([
+        '', Paragraph('<b>Total IGST</b>', t_style_row),
+        '', '', '', '', '', '', '', '', igst_total_val, ''
+    ])
+
     total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)
     table_data.append([
         '', Paragraph('<b>Total</b>', t_style_row),
@@ -889,11 +898,16 @@ def generate_invoice_pdf(
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('SPAN', (1, -2), (7, -2)),
-        ('ALIGN', (1, -2), (7, -2), 'RIGHT'),
+        # Total Taxable Amount
+        ('SPAN', (1, -3), (7, -3)),
+        ('ALIGN', (1, -3), (7, -3), 'RIGHT'),
+        # Total IGST
+        ('SPAN', (1, -2), (9, -2)),
+        ('ALIGN', (1, -2), (9, -2), 'RIGHT'),
+        # Total
         ('SPAN', (1, -1), (10, -1)),
         ('ALIGN', (1, -1), (10, -1), 'RIGHT'),
-        ('FONTNAME', (0, -2), (-1, -1), 'Helvetica-Bold'),
+        ('FONTNAME', (0, -3), (-1, -1), 'Helvetica-Bold'),
         ('TOPPADDING', (0, 0), (-1, -1), 2),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
     ])
