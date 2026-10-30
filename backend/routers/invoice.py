@@ -8,6 +8,7 @@ from backend.models.invoice import Invoice
 from backend.services.invoice_service import allocate_invoice_number, get_next_invoice_number
 from backend.services import invoice_quote_service
 from backend.services import client_invoicing_service
+from backend.services import exchange_rate_service
 from pydantic import BaseModel
 
 from reportlab.pdfgen import canvas
@@ -434,9 +435,18 @@ def generate_invoice_pdf(
     apply_line_currency_split = dual_currency_split and item_type in ("all", "main")
     if not apply_line_currency_split:
         invoice_currency_bucket = None
-    amount_total_header = "Amt in INR"
-    # USD line-charge invoices omit INR conversion / GST columns (ROE, Taxable Amt, Rate, IGST, Amt in INR).
+    # USD dual invoices use the same GST columns as INR; settle in USD (no ROE multiply).
     usd_line_invoice = invoice_currency_bucket == "usd"
+    amount_total_header = "Amt in USD" if usd_line_invoice else "Amt in INR"
+    api_usd_roe: Optional[float] = None
+    if usd_line_invoice:
+        try:
+            api_usd_roe = round(float(exchange_rate_service.get_exchange_rate("USD", "INR")), 2)
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Could not fetch current USD exchange rate: {exc}",
+            ) from exc
 
     # 3. PDF Setup
     buffer = io.BytesIO()
@@ -650,23 +660,15 @@ def generate_invoice_pdf(
     elements.append(main_details_table)
     elements.append(Spacer(1, 10))
     
-    # Charge Details Table
-    if usd_line_invoice:
-        col_widths = [
-            0.5*inch, 2.4*inch, 0.85*inch, 0.55*inch, 1.0*inch, 0.6*inch, 1.1*inch,
-        ]
-        headers = [
-            "SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt",
-        ]
-    else:
-        col_widths = [
-            0.4*inch, 1.3*inch, 0.6*inch, 0.4*inch, 0.7*inch, 0.4*inch, 0.7*inch,
-            0.45*inch, 0.75*inch, 0.4*inch, 0.65*inch, 0.85*inch,
-        ]
-        headers = [
-            "SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt",
-            "ROE", "Taxable Amt", "Rate", "IGST", amount_total_header,
-        ]
+    # Charge Details Table (same layout for INR and USD dual invoices)
+    col_widths = [
+        0.4*inch, 1.3*inch, 0.6*inch, 0.4*inch, 0.7*inch, 0.4*inch, 0.7*inch,
+        0.45*inch, 0.75*inch, 0.4*inch, 0.65*inch, 0.85*inch,
+    ]
+    headers = [
+        "SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt",
+        "ROE", "Taxable Amt", "Rate", "IGST", amount_total_header,
+    ]
 
     table_data = [headers]
     grand_total_taxable = 0.0
@@ -726,11 +728,18 @@ def generate_invoice_pdf(
                 unit_val = f"{qty:.2f}"
 
                 try:
-                    curr_amt, roe_display, taxable_amt = (
-                        invoice_quote_service.taxable_inr_for_invoice_charge(
-                            charge, vendor_rate_per_unit
+                    if usd_line_invoice:
+                        curr_amt, roe_display, taxable_amt = (
+                            invoice_quote_service.taxable_usd_for_invoice_charge(
+                                charge, vendor_rate_per_unit, api_usd_roe or 0.0
+                            )
                         )
-                    )
+                    else:
+                        curr_amt, roe_display, taxable_amt = (
+                            invoice_quote_service.taxable_inr_for_invoice_charge(
+                                charge, vendor_rate_per_unit
+                            )
+                        )
                 except ValueError as exc:
                     raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -749,15 +758,12 @@ def generate_invoice_pdf(
                     Paragraph(rate_val, t_style_row),
                     Paragraph(unit_val, t_style_row),
                     Paragraph(f"{curr_amt:.2f}", t_style_row),
+                    Paragraph(f"{roe_display:.2f}", t_style_row),
+                    Paragraph(f"{taxable_amt:.2f}", t_style_row),
+                    Paragraph(f"{gst_pct:.0f}%", t_style_row),
+                    Paragraph(f"{igst_amt:.2f}", t_style_row),
+                    Paragraph(f"{line_total:.2f}", t_style_row),
                 ]
-                if not usd_line_invoice:
-                    row.extend([
-                        Paragraph(f"{roe_display:.2f}", t_style_row),
-                        Paragraph(f"{taxable_amt:.2f}", t_style_row),
-                        Paragraph(f"{gst_pct:.0f}%", t_style_row),
-                        Paragraph(f"{igst_amt:.2f}", t_style_row),
-                        Paragraph(f"{line_total:.2f}", t_style_row),
-                    ])
                 table_data.append(row)
                 sn += 1
             
@@ -807,11 +813,18 @@ def generate_invoice_pdf(
                 continue
             meta_roe = metadata.get("roe", metadata.get("exchange_rate"))
             try:
-                curr_amt, roe_display, taxable_amt = (
-                    invoice_quote_service.taxable_inr_for_additional_amount(
-                        curr_amt, curr, containers, exchange_rate=meta_roe
+                if usd_line_invoice:
+                    curr_amt, roe_display, taxable_amt = (
+                        invoice_quote_service.taxable_usd_for_additional_amount(
+                            curr_amt, api_usd_roe or 0.0
+                        )
                     )
-                )
+                else:
+                    curr_amt, roe_display, taxable_amt = (
+                        invoice_quote_service.taxable_inr_for_additional_amount(
+                            curr_amt, curr, containers, exchange_rate=meta_roe
+                        )
+                    )
             except ValueError as exc:
                 raise HTTPException(status_code=422, detail=str(exc)) from exc
 
@@ -829,15 +842,12 @@ def generate_invoice_pdf(
                 Paragraph(f"{curr_amt:.2f}", t_style_row),
                 Paragraph("1.00", t_style_row),
                 Paragraph(f"{curr_amt:.2f}", t_style_row),
+                Paragraph(f"{roe_display:.2f}", t_style_row),
+                Paragraph(f"{taxable_amt:.2f}", t_style_row),
+                Paragraph(f"{gst_pct:.0f}%", t_style_row),
+                Paragraph(f"{igst_amt:.2f}", t_style_row),
+                Paragraph(f"{line_total:.2f}", t_style_row),
             ]
-            if not usd_line_invoice:
-                add_row.extend([
-                    Paragraph(f"{roe_display:.2f}", t_style_row),
-                    Paragraph(f"{taxable_amt:.2f}", t_style_row),
-                    Paragraph(f"{gst_pct:.0f}%", t_style_row),
-                    Paragraph(f"{igst_amt:.2f}", t_style_row),
-                    Paragraph(f"{line_total:.2f}", t_style_row),
-                ])
             table_data.append(add_row)
             sn += 1
 
@@ -848,47 +858,30 @@ def generate_invoice_pdf(
             detail=f"No billable {bucket_label} charge lines on this job for this invoice.",
         )
 
-    # Summary rows
-    if usd_line_invoice:
-        total_val = Paragraph(f"<b>{grand_total_curr_amt:.2f}</b>", t_style_row)
-        table_data.append([
-            '', Paragraph('<b>Total</b>', t_style_row),
-            '', '', '', '', total_val,
-        ])
-        charge_table_style = TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('SPAN', (1, -1), (5, -1)),
-            ('ALIGN', (1, -1), (5, -1), 'RIGHT'),
-            ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-        ])
-    else:
-        taxable_total_val = Paragraph(f"<b>{grand_total_taxable:.2f}</b>", t_style_row)
-        table_data.append([
-            '', Paragraph('<b>Total Taxable Amount</b>', t_style_row),
-            '', '', '', '', '', '', taxable_total_val, '', '', ''
-        ])
+    # Summary rows (same for INR and USD dual invoices)
+    taxable_total_val = Paragraph(f"<b>{grand_total_taxable:.2f}</b>", t_style_row)
+    table_data.append([
+        '', Paragraph('<b>Total Taxable Amount</b>', t_style_row),
+        '', '', '', '', '', '', taxable_total_val, '', '', ''
+    ])
 
-        total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)
-        table_data.append([
-            '', Paragraph('<b>Total</b>', t_style_row),
-            '', '', '', '', '', '', '', '', '', total_val,
-        ])
-        charge_table_style = TableStyle([
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('SPAN', (1, -2), (7, -2)),
-            ('ALIGN', (1, -2), (7, -2), 'RIGHT'),
-            ('SPAN', (1, -1), (10, -1)),
-            ('ALIGN', (1, -1), (10, -1), 'RIGHT'),
-            ('FONTNAME', (0, -2), (-1, -1), 'Helvetica-Bold'),
-            ('TOPPADDING', (0, 0), (-1, -1), 2),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
-        ])
+    total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)
+    table_data.append([
+        '', Paragraph('<b>Total</b>', t_style_row),
+        '', '', '', '', '', '', '', '', '', total_val,
+    ])
+    charge_table_style = TableStyle([
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('SPAN', (1, -2), (7, -2)),
+        ('ALIGN', (1, -2), (7, -2), 'RIGHT'),
+        ('SPAN', (1, -1), (10, -1)),
+        ('ALIGN', (1, -1), (10, -1), 'RIGHT'),
+        ('FONTNAME', (0, -2), (-1, -1), 'Helvetica-Bold'),
+        ('TOPPADDING', (0, 0), (-1, -1), 2),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2),
+    ])
 
     t_charges = Table(table_data, colWidths=col_widths, repeatRows=1)
     t_charges.setStyle(charge_table_style)

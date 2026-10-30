@@ -445,18 +445,23 @@ function applyInvoiceRatesPreview(data) {
         const dualNote = isDualInvoicingClient()
             ? ` Dual-invoice client: includes only <strong>${(getSelectedCurrencyMode() || 'inr').toUpperCase()}</strong> charge lines from the quote.`
             : '';
+        const isUsdInvoice = isDualInvoicingClient() && getSelectedCurrencyMode() === 'usd';
+        const roeNote = isUsdInvoice
+            ? ' ROE on the PDF uses the current USD→INR rate from the exchange-rate API; amounts stay in USD (no ROE multiply) with GST applied the same as INR invoices.'
+            : ' Exchange rates come from each line’s Client Ex. Rate on the quote.';
         if (data.source === 'final' && count > 0) {
             banner.hidden = false;
             banner.innerHTML =
                 '<i class="fas fa-info-circle" aria-hidden="true"></i> ' +
-                `Using <strong>post-SI final quote</strong> client rates (${count} billable charge${count === 1 ? '' : 's'}). ` +
-                'Exchange rates come from each line’s Client Ex. Rate on the quote.' +
+                `Using <strong>post-SI final quote</strong> client rates (${count} billable charge${count === 1 ? '' : 's'}).` +
+                roeNote +
                 dualNote;
         } else if (count > 0) {
             banner.hidden = false;
             banner.innerHTML =
                 '<i class="fas fa-info-circle" aria-hidden="true"></i> ' +
                 `Using <strong>accepted quote</strong> client rates (${count} billable charge${count === 1 ? '' : 's'}).` +
+                roeNote +
                 dualNote;
         } else {
             banner.hidden = true;
