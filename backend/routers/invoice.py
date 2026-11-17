@@ -393,6 +393,10 @@ def generate_invoice_pdf(
     item_type: str = "all",      # 'all', 'main', or 'additional'
     currency_mode: Optional[str] = None,
     additional_doc_id: Optional[int] = None,
+    usd_roe: Optional[float] = Query(
+        None,
+        description="Manual USD→INR ROE for USD dual invoices; overrides API date rate when > 0",
+    ),
     db: Session = Depends(get_db)
 ):
     # 1. Fetch Data
@@ -439,7 +443,7 @@ def generate_invoice_pdf(
     usd_line_invoice = invoice_currency_bucket == "usd"
     amount_total_header = "Amt in USD" if usd_line_invoice else "Amt in INR"
 
-    # Resolve invoice calendar date early — USD ROE is the rate for this date only.
+    # Resolve invoice calendar date early — used for display and API ROE fallback.
     inv_date_for_roe = datetime.date.today()
     if invoice_date:
         for _fmt in ("%Y-%m-%d", "%d-%b-%y", "%d-%b-%Y"):
@@ -451,23 +455,44 @@ def generate_invoice_pdf(
 
     api_usd_roe: Optional[float] = None
     if usd_line_invoice:
-        try:
-            api_usd_roe = round(
-                float(
-                    exchange_rate_service.get_exchange_rate(
-                        "USD", "INR", rate_date=inv_date_for_roe
-                    )
-                ),
-                2,
+        manual_roe: Optional[float] = None
+        if usd_roe is not None:
+            try:
+                manual_val = float(usd_roe)
+            except (TypeError, ValueError):
+                manual_val = 0.0
+            if manual_val > 0:
+                manual_roe = round(manual_val, 2)
+            else:
+                raise HTTPException(
+                    status_code=422,
+                    detail="usd_roe must be greater than 0 when provided",
+                )
+        if manual_roe is not None:
+            api_usd_roe = manual_roe
+            logger.info(
+                "USD invoice enquiry_id=%s using manual ROE=%s",
+                enquiry_id,
+                api_usd_roe,
             )
-        except (TypeError, ValueError) as exc:
-            raise HTTPException(
-                status_code=502,
-                detail=(
-                    f"Could not fetch USD exchange rate for invoice date "
-                    f"{inv_date_for_roe.isoformat()}: {exc}"
-                ),
-            ) from exc
+        else:
+            try:
+                api_usd_roe = round(
+                    float(
+                        exchange_rate_service.get_exchange_rate(
+                            "USD", "INR", rate_date=inv_date_for_roe
+                        )
+                    ),
+                    2,
+                )
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(
+                    status_code=502,
+                    detail=(
+                        f"Could not fetch USD exchange rate for invoice date "
+                        f"{inv_date_for_roe.isoformat()}: {exc}"
+                    ),
+                ) from exc
 
     # 3. PDF Setup
     buffer = io.BytesIO()

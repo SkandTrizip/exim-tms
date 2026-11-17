@@ -248,6 +248,20 @@
                                 <option value="usd">USD invoice — USD charge lines only</option>
                             </select>
                         </div>
+                        <div class="form-row" id="invoiceUsdRoeRow" style="display:none;">
+                            <span class="field-label">USD ROE</span>
+                            <div style="display:flex; gap:8px; align-items:center; flex:1;">
+                                <input type="number" id="invoice_usd_roe" class="manual-input" min="0" step="0.01"
+                                    placeholder="USD→INR rate" title="Shown on the USD invoice ROE column. Prefills from the API for the invoice date; edit to override."
+                                    style="flex:1;">
+                                <button type="button" class="btn btn-secondary" id="invoiceUsdRoeRefreshBtn"
+                                    onclick="refreshUsdRoeFromApi()"
+                                    title="Load API mid-rate for the invoice date"
+                                    style="white-space:nowrap; padding:8px 12px; font-size:12px;">
+                                    <i class="fas fa-sync-alt"></i> API rate
+                                </button>
+                            </div>
+                        </div>
                         <div class="form-row" id="additionalInvoiceRefRow" style="display:none;">
                             <span class="field-label">Additional Invoice Ref</span>
                             <select id="additional_invoice_doc_id" class="manual-input">

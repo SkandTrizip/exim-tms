@@ -161,6 +161,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('invoice_date').addEventListener('change', function () {
         calculateDueDate();
         fetchNextInvoiceNumber();
+        if (getSelectedCurrencyMode() === 'usd') {
+            refreshUsdRoeFromApi({ onlyIfEmpty: true });
+        }
     });
 
     // Reload saved invoice per type (additional always gets a fresh number + empty IRN until saved)
@@ -173,6 +176,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const currencyModeEl = document.getElementById('invoice_currency_mode');
     if (currencyModeEl) {
         currencyModeEl.addEventListener('change', async function () {
+            syncInvoiceCurrencyModeVisibility();
             await refreshInvoiceDetailsForSelection();
             await fetchInvoiceRatesPreview();
         });
@@ -194,12 +198,67 @@ function syncInvoiceCurrencyModeVisibility() {
     if (!row || !select) return;
     const show = isDualInvoicingClient() && getSelectedItemType() !== 'additional';
     row.style.display = show ? '' : 'none';
+    syncUsdRoeRowVisibility();
+}
+
+function syncUsdRoeRowVisibility() {
+    const roeRow = document.getElementById('invoiceUsdRoeRow');
+    if (!roeRow) return;
+    const showUsdRoe = getSelectedCurrencyMode() === 'usd';
+    roeRow.style.display = showUsdRoe ? '' : 'none';
+    if (showUsdRoe) {
+        refreshUsdRoeFromApi({ onlyIfEmpty: true });
+    }
 }
 
 function getSelectedCurrencyMode() {
     if (!isDualInvoicingClient() || getSelectedItemType() === 'additional') return null;
     const raw = (document.getElementById('invoice_currency_mode')?.value || 'inr').trim().toLowerCase();
     return raw === 'usd' ? 'usd' : 'inr';
+}
+
+/** Manual USD→INR ROE for the PDF; null when empty/invalid (backend then uses API date rate). */
+function getManualUsdRoe() {
+    if (getSelectedCurrencyMode() !== 'usd') return null;
+    const raw = (document.getElementById('invoice_usd_roe')?.value || '').trim();
+    if (!raw) return null;
+    const val = parseFloat(raw);
+    if (!Number.isFinite(val) || val <= 0) return null;
+    return Math.round(val * 100) / 100;
+}
+
+async function refreshUsdRoeFromApi({ onlyIfEmpty = false } = {}) {
+    const input = document.getElementById('invoice_usd_roe');
+    if (!input || getSelectedCurrencyMode() !== 'usd') return;
+    if (onlyIfEmpty && (input.value || '').trim()) return;
+
+    const invDate = (document.getElementById('invoice_date')?.value || '').trim();
+    const params = new URLSearchParams();
+    if (invDate) params.set('date', invDate);
+    const qs = params.toString();
+    const btn = document.getElementById('invoiceUsdRoeRefreshBtn');
+    if (btn) {
+        btn.disabled = true;
+        btn.setAttribute('aria-busy', 'true');
+    }
+    try {
+        const res = await fetch(
+            `${CONFIG.API_URL}/api/exchange-rate/rate?currency=USD&target=INR${qs ? `&${qs}` : ''}`
+        );
+        if (!res.ok) return;
+        const data = await res.json();
+        const rate = parseFloat(data?.rate);
+        if (Number.isFinite(rate) && rate > 0) {
+            input.value = String(Math.round(rate * 100) / 100);
+        }
+    } catch (err) {
+        console.warn('USD ROE API refresh failed:', err);
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.removeAttribute('aria-busy');
+        }
+    }
 }
 
 async function fetchAllData({ presetAdditionalDocId, presetCurrencyMode } = {}) {
@@ -447,7 +506,7 @@ function applyInvoiceRatesPreview(data) {
             : '';
         const isUsdInvoice = isDualInvoicingClient() && getSelectedCurrencyMode() === 'usd';
         const roeNote = isUsdInvoice
-            ? ' ROE on the PDF uses the USD→INR mid-rate for the invoice date from the exchange-rate API; amounts stay in USD (no ROE multiply) with GST applied the same as INR invoices.'
+            ? ' Enter <strong>USD ROE</strong> below (or use API rate for the invoice date). Amounts stay in USD (no ROE multiply); GST applies the same as INR invoices.'
             : ' Exchange rates come from each line’s Client Ex. Rate on the quote.';
         if (data.source === 'final' && count > 0) {
             banner.hidden = false;
@@ -515,6 +574,10 @@ async function generateInvoice(type = 'draft') {
         });
         const pdfCurrencyMode = getSelectedCurrencyMode();
         if (pdfCurrencyMode) params.append('currency_mode', pdfCurrencyMode);
+        const manualUsdRoe = getManualUsdRoe();
+        if (pdfCurrencyMode === 'usd' && manualUsdRoe != null) {
+            params.append('usd_roe', String(manualUsdRoe));
+        }
         if (customerInvNo) params.append('customer_invoice_no', customerInvNo);
         if (irnValue) params.append('irn', irnValue);
         const addDocId = getSelectedAdditionalDocId();
