@@ -252,13 +252,13 @@
                             <span class="field-label">USD ROE</span>
                             <div style="display:flex; gap:8px; align-items:center; flex:1;">
                                 <input type="number" id="invoice_usd_roe" class="manual-input" min="0" step="0.01"
-                                    placeholder="USD→INR rate" title="Shown on the USD invoice ROE column. Prefills from the API for the invoice date; edit to override."
-                                    style="flex:1;">
+                                    placeholder="Enter USD→INR rate" title="Manual ROE saved with the invoice and shown on the PDF. Not fetched automatically."
+                                    style="flex:1;" required>
                                 <button type="button" class="btn btn-secondary" id="invoiceUsdRoeRefreshBtn"
                                     onclick="refreshUsdRoeFromApi()"
-                                    title="Load API mid-rate for the invoice date"
+                                    title="Optional: copy today’s API mid-rate into the field (you can still edit before saving)"
                                     style="white-space:nowrap; padding:8px 12px; font-size:12px;">
-                                    <i class="fas fa-sync-alt"></i> API rate
+                                    <i class="fas fa-sync-alt"></i> Suggest API
                                 </button>
                             </div>
                         </div>

@@ -153,16 +153,16 @@ def taxable_inr_for_invoice_charge(
 def taxable_usd_for_invoice_charge(
     charge,
     vendor_rate: float,
-    api_roe: float,
+    usd_roe: float,
 ) -> Tuple[float, float, float]:
     """
     USD dual-invoice lines: taxable stays in USD (no ROE multiply).
-    ROE is the live API rate, shown for reference only.
+    ROE is the manual rate recorded with the draft, shown for reference only.
     Returns (curr_amt, roe_display, taxable_amt_usd).
     """
     qty = float(charge.quantity or 0)
     curr_amt = vendor_rate * qty
-    roe_display = round(float(api_roe), 2)
+    roe_display = round(float(usd_roe), 2)
     return curr_amt, roe_display, curr_amt
 
 
@@ -206,12 +206,13 @@ def taxable_inr_for_additional_amount(
 
 def taxable_usd_for_additional_amount(
     amount: float,
-    api_roe: float,
+    usd_roe: float,
 ) -> Tuple[float, float, float]:
     """
     USD dual-invoice additional lines: taxable stays in USD (no ROE multiply).
+    ROE is the manual rate recorded with the draft.
     Returns (curr_amt, roe_display, taxable_amt_usd).
     """
     curr_amt = float(amount or 0)
-    roe_display = round(float(api_roe), 2)
+    roe_display = round(float(usd_roe), 2)
     return curr_amt, roe_display, curr_amt

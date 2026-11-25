@@ -161,9 +161,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('invoice_date').addEventListener('change', function () {
         calculateDueDate();
         fetchNextInvoiceNumber();
-        if (getSelectedCurrencyMode() === 'usd') {
-            refreshUsdRoeFromApi({ onlyIfEmpty: true });
-        }
     });
 
     // Reload saved invoice per type (additional always gets a fresh number + empty IRN until saved)
@@ -206,9 +203,6 @@ function syncUsdRoeRowVisibility() {
     if (!roeRow) return;
     const showUsdRoe = getSelectedCurrencyMode() === 'usd';
     roeRow.style.display = showUsdRoe ? '' : 'none';
-    if (showUsdRoe) {
-        refreshUsdRoeFromApi({ onlyIfEmpty: true });
-    }
 }
 
 function getSelectedCurrencyMode() {
@@ -217,7 +211,7 @@ function getSelectedCurrencyMode() {
     return raw === 'usd' ? 'usd' : 'inr';
 }
 
-/** Manual USD→INR ROE for the PDF; null when empty/invalid (backend then uses API date rate). */
+/** Manual USD→INR ROE for the PDF / record; null when empty/invalid (no live API fallback). */
 function getManualUsdRoe() {
     if (getSelectedCurrencyMode() !== 'usd') return null;
     const raw = (document.getElementById('invoice_usd_roe')?.value || '').trim();
@@ -225,6 +219,16 @@ function getManualUsdRoe() {
     const val = parseFloat(raw);
     if (!Number.isFinite(val) || val <= 0) return null;
     return Math.round(val * 100) / 100;
+}
+
+function requireManualUsdRoe(actionLabel = 'continue') {
+    if (getSelectedCurrencyMode() !== 'usd') return true;
+    if (getManualUsdRoe() != null) return true;
+    const msg = `Enter USD ROE before you ${actionLabel}. The rate is saved with the invoice and is not fetched from the live API.`;
+    if (typeof showModal === 'function') showModal('USD ROE Required', msg, 'warning');
+    else alert(msg);
+    document.getElementById('invoice_usd_roe')?.focus();
+    return false;
 }
 
 async function refreshUsdRoeFromApi({ onlyIfEmpty = false } = {}) {
@@ -461,6 +465,13 @@ async function refreshInvoiceDetailsForSelection() {
         if (invData.payment_due_date) document.getElementById('payment_due_date').value = invData.payment_due_date;
         if (invData.irn) document.getElementById('irn_val').value = invData.irn;
         else clearIrnField();
+        const roeInput = document.getElementById('invoice_usd_roe');
+        if (roeInput) {
+            const savedRoe = invData.usd_roe != null ? Number(invData.usd_roe) : NaN;
+            if (Number.isFinite(savedRoe) && savedRoe > 0) {
+                roeInput.value = String(Math.round(savedRoe * 100) / 100);
+            }
+        }
         return;
     }
 
@@ -506,7 +517,7 @@ function applyInvoiceRatesPreview(data) {
             : '';
         const isUsdInvoice = isDualInvoicingClient() && getSelectedCurrencyMode() === 'usd';
         const roeNote = isUsdInvoice
-            ? ' Enter <strong>USD ROE</strong> below (or use API rate for the invoice date). Amounts stay in USD (no ROE multiply); GST applies the same as INR invoices.'
+            ? ' Enter <strong>USD ROE</strong> below — it is saved with the invoice and reused on tax PDF (not live API). Amounts stay in USD (no ROE multiply).'
             : ' Exchange rates come from each line’s Client Ex. Rate on the quote.';
         if (data.source === 'final' && count > 0) {
             banner.hidden = false;
@@ -555,6 +566,10 @@ async function generateInvoice(type = 'draft') {
         } else {
             alert('Invoice number is not ready yet. Please wait a moment and try again.');
         }
+        return;
+    }
+
+    if (!requireManualUsdRoe(type === 'tax' ? 'generate the tax invoice' : 'generate the draft')) {
         return;
     }
 
@@ -662,6 +677,9 @@ async function recordInvoice() {
     const itemType = getSelectedItemType();
     const additionalDocId = itemType === 'additional' ? getSelectedAdditionalDocId() : null;
     const currencyMode = getSelectedCurrencyMode();
+    if (!requireManualUsdRoe('record the invoice')) {
+        return;
+    }
     const invoiceData = {
         enquiry_id: parseInt(enquiryId),
         place_of_supply: document.getElementById('place_of_supply').value,
@@ -671,6 +689,7 @@ async function recordInvoice() {
         payment_due_date: document.getElementById('payment_due_date').value,
         item_type: itemType || 'all',
         currency_mode: currencyMode,
+        usd_roe: currencyMode === 'usd' ? getManualUsdRoe() : null,
         additional_doc_id: additionalDocId,
         remark: itemType === 'additional'
             ? 'Additional invoice'

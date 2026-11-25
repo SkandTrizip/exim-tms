@@ -46,6 +46,7 @@ _column_migrations = [
     ("invoices", "additional_doc_id", "INTEGER"),
     ("invoices", "currency_mode", "VARCHAR"),
     ("invoices", "bank_account", "VARCHAR"),
+    ("invoices", "usd_roe", "FLOAT"),
     ("client_master", "customer_invoicing_type", "VARCHAR DEFAULT 'standard'"),
     ("client_master", "gst_applicable", "BOOLEAN DEFAULT true"),
     ("quotes", "initial_quote_snapshot", "TEXT"),

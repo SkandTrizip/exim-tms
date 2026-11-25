@@ -21,7 +21,7 @@ def test_belongs_to_currency_invoice():
 def test_taxable_usd_for_invoice_charge_no_roe_multiply():
     charge = SimpleNamespace(quantity=2.0, currency="USD", charge_description="Ocean Freight")
     curr_amt, roe, taxable = invoice_quote_service.taxable_usd_for_invoice_charge(
-        charge, vendor_rate=100.0, api_roe=86.5
+        charge, vendor_rate=100.0, usd_roe=86.5
     )
     assert curr_amt == 200.0
     assert taxable == 200.0  # no ROE multiply
@@ -30,7 +30,7 @@ def test_taxable_usd_for_invoice_charge_no_roe_multiply():
 
 def test_taxable_usd_for_additional_amount_no_roe_multiply():
     curr_amt, roe, taxable = invoice_quote_service.taxable_usd_for_additional_amount(
-        150.0, api_roe=87.25
+        150.0, usd_roe=87.25
     )
     assert curr_amt == 150.0
     assert taxable == 150.0

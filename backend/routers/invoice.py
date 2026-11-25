@@ -8,7 +8,6 @@ from backend.models.invoice import Invoice
 from backend.services.invoice_service import allocate_invoice_number, get_next_invoice_number
 from backend.services import invoice_quote_service
 from backend.services import client_invoicing_service
-from backend.services import exchange_rate_service
 from pydantic import BaseModel
 
 from reportlab.pdfgen import canvas
@@ -44,6 +43,7 @@ class InvoiceCreate(BaseModel):
     irn: Optional[str] = None
     item_type: str = "all"
     currency_mode: Optional[str] = None
+    usd_roe: Optional[float] = None
     additional_doc_id: Optional[int] = None
     remark: Optional[str] = None
 
@@ -169,6 +169,21 @@ def record_invoice(invoice: InvoiceCreate, db: Session = Depends(get_db)):
                 payload["currency_mode"] = None
         if not payload.get("remark"):
             payload["remark"] = "Additional invoice" if is_additional else "Main invoice"
+
+        # Persist manual USD ROE with the recorded invoice (never live API).
+        if payload.get("currency_mode") == "usd":
+            try:
+                roe_val = float(invoice.usd_roe) if invoice.usd_roe is not None else 0.0
+            except (TypeError, ValueError):
+                roe_val = 0.0
+            if roe_val <= 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="USD ROE is required when recording a USD invoice",
+                )
+            payload["usd_roe"] = round(roe_val, 2)
+        else:
+            payload["usd_roe"] = None
 
         new_invoice = Invoice(**payload)
         db.add(new_invoice)
@@ -348,6 +363,7 @@ def list_all_invoices(db: Session = Depends(get_db)):
             "remark": getattr(inv, "remark", None),
             "additional_doc_id": getattr(inv, "additional_doc_id", None),
             "currency_mode": getattr(inv, "currency_mode", None),
+            "usd_roe": getattr(inv, "usd_roe", None),
         }
         result.append(inv_dict)
     return result
@@ -395,7 +411,7 @@ def generate_invoice_pdf(
     additional_doc_id: Optional[int] = None,
     usd_roe: Optional[float] = Query(
         None,
-        description="Manual USD→INR ROE for USD dual invoices; overrides API date rate when > 0",
+        description="Manual USD→INR ROE for USD dual invoices (required; never uses live API)",
     ),
     db: Session = Depends(get_db)
 ):
@@ -423,12 +439,6 @@ def generate_invoice_pdf(
     # Fetch Shipment Status for Invoice Details (Invoice No, Date, etc.)
     status = db.query(ShipmentStatus).filter(ShipmentStatus.enquiry_id == enquiry_id).first()
 
-    # If IRN not passed as query param, try fetching from saved Invoice record
-    if not irn:
-        saved_inv = db.query(Invoice).filter(Invoice.enquiry_id == enquiry_id).first()
-        if saved_inv and saved_inv.irn:
-            irn = saved_inv.irn
-
     invoice_currency_bucket = (currency_mode or "inr").strip().lower()
     if invoice_currency_bucket not in ("usd", "inr"):
         invoice_currency_bucket = "inr"
@@ -443,7 +453,23 @@ def generate_invoice_pdf(
     usd_line_invoice = invoice_currency_bucket == "usd"
     amount_total_header = "Amt in USD" if usd_line_invoice else "Amt in INR"
 
-    # Resolve invoice calendar date early — used for display and API ROE fallback.
+    # Prefer the matching saved invoice (same item/currency) for IRN + recorded ROE.
+    saved_inv_q = db.query(Invoice).filter(Invoice.enquiry_id == enquiry_id)
+    it_norm = (item_type or "all").strip().lower()
+    if it_norm == "additional":
+        saved_inv_q = saved_inv_q.filter(Invoice.item_type == "additional")
+        if additional_doc_id is not None:
+            saved_inv_q = saved_inv_q.filter(Invoice.additional_doc_id == additional_doc_id)
+    else:
+        saved_inv_q = saved_inv_q.filter(Invoice.item_type.in_(["all", "main"]))
+        if invoice_currency_bucket in ("usd", "inr"):
+            saved_inv_q = saved_inv_q.filter(Invoice.currency_mode == invoice_currency_bucket)
+    saved_inv = saved_inv_q.order_by(Invoice.id.desc()).first()
+
+    if not irn and saved_inv and saved_inv.irn:
+        irn = saved_inv.irn
+
+    # Resolve invoice calendar date early — used for display / due date.
     inv_date_for_roe = datetime.date.today()
     if invoice_date:
         for _fmt in ("%Y-%m-%d", "%d-%b-%y", "%d-%b-%Y"):
@@ -453,7 +479,8 @@ def generate_invoice_pdf(
             except ValueError:
                 continue
 
-    api_usd_roe: Optional[float] = None
+    # USD ROE: query param (what user entered) → saved invoice ROE. Never live API.
+    recorded_usd_roe: Optional[float] = None
     if usd_line_invoice:
         manual_roe: Optional[float] = None
         if usd_roe is not None:
@@ -468,31 +495,27 @@ def generate_invoice_pdf(
                     status_code=422,
                     detail="usd_roe must be greater than 0 when provided",
                 )
-        if manual_roe is not None:
-            api_usd_roe = manual_roe
-            logger.info(
-                "USD invoice enquiry_id=%s using manual ROE=%s",
-                enquiry_id,
-                api_usd_roe,
-            )
-        else:
+        if manual_roe is None and saved_inv and saved_inv.usd_roe is not None:
             try:
-                api_usd_roe = round(
-                    float(
-                        exchange_rate_service.get_exchange_rate(
-                            "USD", "INR", rate_date=inv_date_for_roe
-                        )
-                    ),
-                    2,
-                )
-            except (TypeError, ValueError) as exc:
-                raise HTTPException(
-                    status_code=502,
-                    detail=(
-                        f"Could not fetch USD exchange rate for invoice date "
-                        f"{inv_date_for_roe.isoformat()}: {exc}"
-                    ),
-                ) from exc
+                saved_val = float(saved_inv.usd_roe)
+            except (TypeError, ValueError):
+                saved_val = 0.0
+            if saved_val > 0:
+                manual_roe = round(saved_val, 2)
+        if manual_roe is None:
+            raise HTTPException(
+                status_code=422,
+                detail=(
+                    "USD ROE is required for this invoice. Enter the rate used when the "
+                    "draft was created (live API rate is not used)."
+                ),
+            )
+        recorded_usd_roe = manual_roe
+        logger.info(
+            "USD invoice enquiry_id=%s using recorded/manual ROE=%s",
+            enquiry_id,
+            recorded_usd_roe,
+        )
 
     # 3. PDF Setup
     buffer = io.BytesIO()
@@ -719,7 +742,7 @@ def generate_invoice_pdf(
     elements.append(Spacer(1, 10))
     
     # Charge Details Table (same layout for INR and USD dual invoices)
-    # When GST is not applicable (SEZ under LUT), omit Rate / IGST columns.
+    # When GST is not applicable (SEZ under LUT), omit Taxable Amt / Rate / IGST.
     if gst_applicable:
         col_widths = [
             0.4*inch, 1.3*inch, 0.6*inch, 0.4*inch, 0.7*inch, 0.4*inch, 0.7*inch,
@@ -731,12 +754,12 @@ def generate_invoice_pdf(
         ]
     else:
         col_widths = [
-            0.4*inch, 1.5*inch, 0.7*inch, 0.45*inch, 0.85*inch, 0.45*inch, 0.85*inch,
-            0.5*inch, 0.9*inch, 0.9*inch,
+            0.45*inch, 1.7*inch, 0.75*inch, 0.5*inch, 0.9*inch, 0.5*inch, 0.9*inch,
+            0.55*inch, 1.25*inch,
         ]
         headers = [
             "SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt",
-            "ROE", "Taxable Amt", amount_total_header,
+            "ROE", amount_total_header,
         ]
 
     table_data = [headers]
@@ -803,7 +826,7 @@ def generate_invoice_pdf(
                     if usd_line_invoice:
                         curr_amt, roe_display, taxable_amt = (
                             invoice_quote_service.taxable_usd_for_invoice_charge(
-                                charge, vendor_rate_per_unit, api_usd_roe or 0.0
+                                charge, vendor_rate_per_unit, recorded_usd_roe or 0.0
                             )
                         )
                     else:
@@ -832,10 +855,10 @@ def generate_invoice_pdf(
                     Paragraph(unit_val, t_style_row),
                     Paragraph(f"{curr_amt:.2f}", t_style_row),
                     Paragraph(f"{roe_display:.2f}", t_style_row),
-                    Paragraph(f"{taxable_amt:.2f}", t_style_row),
                 ]
                 if gst_applicable:
                     row.extend([
+                        Paragraph(f"{taxable_amt:.2f}", t_style_row),
                         Paragraph(f"{gst_pct:.0f}%", t_style_row),
                         Paragraph(f"{igst_amt:.2f}", t_style_row),
                     ])
@@ -894,7 +917,7 @@ def generate_invoice_pdf(
                 if usd_line_invoice:
                     curr_amt, roe_display, taxable_amt = (
                         invoice_quote_service.taxable_usd_for_additional_amount(
-                            curr_amt, api_usd_roe or 0.0
+                            curr_amt, recorded_usd_roe or 0.0
                         )
                     )
                 else:
@@ -922,10 +945,10 @@ def generate_invoice_pdf(
                 Paragraph("1.00", t_style_row),
                 Paragraph(f"{curr_amt:.2f}", t_style_row),
                 Paragraph(f"{roe_display:.2f}", t_style_row),
-                Paragraph(f"{taxable_amt:.2f}", t_style_row),
             ]
             if gst_applicable:
                 add_row.extend([
+                    Paragraph(f"{taxable_amt:.2f}", t_style_row),
                     Paragraph(f"{gst_pct:.0f}%", t_style_row),
                     Paragraph(f"{igst_amt:.2f}", t_style_row),
                 ])
@@ -941,9 +964,9 @@ def generate_invoice_pdf(
         )
 
     # Single summary row: taxable + IGST + total under their columns (INR and USD)
-    taxable_total_val = Paragraph(f"<b>{grand_total_taxable:.2f}</b>", t_style_row)
     total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)
     if gst_applicable:
+        taxable_total_val = Paragraph(f"<b>{grand_total_taxable:.2f}</b>", t_style_row)
         igst_total_val = Paragraph(f"<b>{grand_total_igst:.2f}</b>", t_style_row)
         table_data.append([
             '',
@@ -959,7 +982,6 @@ def generate_invoice_pdf(
             '',
             Paragraph('<b>Total</b>', t_style_row),
             '', '', '', '', '', '',
-            taxable_total_val,
             total_val,
         ])
     charge_table_style = TableStyle([

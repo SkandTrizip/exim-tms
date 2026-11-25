@@ -18,6 +18,8 @@ class Invoice(Base):
     item_type = Column(String, default="all")
     # For dual_usd_inr clients: 'usd' | 'inr' on main invoices; null on standard clients
     currency_mode = Column(String, nullable=True)
+    # Manual USD→INR ROE entered when the USD invoice draft was created (no live API).
+    usd_roe = Column(Float, nullable=True)
     # Payment bank block on PDF: 'inr' | 'usd' — independent of currency_mode / charge lines
     bank_account = Column(String, nullable=True)
     remark = Column(String, nullable=True)
