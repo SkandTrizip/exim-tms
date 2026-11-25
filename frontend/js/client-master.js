@@ -529,6 +529,7 @@ async function handleMasterSubmit(e) {
         contract_type: val('m_contract_type'),
         billing_method: val('m_billing_method'),
         gst_percent: val('m_gst_percent'),
+        gst_applicable: val('m_gst_applicable') !== 'false',
         billing_type: val('m_billing_type'),
         customer_invoicing_type: val('m_customer_invoicing_type') || 'standard',
         payment_terms: val('m_payment_terms'),
@@ -659,8 +660,9 @@ async function editClient(id, viewOnly = false) {
             'm_client_code', 'm_client_name', 'm_gst_name', 'm_gst_no', 'm_pan_no', 'm_iec_code',
             'm_co_registration_type', 'm_office_location', 'm_office_address', 'm_country', 'm_pin_code',
             'm_contact_person', 'm_contact_no', 'm_email_id', 'm_client_type_category', 'm_business_nature',
-            'm_industry_type', 'm_shipment_type', 'm_contract_type', 'm_billing_method', 'm_gst_percent',
-            'm_billing_type', 'm_customer_invoicing_type', 'm_payment_terms', 'm_credit_amount', 'm_credit_period',
+            'm_industry_type', 'm_shipment_type', 'm_contract_type', 'm_billing_method', 'm_gst_applicable',
+            'm_gst_percent', 'm_billing_type', 'm_customer_invoicing_type', 'm_payment_terms',
+            'm_credit_amount', 'm_credit_period',
             'm_contact_person_logistics', 'm_contact_no_logistics', 'm_email_id_logistics',
             'm_contact_person_finance', 'm_contact_no_finance', 'm_email_id_finance',
             'm_sales_branch', 'm_sales_person', 'm_cs_name', 'm_created_by'
@@ -671,6 +673,10 @@ async function editClient(id, viewOnly = false) {
             if (!el) return;
             const key = f.startsWith('m_') ? f.slice(2) : f;
             const value = master[key];
+            if (f === 'm_gst_applicable') {
+                el.value = value === false || value === 'false' ? 'false' : 'true';
+                return;
+            }
             el.value = value == null ? '' : String(value);
         });
 

@@ -47,6 +47,7 @@ _column_migrations = [
     ("invoices", "currency_mode", "VARCHAR"),
     ("invoices", "bank_account", "VARCHAR"),
     ("client_master", "customer_invoicing_type", "VARCHAR DEFAULT 'standard'"),
+    ("client_master", "gst_applicable", "BOOLEAN DEFAULT true"),
     ("quotes", "initial_quote_snapshot", "TEXT"),
     ("quotes", "final_quote_snapshot", "TEXT"),
     ("quotes", "accepted_remarks_reason", "VARCHAR"),

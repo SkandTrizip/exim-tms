@@ -577,6 +577,8 @@ def generate_invoice_pdf(
     cust_addr = client_origin.office_address if client_origin else "Address specific to client..."
     cust_gst = client_origin.gst_no if client_origin else "N/A"
     cust_code = client_master.client_code if client_master else "N/A"
+    # Default True for legacy clients; False = SEZ under LUT (no IGST)
+    gst_applicable = True if client_master is None else (client_master.gst_applicable is not False)
 
     cust_invoice_no = (customer_invoice_no or "").strip()
     if not cust_invoice_no and status and getattr(status, "si_number", None):
@@ -637,6 +639,22 @@ def generate_invoice_pdf(
         ('ALIGN', (0,0), (-1,-1), 'CENTER'),
     ]))
     elements.append(title_box)
+    if not gst_applicable:
+        sez_lut_style = ParagraphStyle(
+            'SezLutNote',
+            parent=styles['Normal'],
+            fontSize=7,
+            leading=9,
+            alignment=1,
+            textColor=colors.HexColor('#1a3a5c'),
+            spaceBefore=3,
+            spaceAfter=2,
+        )
+        elements.append(Paragraph(
+            "Supply meant for authorised operations of SEZ under LUT without payment of IGST, "
+            "in accordance with Section 16 of the IGST Act, 2017.",
+            sez_lut_style,
+        ))
     elements.append(Spacer(1, 5))
     
     # Styles for details
@@ -701,14 +719,25 @@ def generate_invoice_pdf(
     elements.append(Spacer(1, 10))
     
     # Charge Details Table (same layout for INR and USD dual invoices)
-    col_widths = [
-        0.4*inch, 1.3*inch, 0.6*inch, 0.4*inch, 0.7*inch, 0.4*inch, 0.7*inch,
-        0.45*inch, 0.75*inch, 0.4*inch, 0.65*inch, 0.85*inch,
-    ]
-    headers = [
-        "SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt",
-        "ROE", "Taxable Amt", "Rate", "IGST", amount_total_header,
-    ]
+    # When GST is not applicable (SEZ under LUT), omit Rate / IGST columns.
+    if gst_applicable:
+        col_widths = [
+            0.4*inch, 1.3*inch, 0.6*inch, 0.4*inch, 0.7*inch, 0.4*inch, 0.7*inch,
+            0.45*inch, 0.75*inch, 0.4*inch, 0.65*inch, 0.85*inch,
+        ]
+        headers = [
+            "SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt",
+            "ROE", "Taxable Amt", "Rate", "IGST", amount_total_header,
+        ]
+    else:
+        col_widths = [
+            0.4*inch, 1.5*inch, 0.7*inch, 0.45*inch, 0.85*inch, 0.45*inch, 0.85*inch,
+            0.5*inch, 0.9*inch, 0.9*inch,
+        ]
+        headers = [
+            "SNo.", "Charge Details", "HSN/SAC", "Curr.", "Rate / Unit", "Unit", "Curr. Amt",
+            "ROE", "Taxable Amt", amount_total_header,
+        ]
 
     table_data = [headers]
     grand_total_taxable = 0.0
@@ -750,7 +779,9 @@ def generate_invoice_pdf(
                     charge.charge_description,
                     getattr(charge, "hsn_sac", None),
                 )
-                if "air freight" in desc_lower:
+                if not gst_applicable:
+                    gst_pct = 0.0
+                elif "air freight" in desc_lower:
                     gst_pct = 18.0
                 elif "ocean freight" in desc_lower or "freight" in desc_lower:
                     gst_pct = 5.0
@@ -802,10 +833,13 @@ def generate_invoice_pdf(
                     Paragraph(f"{curr_amt:.2f}", t_style_row),
                     Paragraph(f"{roe_display:.2f}", t_style_row),
                     Paragraph(f"{taxable_amt:.2f}", t_style_row),
-                    Paragraph(f"{gst_pct:.0f}%", t_style_row),
-                    Paragraph(f"{igst_amt:.2f}", t_style_row),
-                    Paragraph(f"{line_total:.2f}", t_style_row),
                 ]
+                if gst_applicable:
+                    row.extend([
+                        Paragraph(f"{gst_pct:.0f}%", t_style_row),
+                        Paragraph(f"{igst_amt:.2f}", t_style_row),
+                    ])
+                row.append(Paragraph(f"{line_total:.2f}", t_style_row))
                 table_data.append(row)
                 sn += 1
             
@@ -828,7 +862,9 @@ def generate_invoice_pdf(
             
             # Determine SAC and GST
             sac_code = metadata.get("hsn_sac", "996511")
-            if "air freight" in desc_lower:
+            if not gst_applicable:
+                gst_pct = 0.0
+            elif "air freight" in desc_lower:
                 gst_pct = 18.0
             elif "ocean freight" in desc_lower or "freight" in desc_lower:
                 gst_pct = 5.0
@@ -887,10 +923,13 @@ def generate_invoice_pdf(
                 Paragraph(f"{curr_amt:.2f}", t_style_row),
                 Paragraph(f"{roe_display:.2f}", t_style_row),
                 Paragraph(f"{taxable_amt:.2f}", t_style_row),
-                Paragraph(f"{gst_pct:.0f}%", t_style_row),
-                Paragraph(f"{igst_amt:.2f}", t_style_row),
-                Paragraph(f"{line_total:.2f}", t_style_row),
             ]
+            if gst_applicable:
+                add_row.extend([
+                    Paragraph(f"{gst_pct:.0f}%", t_style_row),
+                    Paragraph(f"{igst_amt:.2f}", t_style_row),
+                ])
+            add_row.append(Paragraph(f"{line_total:.2f}", t_style_row))
             table_data.append(add_row)
             sn += 1
 
@@ -903,17 +942,26 @@ def generate_invoice_pdf(
 
     # Single summary row: taxable + IGST + total under their columns (INR and USD)
     taxable_total_val = Paragraph(f"<b>{grand_total_taxable:.2f}</b>", t_style_row)
-    igst_total_val = Paragraph(f"<b>{grand_total_igst:.2f}</b>", t_style_row)
     total_val = Paragraph(f"<b>{grand_total_inr:.2f}</b>", t_style_row)
-    table_data.append([
-        '',
-        Paragraph('<b>Total</b>', t_style_row),
-        '', '', '', '', '', '',
-        taxable_total_val,
-        '',
-        igst_total_val,
-        total_val,
-    ])
+    if gst_applicable:
+        igst_total_val = Paragraph(f"<b>{grand_total_igst:.2f}</b>", t_style_row)
+        table_data.append([
+            '',
+            Paragraph('<b>Total</b>', t_style_row),
+            '', '', '', '', '', '',
+            taxable_total_val,
+            '',
+            igst_total_val,
+            total_val,
+        ])
+    else:
+        table_data.append([
+            '',
+            Paragraph('<b>Total</b>', t_style_row),
+            '', '', '', '', '', '',
+            taxable_total_val,
+            total_val,
+        ])
     charge_table_style = TableStyle([
         ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),

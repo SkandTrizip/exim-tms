@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from backend.database import Base
 import datetime
@@ -29,6 +29,8 @@ class ClientMaster(Base):
     contract_type = Column(String) # Fixed: Fixed, NA
     billing_method = Column(String) # Fixed: FCM, RCM
     gst_percent = Column(String) # Fixed: 18%, 5%
+    # True = normal GST invoice; False = SEZ under LUT (no IGST on invoice)
+    gst_applicable = Column(Boolean, default=True)
     billing_type = Column(String) # Fixed: Neft, Cheque
     # standard | dual_usd_inr — see config.CUSTOMER_INVOICING_TYPES
     customer_invoicing_type = Column(String, default="standard")
