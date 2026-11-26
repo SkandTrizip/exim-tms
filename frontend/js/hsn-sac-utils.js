@@ -5,7 +5,7 @@
     function suggestHsnSacFromDescription(description) {
         const d = String(description || '').toLowerCase();
         if (d.includes('air freight')) return '996531';
-        if (d.includes('ocean freight') || d.includes('freight') || d.includes('suez')) return '996521';
+        if (d.includes('ocean freight') || d.includes('freight')) return '996521';
         if (d.includes('bl fee') || d.includes('bl charge')) return '996799';
         if (d.includes('origin thc') || d.includes('origin terminal')) return '996711';
         if (d.includes('seal charge') || d.includes('seal fee')) return '996799';

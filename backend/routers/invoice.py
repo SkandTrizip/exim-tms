@@ -806,10 +806,12 @@ def generate_invoice_pdf(
                     gst_pct = 0.0
                 elif "air freight" in desc_lower:
                     gst_pct = 18.0
+                elif "ocean freight" in desc_lower or "freight" in desc_lower:
+                    gst_pct = 5.0
+                # One-off: LLP/OFE/26/11/00012 — Suez canal transit at 5% (not global)
                 elif (
-                    "ocean freight" in desc_lower
-                    or "freight" in desc_lower
-                    or "suez" in desc_lower
+                    (enquiry.enquiry_number or "") == "LLP/OFE/26/11/00012"
+                    and "suez" in desc_lower
                 ):
                     gst_pct = 5.0
                 elif "bl fee" in desc_lower or "bl charge" in desc_lower:
@@ -893,10 +895,12 @@ def generate_invoice_pdf(
                 gst_pct = 0.0
             elif "air freight" in desc_lower:
                 gst_pct = 18.0
+            elif "ocean freight" in desc_lower or "freight" in desc_lower:
+                gst_pct = 5.0
+            # One-off: LLP/OFE/26/11/00012 — Suez canal transit at 5% (not global)
             elif (
-                "ocean freight" in desc_lower
-                or "freight" in desc_lower
-                or "suez" in desc_lower
+                (enquiry.enquiry_number or "") == "LLP/OFE/26/11/00012"
+                and "suez" in desc_lower
             ):
                 gst_pct = 5.0
             elif "bl fee" in desc_lower or "bl charge" in desc_lower:

@@ -9,7 +9,7 @@ def default_hsn_sac_for_description(charge_description: Optional[str]) -> str:
     desc_lower = (charge_description or "").lower()
     if "air freight" in desc_lower:
         return "996531"
-    if "ocean freight" in desc_lower or "freight" in desc_lower or "suez" in desc_lower:
+    if "ocean freight" in desc_lower or "freight" in desc_lower:
         return "996521"
     if "bl fee" in desc_lower or "bl charge" in desc_lower:
         return "996799"
