@@ -806,7 +806,11 @@ def generate_invoice_pdf(
                     gst_pct = 0.0
                 elif "air freight" in desc_lower:
                     gst_pct = 18.0
-                elif "ocean freight" in desc_lower or "freight" in desc_lower:
+                elif (
+                    "ocean freight" in desc_lower
+                    or "freight" in desc_lower
+                    or "suez" in desc_lower
+                ):
                     gst_pct = 5.0
                 elif "bl fee" in desc_lower or "bl charge" in desc_lower:
                     gst_pct = 18.0
@@ -889,7 +893,11 @@ def generate_invoice_pdf(
                 gst_pct = 0.0
             elif "air freight" in desc_lower:
                 gst_pct = 18.0
-            elif "ocean freight" in desc_lower or "freight" in desc_lower:
+            elif (
+                "ocean freight" in desc_lower
+                or "freight" in desc_lower
+                or "suez" in desc_lower
+            ):
                 gst_pct = 5.0
             elif "bl fee" in desc_lower or "bl charge" in desc_lower:
                 gst_pct = 18.0
